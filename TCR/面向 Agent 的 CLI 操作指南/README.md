@@ -1,0 +1,197 @@
+# TCR · 面向 Agent 的 CLI 操作指南
+
+> **P0 三步工作流**：筛选 → 读懂 → **试通再写+记证据**（`done`）。真源：`docs/official-toc.json` + `docs/work-items.yaml`。
+
+> 官方侧栏：[TCR](https://cloud.tencent.com/document/product/1141) · **0** scoped / **0** understood / **460** done
+
+## T0 · 环境与 tccli 契约
+
+TCR task pages use the same **tccli** install and credential flow as TKE:
+
+- [环境准备](../../TKE/面向 Agent 的 CLI 操作指南/环境准备.md)
+- [tccli 专页（TKE）](../../TKE/面向 Agent 的 CLI 操作指南/tccli 专页（TKE）.md)
+
+## 裁剪后逻辑树
+
+路径节点 match official nav; **映射页** link to official doc; `tccli 操作` only after hand rewrite.
+
+- **快速入门**
+  - **企业版快速入门** · page_id `39287` · status `done`
+    - [官方文档](https://cloud.tencent.com/document/product/1141/39287)
+    - [tccli 操作](./%E5%BF%AB%E9%80%9F%E5%85%A5%E9%97%A8/%E4%BC%81%E4%B8%9A%E7%89%88%E5%BF%AB%E9%80%9F%E5%85%A5%E9%97%A8/tccli%20%E6%93%8D%E4%BD%9C.md)
+    - [产品 CLI 操作](./%E5%BF%AB%E9%80%9F%E5%85%A5%E9%97%A8/%E4%BC%81%E4%B8%9A%E7%89%88%E5%BF%AB%E9%80%9F%E5%85%A5%E9%97%A8/%E4%BA%A7%E5%93%81%20CLI%20%E6%93%8D%E4%BD%9C.md) · Phase 2 stub
+  - **个人版快速入门** · page_id `63910` · status `done`
+    - [官方文档](https://cloud.tencent.com/document/product/1141/63910)
+    - [tccli 操作](./%E5%BF%AB%E9%80%9F%E5%85%A5%E9%97%A8/%E4%B8%AA%E4%BA%BA%E7%89%88%E5%BF%AB%E9%80%9F%E5%85%A5%E9%97%A8/tccli%20%E6%93%8D%E4%BD%9C.md)
+    - [产品 CLI 操作](./%E5%BF%AB%E9%80%9F%E5%85%A5%E9%97%A8/%E4%B8%AA%E4%BA%BA%E7%89%88%E5%BF%AB%E9%80%9F%E5%85%A5%E9%97%A8/%E4%BA%A7%E5%93%81%20CLI%20%E6%93%8D%E4%BD%9C.md) · Phase 2 stub
+- **操作指南**
+  - **创建企业版实例** · page_id `51110` · status `done`
+    - [官方文档](https://cloud.tencent.com/document/product/1141/51110)
+    - [tccli 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E5%88%9B%E5%BB%BA%E4%BC%81%E4%B8%9A%E7%89%88%E5%AE%9E%E4%BE%8B/tccli%20%E6%93%8D%E4%BD%9C.md)
+    - [产品 CLI 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E5%88%9B%E5%BB%BA%E4%BC%81%E4%B8%9A%E7%89%88%E5%AE%9E%E4%BE%8B/%E4%BA%A7%E5%93%81%20CLI%20%E6%93%8D%E4%BD%9C.md) · Phase 2 stub
+  - **访问配置**
+    - **访问凭证配置**
+      - **用户级账号管理** · page_id `41829` · status `done`
+        - [官方文档](https://cloud.tencent.com/document/product/1141/41829)
+        - [tccli 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E8%AE%BF%E9%97%AE%E9%85%8D%E7%BD%AE/%E8%AE%BF%E9%97%AE%E5%87%AD%E8%AF%81%E9%85%8D%E7%BD%AE/%E7%94%A8%E6%88%B7%E7%BA%A7%E8%B4%A6%E5%8F%B7%E7%AE%A1%E7%90%86/tccli%20%E6%93%8D%E4%BD%9C.md)
+        - [产品 CLI 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E8%AE%BF%E9%97%AE%E9%85%8D%E7%BD%AE/%E8%AE%BF%E9%97%AE%E5%87%AD%E8%AF%81%E9%85%8D%E7%BD%AE/%E7%94%A8%E6%88%B7%E7%BA%A7%E8%B4%A6%E5%8F%B7%E7%AE%A1%E7%90%86/%E4%BA%A7%E5%93%81%20CLI%20%E6%93%8D%E4%BD%9C.md) · Phase 2 stub
+      - **服务级账号管理** · page_id `89137` · status `done`
+        - [官方文档](https://cloud.tencent.com/document/product/1141/89137)
+        - [tccli 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E8%AE%BF%E9%97%AE%E9%85%8D%E7%BD%AE/%E8%AE%BF%E9%97%AE%E5%87%AD%E8%AF%81%E9%85%8D%E7%BD%AE/%E6%9C%8D%E5%8A%A1%E7%BA%A7%E8%B4%A6%E5%8F%B7%E7%AE%A1%E7%90%86/tccli%20%E6%93%8D%E4%BD%9C.md)
+        - [产品 CLI 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E8%AE%BF%E9%97%AE%E9%85%8D%E7%BD%AE/%E8%AE%BF%E9%97%AE%E5%87%AD%E8%AF%81%E9%85%8D%E7%BD%AE/%E6%9C%8D%E5%8A%A1%E7%BA%A7%E8%B4%A6%E5%8F%B7%E7%AE%A1%E7%90%86/%E4%BA%A7%E5%93%81%20CLI%20%E6%93%8D%E4%BD%9C.md) · Phase 2 stub
+    - **访问网络控制**
+      - **配置公网访问控制** · page_id `41837` · status `done`
+        - [官方文档](https://cloud.tencent.com/document/product/1141/41837)
+        - [tccli 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E8%AE%BF%E9%97%AE%E9%85%8D%E7%BD%AE/%E8%AE%BF%E9%97%AE%E7%BD%91%E7%BB%9C%E6%8E%A7%E5%88%B6/%E9%85%8D%E7%BD%AE%E5%85%AC%E7%BD%91%E8%AE%BF%E9%97%AE%E6%8E%A7%E5%88%B6/tccli%20%E6%93%8D%E4%BD%9C.md)
+        - [产品 CLI 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E8%AE%BF%E9%97%AE%E9%85%8D%E7%BD%AE/%E8%AE%BF%E9%97%AE%E7%BD%91%E7%BB%9C%E6%8E%A7%E5%88%B6/%E9%85%8D%E7%BD%AE%E5%85%AC%E7%BD%91%E8%AE%BF%E9%97%AE%E6%8E%A7%E5%88%B6/%E4%BA%A7%E5%93%81%20CLI%20%E6%93%8D%E4%BD%9C.md) · Phase 2 stub
+      - **配置内网访问控制** · page_id `41838` · status `done`
+        - [官方文档](https://cloud.tencent.com/document/product/1141/41838)
+        - [tccli 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E8%AE%BF%E9%97%AE%E9%85%8D%E7%BD%AE/%E8%AE%BF%E9%97%AE%E7%BD%91%E7%BB%9C%E6%8E%A7%E5%88%B6/%E9%85%8D%E7%BD%AE%E5%86%85%E7%BD%91%E8%AE%BF%E9%97%AE%E6%8E%A7%E5%88%B6/tccli%20%E6%93%8D%E4%BD%9C.md)
+        - [产品 CLI 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E8%AE%BF%E9%97%AE%E9%85%8D%E7%BD%AE/%E8%AE%BF%E9%97%AE%E7%BD%91%E7%BB%9C%E6%8E%A7%E5%88%B6/%E9%85%8D%E7%BD%AE%E5%86%85%E7%BD%91%E8%AE%BF%E9%97%AE%E6%8E%A7%E5%88%B6/%E4%BA%A7%E5%93%81%20CLI%20%E6%93%8D%E4%BD%9C.md) · Phase 2 stub
+    - **访问权限配置**
+      - **访问权限管理概述** · page_id `40718` · status `done`
+        - [官方文档](https://cloud.tencent.com/document/product/1141/40718)
+        - [tccli 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E8%AE%BF%E9%97%AE%E9%85%8D%E7%BD%AE/%E8%AE%BF%E9%97%AE%E6%9D%83%E9%99%90%E9%85%8D%E7%BD%AE/%E8%AE%BF%E9%97%AE%E6%9D%83%E9%99%90%E7%AE%A1%E7%90%86%E6%A6%82%E8%BF%B0/tccli%20%E6%93%8D%E4%BD%9C.md)
+        - [产品 CLI 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E8%AE%BF%E9%97%AE%E9%85%8D%E7%BD%AE/%E8%AE%BF%E9%97%AE%E6%9D%83%E9%99%90%E9%85%8D%E7%BD%AE/%E8%AE%BF%E9%97%AE%E6%9D%83%E9%99%90%E7%AE%A1%E7%90%86%E6%A6%82%E8%BF%B0/%E4%BA%A7%E5%93%81%20CLI%20%E6%93%8D%E4%BD%9C.md) · Phase 2 stub
+      - **基于 CAM 管理子账号权限** · page_id `41417` · status `done`
+        - [官方文档](https://cloud.tencent.com/document/product/1141/41417)
+        - [tccli 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E8%AE%BF%E9%97%AE%E9%85%8D%E7%BD%AE/%E8%AE%BF%E9%97%AE%E6%9D%83%E9%99%90%E9%85%8D%E7%BD%AE/%E5%9F%BA%E4%BA%8E%20CAM%20%E7%AE%A1%E7%90%86%E5%AD%90%E8%B4%A6%E5%8F%B7%E6%9D%83%E9%99%90/tccli%20%E6%93%8D%E4%BD%9C.md)
+        - [产品 CLI 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E8%AE%BF%E9%97%AE%E9%85%8D%E7%BD%AE/%E8%AE%BF%E9%97%AE%E6%9D%83%E9%99%90%E9%85%8D%E7%BD%AE/%E5%9F%BA%E4%BA%8E%20CAM%20%E7%AE%A1%E7%90%86%E5%AD%90%E8%B4%A6%E5%8F%B7%E6%9D%83%E9%99%90/%E4%BA%A7%E5%93%81%20CLI%20%E6%93%8D%E4%BD%9C.md) · Phase 2 stub
+    - **访问域名配置**
+      - **配置自定义域名** · page_id `53879` · status `done`
+        - [官方文档](https://cloud.tencent.com/document/product/1141/53879)
+        - [tccli 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E8%AE%BF%E9%97%AE%E9%85%8D%E7%BD%AE/%E8%AE%BF%E9%97%AE%E5%9F%9F%E5%90%8D%E9%85%8D%E7%BD%AE/%E9%85%8D%E7%BD%AE%E8%87%AA%E5%AE%9A%E4%B9%89%E5%9F%9F%E5%90%8D/tccli%20%E6%93%8D%E4%BD%9C.md)
+        - [产品 CLI 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E8%AE%BF%E9%97%AE%E9%85%8D%E7%BD%AE/%E8%AE%BF%E9%97%AE%E5%9F%9F%E5%90%8D%E9%85%8D%E7%BD%AE/%E9%85%8D%E7%BD%AE%E8%87%AA%E5%AE%9A%E4%B9%89%E5%9F%9F%E5%90%8D/%E4%BA%A7%E5%93%81%20CLI%20%E6%93%8D%E4%BD%9C.md) · Phase 2 stub
+  - **镜像创建**
+    - **管理命名空间** · page_id `41803` · status `done`
+      - [官方文档](https://cloud.tencent.com/document/product/1141/41803)
+      - [tccli 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E9%95%9C%E5%83%8F%E5%88%9B%E5%BB%BA/%E7%AE%A1%E7%90%86%E5%91%BD%E5%90%8D%E7%A9%BA%E9%97%B4/tccli%20%E6%93%8D%E4%BD%9C.md)
+      - [产品 CLI 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E9%95%9C%E5%83%8F%E5%88%9B%E5%BB%BA/%E7%AE%A1%E7%90%86%E5%91%BD%E5%90%8D%E7%A9%BA%E9%97%B4/%E4%BA%A7%E5%93%81%20CLI%20%E6%93%8D%E4%BD%9C.md) · Phase 2 stub
+    - **管理镜像仓库** · page_id `41811` · status `done`
+      - [官方文档](https://cloud.tencent.com/document/product/1141/41811)
+      - [tccli 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E9%95%9C%E5%83%8F%E5%88%9B%E5%BB%BA/%E7%AE%A1%E7%90%86%E9%95%9C%E5%83%8F%E4%BB%93%E5%BA%93/tccli%20%E6%93%8D%E4%BD%9C.md)
+      - [产品 CLI 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E9%95%9C%E5%83%8F%E5%88%9B%E5%BB%BA/%E7%AE%A1%E7%90%86%E9%95%9C%E5%83%8F%E4%BB%93%E5%BA%93/%E4%BA%A7%E5%93%81%20CLI%20%E6%93%8D%E4%BD%9C.md) · Phase 2 stub
+  - **镜像分发**
+    - **同实例多地域复制镜像** · page_id `52095` · status `done`
+      - [官方文档](https://cloud.tencent.com/document/product/1141/52095)
+      - [tccli 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E9%95%9C%E5%83%8F%E5%88%86%E5%8F%91/%E5%90%8C%E5%AE%9E%E4%BE%8B%E5%A4%9A%E5%9C%B0%E5%9F%9F%E5%A4%8D%E5%88%B6%E9%95%9C%E5%83%8F/tccli%20%E6%93%8D%E4%BD%9C.md)
+      - [产品 CLI 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E9%95%9C%E5%83%8F%E5%88%86%E5%8F%91/%E5%90%8C%E5%AE%9E%E4%BE%8B%E5%A4%9A%E5%9C%B0%E5%9F%9F%E5%A4%8D%E5%88%B6%E9%95%9C%E5%83%8F/%E4%BA%A7%E5%93%81%20CLI%20%E6%93%8D%E4%BD%9C.md) · Phase 2 stub
+    - **跨实例（账号）同步镜像** · page_id `41945` · status `done`
+      - [官方文档](https://cloud.tencent.com/document/product/1141/41945)
+      - [tccli 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E9%95%9C%E5%83%8F%E5%88%86%E5%8F%91/%E8%B7%A8%E5%AE%9E%E4%BE%8B%EF%BC%88%E8%B4%A6%E5%8F%B7%EF%BC%89%E5%90%8C%E6%AD%A5%E9%95%9C%E5%83%8F/tccli%20%E6%93%8D%E4%BD%9C.md)
+      - [产品 CLI 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E9%95%9C%E5%83%8F%E5%88%86%E5%8F%91/%E8%B7%A8%E5%AE%9E%E4%BE%8B%EF%BC%88%E8%B4%A6%E5%8F%B7%EF%BC%89%E5%90%8C%E6%AD%A5%E9%95%9C%E5%83%8F/%E4%BA%A7%E5%93%81%20CLI%20%E6%93%8D%E4%BD%9C.md) · Phase 2 stub
+    - **按需加载容器镜像** · page_id `53928` · status `done`
+      - [官方文档](https://cloud.tencent.com/document/product/1141/53928)
+      - [tccli 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E9%95%9C%E5%83%8F%E5%88%86%E5%8F%91/%E6%8C%89%E9%9C%80%E5%8A%A0%E8%BD%BD%E5%AE%B9%E5%99%A8%E9%95%9C%E5%83%8F/tccli%20%E6%93%8D%E4%BD%9C.md)
+      - [产品 CLI 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E9%95%9C%E5%83%8F%E5%88%86%E5%8F%91/%E6%8C%89%E9%9C%80%E5%8A%A0%E8%BD%BD%E5%AE%B9%E5%99%A8%E9%95%9C%E5%83%8F/%E4%BA%A7%E5%93%81%20CLI%20%E6%93%8D%E4%BD%9C.md) · Phase 2 stub
+  - **镜像安全**
+    - **容器镜像安全扫描** · page_id `48185` · status `done`
+      - [官方文档](https://cloud.tencent.com/document/product/1141/48185)
+      - [tccli 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E9%95%9C%E5%83%8F%E5%AE%89%E5%85%A8/%E5%AE%B9%E5%99%A8%E9%95%9C%E5%83%8F%E5%AE%89%E5%85%A8%E6%89%AB%E6%8F%8F/tccli%20%E6%93%8D%E4%BD%9C.md)
+      - [产品 CLI 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E9%95%9C%E5%83%8F%E5%AE%89%E5%85%A8/%E5%AE%B9%E5%99%A8%E9%95%9C%E5%83%8F%E5%AE%89%E5%85%A8%E6%89%AB%E6%8F%8F/%E4%BA%A7%E5%93%81%20CLI%20%E6%93%8D%E4%BD%9C.md) · Phase 2 stub
+    - **镜像版本不可变** · page_id `58200` · status `done`
+      - [官方文档](https://cloud.tencent.com/document/product/1141/58200)
+      - [tccli 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E9%95%9C%E5%83%8F%E5%AE%89%E5%85%A8/%E9%95%9C%E5%83%8F%E7%89%88%E6%9C%AC%E4%B8%8D%E5%8F%AF%E5%8F%98/tccli%20%E6%93%8D%E4%BD%9C.md)
+      - [产品 CLI 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E9%95%9C%E5%83%8F%E5%AE%89%E5%85%A8/%E9%95%9C%E5%83%8F%E7%89%88%E6%9C%AC%E4%B8%8D%E5%8F%AF%E5%8F%98/%E4%BA%A7%E5%93%81%20CLI%20%E6%93%8D%E4%BD%9C.md) · Phase 2 stub
+    - **高危镜像部署阻断** · page_id `63869` · status `done`
+      - [官方文档](https://cloud.tencent.com/document/product/1141/63869)
+      - [tccli 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E9%95%9C%E5%83%8F%E5%AE%89%E5%85%A8/%E9%AB%98%E5%8D%B1%E9%95%9C%E5%83%8F%E9%83%A8%E7%BD%B2%E9%98%BB%E6%96%AD/tccli%20%E6%93%8D%E4%BD%9C.md)
+      - [产品 CLI 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E9%95%9C%E5%83%8F%E5%AE%89%E5%85%A8/%E9%AB%98%E5%8D%B1%E9%95%9C%E5%83%8F%E9%83%A8%E7%BD%B2%E9%98%BB%E6%96%AD/%E4%BA%A7%E5%93%81%20CLI%20%E6%93%8D%E4%BD%9C.md) · Phase 2 stub
+    - **容器镜像签名** · page_id `80862` · status `done`
+      - [官方文档](https://cloud.tencent.com/document/product/1141/80862)
+      - [tccli 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E9%95%9C%E5%83%8F%E5%AE%89%E5%85%A8/%E5%AE%B9%E5%99%A8%E9%95%9C%E5%83%8F%E7%AD%BE%E5%90%8D/tccli%20%E6%93%8D%E4%BD%9C.md)
+      - [产品 CLI 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E9%95%9C%E5%83%8F%E5%AE%89%E5%85%A8/%E5%AE%B9%E5%99%A8%E9%95%9C%E5%83%8F%E7%AD%BE%E5%90%8D/%E4%BA%A7%E5%93%81%20CLI%20%E6%93%8D%E4%BD%9C.md) · Phase 2 stub
+  - **镜像清理**
+    - **清理 COS 存储空间** · page_id `58157` · status `done`
+      - [官方文档](https://cloud.tencent.com/document/product/1141/58157)
+      - [tccli 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E9%95%9C%E5%83%8F%E6%B8%85%E7%90%86/%E6%B8%85%E7%90%86%20COS%20%E5%AD%98%E5%82%A8%E7%A9%BA%E9%97%B4/tccli%20%E6%93%8D%E4%BD%9C.md)
+      - [产品 CLI 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E9%95%9C%E5%83%8F%E6%B8%85%E7%90%86/%E6%B8%85%E7%90%86%20COS%20%E5%AD%98%E5%82%A8%E7%A9%BA%E9%97%B4/%E4%BA%A7%E5%93%81%20CLI%20%E6%93%8D%E4%BD%9C.md) · Phase 2 stub
+    - **自动删除镜像版本** · page_id `50613` · status `done`
+      - [官方文档](https://cloud.tencent.com/document/product/1141/50613)
+      - [tccli 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E9%95%9C%E5%83%8F%E6%B8%85%E7%90%86/%E8%87%AA%E5%8A%A8%E5%88%A0%E9%99%A4%E9%95%9C%E5%83%8F%E7%89%88%E6%9C%AC/tccli%20%E6%93%8D%E4%BD%9C.md)
+      - [产品 CLI 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E9%95%9C%E5%83%8F%E6%B8%85%E7%90%86/%E8%87%AA%E5%8A%A8%E5%88%A0%E9%99%A4%E9%95%9C%E5%83%8F%E7%89%88%E6%9C%AC/%E4%BA%A7%E5%93%81%20CLI%20%E6%93%8D%E4%BD%9C.md) · Phase 2 stub
+  - **DevOps**
+    - **触发器（Webhook）** · page_id `44369` · status `done`
+      - [官方文档](https://cloud.tencent.com/document/product/1141/44369)
+      - [tccli 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/DevOps/%E8%A7%A6%E5%8F%91%E5%99%A8%EF%BC%88Webhook%EF%BC%89/tccli%20%E6%93%8D%E4%BD%9C.md)
+      - [产品 CLI 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/DevOps/%E8%A7%A6%E5%8F%91%E5%99%A8%EF%BC%88Webhook%EF%BC%89/%E4%BA%A7%E5%93%81%20CLI%20%E6%93%8D%E4%BD%9C.md) · Phase 2 stub
+  - **OCI 制品管理**
+    - **OCI 制品管理概述** · page_id `63918` · status `done`
+      - [官方文档](https://cloud.tencent.com/document/product/1141/63918)
+      - [tccli 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/OCI%20%E5%88%B6%E5%93%81%E7%AE%A1%E7%90%86/OCI%20%E5%88%B6%E5%93%81%E7%AE%A1%E7%90%86%E6%A6%82%E8%BF%B0/tccli%20%E6%93%8D%E4%BD%9C.md)
+      - [产品 CLI 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/OCI%20%E5%88%B6%E5%93%81%E7%AE%A1%E7%90%86/OCI%20%E5%88%B6%E5%93%81%E7%AE%A1%E7%90%86%E6%A6%82%E8%BF%B0/%E4%BA%A7%E5%93%81%20CLI%20%E6%93%8D%E4%BD%9C.md) · Phase 2 stub
+    - **托管 Helm Chart** · page_id `41944` · status `done`
+      - [官方文档](https://cloud.tencent.com/document/product/1141/41944)
+      - [tccli 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/OCI%20%E5%88%B6%E5%93%81%E7%AE%A1%E7%90%86/%E6%89%98%E7%AE%A1%20Helm%20Chart/tccli%20%E6%93%8D%E4%BD%9C.md)
+      - [产品 CLI 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/OCI%20%E5%88%B6%E5%93%81%E7%AE%A1%E7%90%86/%E6%89%98%E7%AE%A1%20Helm%20Chart/%E4%BA%A7%E5%93%81%20CLI%20%E6%93%8D%E4%BD%9C.md) · Phase 2 stub
+  - **个人版操作指南**
+    - **更新登录密码** · page_id `63912` · status `done`
+      - [官方文档](https://cloud.tencent.com/document/product/1141/63912)
+      - [tccli 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E4%B8%AA%E4%BA%BA%E7%89%88%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E6%9B%B4%E6%96%B0%E7%99%BB%E5%BD%95%E5%AF%86%E7%A0%81/tccli%20%E6%93%8D%E4%BD%9C.md)
+      - [产品 CLI 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E4%B8%AA%E4%BA%BA%E7%89%88%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E6%9B%B4%E6%96%B0%E7%99%BB%E5%BD%95%E5%AF%86%E7%A0%81/%E4%BA%A7%E5%93%81%20CLI%20%E6%93%8D%E4%BD%9C.md) · Phase 2 stub
+    - **配置访问权限**
+      - **个人版接入 CAM 的 API 列表** · page_id `41415` · status `done`
+        - [官方文档](https://cloud.tencent.com/document/product/1141/41415)
+        - [tccli 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E4%B8%AA%E4%BA%BA%E7%89%88%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E9%85%8D%E7%BD%AE%E8%AE%BF%E9%97%AE%E6%9D%83%E9%99%90/%E4%B8%AA%E4%BA%BA%E7%89%88%E6%8E%A5%E5%85%A5%20CAM%20%E7%9A%84%20API%20%E5%88%97%E8%A1%A8/tccli%20%E6%93%8D%E4%BD%9C.md)
+        - [产品 CLI 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E4%B8%AA%E4%BA%BA%E7%89%88%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E9%85%8D%E7%BD%AE%E8%AE%BF%E9%97%AE%E6%9D%83%E9%99%90/%E4%B8%AA%E4%BA%BA%E7%89%88%E6%8E%A5%E5%85%A5%20CAM%20%E7%9A%84%20API%20%E5%88%97%E8%A1%A8/%E4%BA%A7%E5%93%81%20CLI%20%E6%93%8D%E4%BD%9C.md) · Phase 2 stub
+      - **个人版授权方案示例** · page_id `41409` · status `done`
+        - [官方文档](https://cloud.tencent.com/document/product/1141/41409)
+        - [tccli 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E4%B8%AA%E4%BA%BA%E7%89%88%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E9%85%8D%E7%BD%AE%E8%AE%BF%E9%97%AE%E6%9D%83%E9%99%90/%E4%B8%AA%E4%BA%BA%E7%89%88%E6%8E%88%E6%9D%83%E6%96%B9%E6%A1%88%E7%A4%BA%E4%BE%8B/tccli%20%E6%93%8D%E4%BD%9C.md)
+        - [产品 CLI 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E4%B8%AA%E4%BA%BA%E7%89%88%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E9%85%8D%E7%BD%AE%E8%AE%BF%E9%97%AE%E6%9D%83%E9%99%90/%E4%B8%AA%E4%BA%BA%E7%89%88%E6%8E%88%E6%9D%83%E6%96%B9%E6%A1%88%E7%A4%BA%E4%BE%8B/%E4%BA%A7%E5%93%81%20CLI%20%E6%93%8D%E4%BD%9C.md) · Phase 2 stub
+      - **个人版资源级 API 接口及授权方案变更指南** · page_id `41412` · status `done`
+        - [官方文档](https://cloud.tencent.com/document/product/1141/41412)
+        - [tccli 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E4%B8%AA%E4%BA%BA%E7%89%88%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E9%85%8D%E7%BD%AE%E8%AE%BF%E9%97%AE%E6%9D%83%E9%99%90/%E4%B8%AA%E4%BA%BA%E7%89%88%E8%B5%84%E6%BA%90%E7%BA%A7%20API%20%E6%8E%A5%E5%8F%A3%E5%8F%8A%E6%8E%88%E6%9D%83%E6%96%B9%E6%A1%88%E5%8F%98%E6%9B%B4%E6%8C%87%E5%8D%97/tccli%20%E6%93%8D%E4%BD%9C.md)
+        - [产品 CLI 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E4%B8%AA%E4%BA%BA%E7%89%88%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E9%85%8D%E7%BD%AE%E8%AE%BF%E9%97%AE%E6%9D%83%E9%99%90/%E4%B8%AA%E4%BA%BA%E7%89%88%E8%B5%84%E6%BA%90%E7%BA%A7%20API%20%E6%8E%A5%E5%8F%A3%E5%8F%8A%E6%8E%88%E6%9D%83%E6%96%B9%E6%A1%88%E5%8F%98%E6%9B%B4%E6%8C%87%E5%8D%97/%E4%BA%A7%E5%93%81%20CLI%20%E6%93%8D%E4%BD%9C.md) · Phase 2 stub
+    - **设置镜像清理** · page_id `63914` · status `done`
+      - [官方文档](https://cloud.tencent.com/document/product/1141/63914)
+      - [tccli 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E4%B8%AA%E4%BA%BA%E7%89%88%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E8%AE%BE%E7%BD%AE%E9%95%9C%E5%83%8F%E6%B8%85%E7%90%86/tccli%20%E6%93%8D%E4%BD%9C.md)
+      - [产品 CLI 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E4%B8%AA%E4%BA%BA%E7%89%88%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E8%AE%BE%E7%BD%AE%E9%95%9C%E5%83%8F%E6%B8%85%E7%90%86/%E4%BA%A7%E5%93%81%20CLI%20%E6%93%8D%E4%BD%9C.md) · Phase 2 stub
+  - **销毁退还实例** · page_id `51111` · status `done`
+    - [官方文档](https://cloud.tencent.com/document/product/1141/51111)
+    - [tccli 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E9%94%80%E6%AF%81%E9%80%80%E8%BF%98%E5%AE%9E%E4%BE%8B/tccli%20%E6%93%8D%E4%BD%9C.md)
+    - [产品 CLI 操作](./%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E9%94%80%E6%AF%81%E9%80%80%E8%BF%98%E5%AE%9E%E4%BE%8B/%E4%BA%A7%E5%93%81%20CLI%20%E6%93%8D%E4%BD%9C.md) · Phase 2 stub
+- **实践教程**
+  - **个人版迁移**
+    - **个人版迁移至企业版完全指南** · page_id `52292` · status `done`
+      - [官方文档](https://cloud.tencent.com/document/product/1141/52292)
+      - [tccli 操作](./%E5%AE%9E%E8%B7%B5%E6%95%99%E7%A8%8B/%E4%B8%AA%E4%BA%BA%E7%89%88%E8%BF%81%E7%A7%BB/%E4%B8%AA%E4%BA%BA%E7%89%88%E8%BF%81%E7%A7%BB%E8%87%B3%E4%BC%81%E4%B8%9A%E7%89%88%E5%AE%8C%E5%85%A8%E6%8C%87%E5%8D%97/tccli%20%E6%93%8D%E4%BD%9C.md)
+      - [产品 CLI 操作](./%E5%AE%9E%E8%B7%B5%E6%95%99%E7%A8%8B/%E4%B8%AA%E4%BA%BA%E7%89%88%E8%BF%81%E7%A7%BB/%E4%B8%AA%E4%BA%BA%E7%89%88%E8%BF%81%E7%A7%BB%E8%87%B3%E4%BC%81%E4%B8%9A%E7%89%88%E5%AE%8C%E5%85%A8%E6%8C%87%E5%8D%97/%E4%BA%A7%E5%93%81%20CLI%20%E6%93%8D%E4%BD%9C.md) · Phase 2 stub
+    - **使用个人版域名访问企业版实例** · page_id `82855` · status `done`
+      - [官方文档](https://cloud.tencent.com/document/product/1141/82855)
+      - [tccli 操作](./%E5%AE%9E%E8%B7%B5%E6%95%99%E7%A8%8B/%E4%B8%AA%E4%BA%BA%E7%89%88%E8%BF%81%E7%A7%BB/%E4%BD%BF%E7%94%A8%E4%B8%AA%E4%BA%BA%E7%89%88%E5%9F%9F%E5%90%8D%E8%AE%BF%E9%97%AE%E4%BC%81%E4%B8%9A%E7%89%88%E5%AE%9E%E4%BE%8B/tccli%20%E6%93%8D%E4%BD%9C.md)
+      - [产品 CLI 操作](./%E5%AE%9E%E8%B7%B5%E6%95%99%E7%A8%8B/%E4%B8%AA%E4%BA%BA%E7%89%88%E8%BF%81%E7%A7%BB/%E4%BD%BF%E7%94%A8%E4%B8%AA%E4%BA%BA%E7%89%88%E5%9F%9F%E5%90%8D%E8%AE%BF%E9%97%AE%E4%BC%81%E4%B8%9A%E7%89%88%E5%AE%9E%E4%BE%8B/%E4%BA%A7%E5%93%81%20CLI%20%E6%93%8D%E4%BD%9C.md) · Phase 2 stub
+  - **TKE 集群使用 TCR 插件内网免密拉取容器镜像** · page_id `48184` · status `done`
+    - [官方文档](https://cloud.tencent.com/document/product/1141/48184)
+    - [tccli 操作](./%E5%AE%9E%E8%B7%B5%E6%95%99%E7%A8%8B/TKE%20%E9%9B%86%E7%BE%A4%E4%BD%BF%E7%94%A8%20TCR%20%E6%8F%92%E4%BB%B6%E5%86%85%E7%BD%91%E5%85%8D%E5%AF%86%E6%8B%89%E5%8F%96%E5%AE%B9%E5%99%A8%E9%95%9C%E5%83%8F/tccli%20%E6%93%8D%E4%BD%9C.md)
+    - [产品 CLI 操作](./%E5%AE%9E%E8%B7%B5%E6%95%99%E7%A8%8B/TKE%20%E9%9B%86%E7%BE%A4%E4%BD%BF%E7%94%A8%20TCR%20%E6%8F%92%E4%BB%B6%E5%86%85%E7%BD%91%E5%85%8D%E5%AF%86%E6%8B%89%E5%8F%96%E5%AE%B9%E5%99%A8%E9%95%9C%E5%83%8F/%E4%BA%A7%E5%93%81%20CLI%20%E6%93%8D%E4%BD%9C.md) · Phase 2 stub
+  - **从自建 Harbor 同步镜像到 TCR 企业版** · page_id `44970` · status `done`
+    - [官方文档](https://cloud.tencent.com/document/product/1141/44970)
+    - [tccli 操作](./%E5%AE%9E%E8%B7%B5%E6%95%99%E7%A8%8B/%E4%BB%8E%E8%87%AA%E5%BB%BA%20Harbor%20%E5%90%8C%E6%AD%A5%E9%95%9C%E5%83%8F%E5%88%B0%20TCR%20%E4%BC%81%E4%B8%9A%E7%89%88/tccli%20%E6%93%8D%E4%BD%9C.md)
+    - [产品 CLI 操作](./%E5%AE%9E%E8%B7%B5%E6%95%99%E7%A8%8B/%E4%BB%8E%E8%87%AA%E5%BB%BA%20Harbor%20%E5%90%8C%E6%AD%A5%E9%95%9C%E5%83%8F%E5%88%B0%20TCR%20%E4%BC%81%E4%B8%9A%E7%89%88/%E4%BA%A7%E5%93%81%20CLI%20%E6%93%8D%E4%BD%9C.md) · Phase 2 stub
+  - **TKE Serverless 集群拉取 TCR 容器镜像** · page_id `59029` · status `done`
+    - [官方文档](https://cloud.tencent.com/document/product/1141/59029)
+    - [tccli 操作](./%E5%AE%9E%E8%B7%B5%E6%95%99%E7%A8%8B/TKE%20Serverless%20%E9%9B%86%E7%BE%A4%E6%8B%89%E5%8F%96%20TCR%20%E5%AE%B9%E5%99%A8%E9%95%9C%E5%83%8F/tccli%20%E6%93%8D%E4%BD%9C.md)
+    - [产品 CLI 操作](./%E5%AE%9E%E8%B7%B5%E6%95%99%E7%A8%8B/TKE%20Serverless%20%E9%9B%86%E7%BE%A4%E6%8B%89%E5%8F%96%20TCR%20%E5%AE%B9%E5%99%A8%E9%95%9C%E5%83%8F/%E4%BA%A7%E5%93%81%20CLI%20%E6%93%8D%E4%BD%9C.md) · Phase 2 stub
+  - **混合云下的多平台镜像数据同步复制** · page_id `60740` · status `done`
+    - [官方文档](https://cloud.tencent.com/document/product/1141/60740)
+    - [tccli 操作](./%E5%AE%9E%E8%B7%B5%E6%95%99%E7%A8%8B/%E6%B7%B7%E5%90%88%E4%BA%91%E4%B8%8B%E7%9A%84%E5%A4%9A%E5%B9%B3%E5%8F%B0%E9%95%9C%E5%83%8F%E6%95%B0%E6%8D%AE%E5%90%8C%E6%AD%A5%E5%A4%8D%E5%88%B6/tccli%20%E6%93%8D%E4%BD%9C.md)
+    - [产品 CLI 操作](./%E5%AE%9E%E8%B7%B5%E6%95%99%E7%A8%8B/%E6%B7%B7%E5%90%88%E4%BA%91%E4%B8%8B%E7%9A%84%E5%A4%9A%E5%B9%B3%E5%8F%B0%E9%95%9C%E5%83%8F%E6%95%B0%E6%8D%AE%E5%90%8C%E6%AD%A5%E5%A4%8D%E5%88%B6/%E4%BA%A7%E5%93%81%20CLI%20%E6%93%8D%E4%BD%9C.md) · Phase 2 stub
+  - **全球多地域间同步镜像实现就近访问** · page_id `61458` · status `done`
+    - [官方文档](https://cloud.tencent.com/document/product/1141/61458)
+    - [tccli 操作](./%E5%AE%9E%E8%B7%B5%E6%95%99%E7%A8%8B/%E5%85%A8%E7%90%83%E5%A4%9A%E5%9C%B0%E5%9F%9F%E9%97%B4%E5%90%8C%E6%AD%A5%E9%95%9C%E5%83%8F%E5%AE%9E%E7%8E%B0%E5%B0%B1%E8%BF%91%E8%AE%BF%E9%97%AE/tccli%20%E6%93%8D%E4%BD%9C.md)
+    - [产品 CLI 操作](./%E5%AE%9E%E8%B7%B5%E6%95%99%E7%A8%8B/%E5%85%A8%E7%90%83%E5%A4%9A%E5%9C%B0%E5%9F%9F%E9%97%B4%E5%90%8C%E6%AD%A5%E9%95%9C%E5%83%8F%E5%AE%9E%E7%8E%B0%E5%B0%B1%E8%BF%91%E8%AE%BF%E9%97%AE/%E4%BA%A7%E5%93%81%20CLI%20%E6%93%8D%E4%BD%9C.md) · Phase 2 stub
+  - **使用自定义域名及云联网实现跨地域内网访问** · page_id `76084` · status `done`
+    - [官方文档](https://cloud.tencent.com/document/product/1141/76084)
+    - [tccli 操作](./%E5%AE%9E%E8%B7%B5%E6%95%99%E7%A8%8B/%E4%BD%BF%E7%94%A8%E8%87%AA%E5%AE%9A%E4%B9%89%E5%9F%9F%E5%90%8D%E5%8F%8A%E4%BA%91%E8%81%94%E7%BD%91%E5%AE%9E%E7%8E%B0%E8%B7%A8%E5%9C%B0%E5%9F%9F%E5%86%85%E7%BD%91%E8%AE%BF%E9%97%AE/tccli%20%E6%93%8D%E4%BD%9C.md)
+    - [产品 CLI 操作](./%E5%AE%9E%E8%B7%B5%E6%95%99%E7%A8%8B/%E4%BD%BF%E7%94%A8%E8%87%AA%E5%AE%9A%E4%B9%89%E5%9F%9F%E5%90%8D%E5%8F%8A%E4%BA%91%E8%81%94%E7%BD%91%E5%AE%9E%E7%8E%B0%E8%B7%A8%E5%9C%B0%E5%9F%9F%E5%86%85%E7%BD%91%E8%AE%BF%E9%97%AE/%E4%BA%A7%E5%93%81%20CLI%20%E6%93%8D%E4%BD%9C.md) · Phase 2 stub
+  - **TCR 实例后端存储切换** · page_id `128966` · status `done`
+    - [官方文档](https://cloud.tencent.com/document/product/1141/128966)
+    - [tccli 操作](./%E5%AE%9E%E8%B7%B5%E6%95%99%E7%A8%8B/TCR%20%E5%AE%9E%E4%BE%8B%E5%90%8E%E7%AB%AF%E5%AD%98%E5%82%A8%E5%88%87%E6%8D%A2/tccli%20%E6%93%8D%E4%BD%9C.md)
+    - [产品 CLI 操作](./%E5%AE%9E%E8%B7%B5%E6%95%99%E7%A8%8B/TCR%20%E5%AE%9E%E4%BE%8B%E5%90%8E%E7%AB%AF%E5%AD%98%E5%82%A8%E5%88%87%E6%8D%A2/%E4%BA%A7%E5%93%81%20CLI%20%E6%93%8D%E4%BD%9C.md) · Phase 2 stub
+
+## 真源
+
+- TOC: `docs/official-toc.json`
+- Work items: `docs/work-items.yaml`
+- Work items: `docs/work-items.yaml`（含过滤规则 + session 分组）
+- Command blocks: `scripts/lib/render-tccli-block.mjs`
