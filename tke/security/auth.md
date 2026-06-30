@@ -1,0 +1,183 @@
+---
+doc_type: How-to
+subtype: 6B
+fused: false
+---
+# 配置集群认证
+
+> 获取/轮转 kubeconfig、配置 OIDC 企业 SSO、授予 RBAC 权限。配置型操作（改变认证行为，不创建资源）。
+
+## 概述
+
+认证决定谁能连集群、以什么身份连。三种认证方式：
+
+| 方式 | 作用 | 适用 |
+|:-----|:-----|:-----|
+| kubeconfig | 证书 + 端点，kubectl 直连 | 个人开发、运维 |
+| OIDC | 企业身份系统 SSO | 企业多团队 |
+| RBAC | 子账号细粒度权限 | 多人协作 |
+
+## 决策依据
+
+#### kubeconfig 与 OIDC
+
+- **kubeconfig**: 直接用证书认证，简单。适合个人或 CI/CD
+- **OIDC**: 接企业 SSO（如腾讯云账号、第三方 IdP），身份集中管理。适合多团队
+- **默认推荐**: 小团队用 kubeconfig；企业多团队用 OIDC
+- **能切换吗?**: 能。OIDC 与 kubeconfig 可共存
+
+## 配置项
+
+### kubeconfig 获取与轮转
+
+```bash
+# 获取 kubeconfig（实测返回完整 kubeconfig YAML）
+tccli tke DescribeClusterKubeconfig --region <REGION> --ClusterId "<CLUSTER_ID>" > kubeconfig.yaml
+# expected: kubeconfig 文件生成，含 apiVersion/clusters/contexts/users
+```
+
+```bash
+# 轮转证书（kubeconfig 过期或泄露时）
+tccli tke UpdateClusterKubeconfig --region <REGION> --ClusterId "<CLUSTER_ID>"
+# expected: exit 0, 重新 DescribeClusterKubeconfig 获取新凭证
+```
+
+> `DescribeClusterKubeconfig` 响应字段 `Kubeconfig` 含完整 YAML，重定向到文件即可用 `kubectl --kubeconfig kubeconfig.yaml get nodes`。
+
+### OIDC 配置
+
+> 来源：`tccli tke ModifyClusterAuthenticationOptions --generate-cli-skeleton`（实测）。
+
+```bash
+tccli tke ModifyClusterAuthenticationOptions --region <REGION> \
+  --ClusterId "<CLUSTER_ID>" \
+  --ServiceAccounts '{"UseTKEDefault":true}' \
+  --OIDCConfig '{"AutoCreateOIDCConfig":true,"AutoInstallPodIdentityWebhookAddon":true}'
+# expected: exit 0
+```
+
+| 字段 | 类型 | 作用 |
+|:-----|:-----|:-----|
+| `ServiceAccounts.UseTKEDefault` | boolean | 用 TKE 默认 ServiceAccount 签发 |
+| `ServiceAccounts.Issuer` | string | 自定义 issuer URL |
+| `ServiceAccounts.JWKSURI` | string | JWKS 公钥地址 |
+| `OIDCConfig.AutoCreateOIDCConfig` | boolean | 自动创建 OIDC 配置 |
+| `OIDCConfig.AutoCreateClientId` | list | 自动创建的 ClientId |
+| `OIDCConfig.AutoInstallPodIdentityWebhookAddon` | boolean | 自动安装 Pod Identity Webhook 插件 |
+
+### RBAC 权限授予
+
+```bash
+# 授予子账号集群权限
+tccli tke GrantUserPermissions --region <REGION> \
+  --ClusterId "<CLUSTER_ID>" --AccountUin "<UIN>" \
+  --Permissions '[{"Resource":"cluster","Action":"rw"}]'
+# expected: exit 0
+```
+
+## 应用
+
+```bash
+# 1. 获取 kubeconfig
+tccli tke DescribeClusterKubeconfig --region ap-guangzhou --ClusterId "<CLUSTER_ID>" > ~/.kube/tke-config
+
+# 2. 验证可用
+kubectl --kubeconfig ~/.kube/tke-config get nodes
+# expected: 节点列表返回
+```
+
+## 验证
+
+```bash
+# 查看当前认证配置
+tccli tke DescribeClusterAuthenticationOptions --region <REGION> --ClusterId "<CLUSTER_ID>"
+# expected: 返回 ServiceAccounts/OIDCConfig 配置
+
+# kubectl 连通性
+kubectl --kubeconfig kubeconfig.yaml get nodes
+# expected: 节点列表
+```
+
+| 维度 | 命令 | 预期 |
+|:-----|:-----|:-----|
+| kubeconfig 有效 | `kubectl --kubeconfig <file> get nodes` | 节点列表返回 |
+| OIDC 配置 | `DescribeClusterAuthenticationOptions` | OIDCConfig 非空 |
+| 证书未过期 | `kubectl --kubeconfig <file> version` | 无认证错误 |
+
+## 回滚
+
+```bash
+# OIDC 改回默认
+tccli tke ModifyClusterAuthenticationOptions --region <REGION> \
+  --ClusterId "<CLUSTER_ID>" --ServiceAccounts '{"UseTKEDefault":true}'
+# expected: exit 0
+
+# kubeconfig 旧文件覆盖（轮转后旧凭证失效，用新文件）
+tccli tke DescribeClusterKubeconfig --region <REGION> --ClusterId "<CLUSTER_ID>" > kubeconfig.yaml
+```
+
+## 故障恢复
+
+### 命令返回错误 (exit ≠ 0)
+
+| 现象 | 诊断 | 根因 | 修复 |
+|:--------|:----------|:------------|:-----|
+| `UnauthorizedOperation.CamNoAuth` | 查 CAM 策略 | 子账号无 `tke:DescribeClusterKubeconfig` 权限 | 授予 `tke:*` 相关权限 |
+| `InvalidParameterValue` | 查 OIDCConfig JSON 格式 | JSON 拼错或字段名错 | 用 skeleton 核对字段名 |
+| `ResourceNotFound` | `DescribeClusters` 核对 ID | ClusterId 错 | 确认集群 ID |
+
+### 命令成功但状态不对 (exit = 0)
+
+| 现象 | 诊断 | 根因 | 修复 |
+|:--------|:----------|:------------|:-----|
+| kubectl 报 `certificate expired` | `kubectl version` | kubeconfig 证书过期 | `UpdateClusterKubeconfig` 轮转 |
+| kubectl 报 `Unable to connect` | 端点状态 | 集群端点未开启或不通 | 见 [管理访问端点](../networking/endpoints.md) |
+| OIDC 登录失败 | `DescribeClusterAuthenticationOptions` | issuer 不可达或 JWKSURI 错 | 确认 IdP 服务可达 |
+
+## 子账号权限管理
+
+> 查询/删除子账号（CAM 子用户）的集群 RBAC 权限。`GrantUserPermissions` 授予权限（见上文），本段是查询与撤销。
+
+```bash
+# 查询子账号的集群权限 (TargetUin = 子账号 UIN)
+tccli tke DescribeUserPermissions --TargetUin "<SUB_UIN>" --region <REGION>
+# expected: exit 0, Permissions[] 含 ClusterId/RoleName/RoleType/Namespace
+```
+```json
+{"TargetUin": "1000000000", "Permissions": [], "RequestId": "..."}
+```
+
+```bash
+# 删除子账号的指定权限 (按 ClusterId + RoleName 定位)
+tccli tke DeleteUserPermissions --TargetUin "<SUB_UIN>" --region <REGION> \
+  --Permissions '[{"ClusterId":"<CLUSTER_ID>","RoleName":"<ROLE>","RoleType":"cls","Namespace":""}]'
+# expected: exit 0
+```
+
+> `TargetUin` 是子账号 UIN（非主账号）。`DeleteUserPermissions` 的 `Permissions[]` 精确定位要撤销的权限（ClusterId+RoleName+Namespace），`RoleType` 如 `cls`（集群级）/ `ns`（命名空间级）。
+
+## 下一步
+
+- [管理访问端点](../networking/endpoints.md) — kubeconfig 需配合端点
+- [审计日志](audit.md) — 认证后开启操作审计
+- [查询集群](../clusters/query.md) — `DescribeClusterSecurity` 取凭证
+- [故障排查](../troubleshooting.md) — kubeconfig 不可用诊断
+
+## 控制台替代方案
+
+[容器服务控制台 - 集群认证](https://console.cloud.tencent.com/tke2/cluster)
+
+## Action 清单
+
+| Action | 类型 | 版本 | 说明 |
+|:-------|:-----|:-----|:-----|
+| `GrantUserPermissions` | 主操作 | 2018-05-25 | 授予子账号集群 RBAC 权限 |
+| `ModifyClusterAuthenticationOptions` | 主操作 | 2018-05-25 | 配置 OIDC/ServiceAccount |
+| `UpdateClusterKubeconfig` | 主操作 | 2018-05-25 | 轮转 kubeconfig 证书 |
+| `AcquireClusterAdminRole` | 主操作 | 2018-05-25 | 获取集群管理员角色 |
+| `DeleteUserPermissions` | 清理 | 2018-05-25 | 撤销子账号权限（ClusterId+RoleName） |
+| `DescribeClusterAuthenticationOptions` | 验证 | 2018-05-25 | 认证配置（OIDC/SA） |
+| `DescribeClusterKubeconfig` | 验证 | 2018-05-25 | 获取 kubeconfig YAML |
+| `DescribeClusterSecurity` | 验证 | 2018-05-25 | kubeconfig + 密码 + CA |
+| `DescribeUserPermissions` | 验证 | 2018-05-25 | 子账号权限列表（TargetUin） |
+| `DescribeClusters` | 验证 | 2018-05-25 | 确认集群 ID |

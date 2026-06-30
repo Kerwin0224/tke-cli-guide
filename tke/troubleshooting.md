@@ -1,0 +1,199 @@
+---
+doc_type: Troubleshooting
+subtype: 7B
+---
+# TKE 故障排查
+
+## 从这里开始
+
+```bash
+tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]'
+# expected: ClusterStatusSet[0].ClusterState = "Running", ClusterDeletionProtection = true
+```
+
+正常输出： `ClusterState: "Running"` + `ClusterInstanceState: "AllNormal"` 表示集群正常。任何其他状态见 [状态机](reference/states.md) 或下方。
+
+## 诊断工具箱
+
+| 命令 | 检查什么 | 何时使用 |
+|---------|---------------|------------|
+| `tccli tke DescribeClusterStatus --ClusterIds '["<ID>"]'` | 集群状态 + 删除保护状态 + 节点计数 | 任何集群异常时第一步 |
+| `tccli tke DescribeClusters --ClusterIds '["<ID>"]'` | 集群全量配置 | 怀疑配置被修改时 |
+| `tccli tke DescribeClusterInstances --ClusterId "<ID>"` | 节点列表 + 各节点状态 | 节点不能加入/运行异常时 |
+| `tccli tke DescribeClusterKubeconfig --ClusterId "<ID>"` | kubeconfig 是否可获取 | kubectl 连接失败时 |
+| `tccli tke DescribeClusterEndpoints --ClusterId "<ID>"` | 访问端点状态 | 无法连接 API Server 时 |
+| `tccli tke DescribeTasks --Filter '[{"Name":"cluster-id","Values":["<ID>"]}]' --Latest true` | 异步任务进度 | 操作卡住时 |
+
+> `DescribeTasks` 入参是 `Filter`+`Latest`（实测 `--generate-cli-skeleton`），无 `TaskIds` 参数——按 `cluster-id` 等过滤 + `Latest=true` 只取每个任务最新状态。参数以 tccli 骨架为准，勿凭记忆传 `--TaskIds`。
+
+```bash
+# 查询集群的异步任务进度（Filter 按 cluster-id 过滤，Latest=true 取最新状态）
+tccli tke DescribeTasks --region ap-guangzhou \
+  --Filter '[{"Name":"cluster-id","Values":["<CLUSTER_ID>"]}]' --Latest true
+# expected: exit 0, TaskSet[] 含任务状态（Running/Succeeded/Failed）
+```
+
+## 常见问题
+
+### 集群卡在 Creating 状态超过 30 分钟
+
+**可能原因**： 可用区资源不足或 VPC 配置冲突。
+
+**诊断**：
+
+```bash
+tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]'
+# expected: 查看 ClusterState 值和状态变更时间
+```
+
+如果 `ClusterState: "Creating"` 持续超过 30 分钟，通常是底层资源问题。
+
+**修复**：
+
+```bash
+# 1. 删除卡住的集群
+tccli tke DisableClusterDeletionProtection --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
+tccli tke DeleteCluster --region ap-guangzhou --ClusterId "<CLUSTER_ID>" --InstanceDeleteMode terminate
+# 2. 换可用区重建
+tccli tke CreateCluster --region ap-guangzhou --ClusterType MANAGED_CLUSTER \
+  --ClusterBasicSettings '{"ClusterName":"<NEW_NAME>","ClusterVersion":"1.34.1",...}'
+```
+
+**验证**：
+
+```bash
+tccli tke DescribeClusterStatus --ClusterIds '["<NEW_CLUSTER_ID>"]'
+# expected: 5-10 分钟内 ClusterState 变为 "Running"
+```
+
+### 节点一直 initializing 或 NotReady
+
+**可能原因**： 安全组规则阻止 kubelet 与 API Server 通信，或节点脚本执行失败。
+
+**诊断**：
+
+```bash
+# 1. 查看节点状态
+tccli tke DescribeClusterInstances --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
+# expected: 找到 InstanceState 为 "initializing" 或 "failed" 的节点
+
+# 2. 查看节点池详情
+tccli tke DescribeClusterNodePoolDetail --region ap-guangzhou \
+  --ClusterId "<CLUSTER_ID>" --NodePoolId "<NODEPOOL_ID>"
+# expected: 检查 LifeState 和伸缩配置
+```
+
+**修复**： 常见原因及修复:
+
+1. **安全组问题**: 确保节点安全组出方向允许 443 端口到集群 API Server 地址
+2. **镜像拉取失败**: 检查 `DescribeClusterInstances` 中的 `InstanceAdvancedSettings.UserScript` 是否有错误
+3. **磁盘空间不足**: 检查 DataDisk 配置是否足够 (建议 ≥50GB)
+
+```bash
+# 如果节点完全无法恢复，移出并销毁
+tccli tke RemoveNodeFromNodePool --ClusterId "<CLUSTER_ID>" --NodePoolId "<POOL>" \
+  --InstanceIds '["<INSTANCE_ID>"]'
+tccli tke DeleteClusterInstances --ClusterId "<CLUSTER_ID>" \
+  --InstanceIds '["<INSTANCE_ID>"]'
+```
+
+**验证**：
+
+```bash
+tccli tke DescribeClusterInstances --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
+# expected: 所有节点 InstanceState 为 "running"，DrainStatus 为空
+```
+
+### kubectl 连接集群失败
+
+**可能原因**： kubeconfig 过期、访问端点未开启、或凭证配置错误。
+
+**诊断**：
+
+```bash
+# 1. 检查端点状态
+tccli tke DescribeClusterEndpoints --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
+# expected: 至少有一个端点 Status 为 Created
+
+# 2. 重新获取 kubeconfig
+tccli tke DescribeClusterKubeconfig --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
+# expected: 返回有效 kubeconfig (base64)
+```
+
+**修复**：
+
+```bash
+# 如果端点未开启
+tccli tke CreateClusterEndpoint --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
+
+# 如果 kubeconfig 过期
+tccli tke UpdateClusterKubeconfig --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
+```
+
+**验证**：
+
+```bash
+kubectl --kubeconfig <KUBECONFIG_FILE> cluster-info
+# expected: Kubernetes control plane is running at https://...
+```
+
+### 删除保护阻止删除集群
+
+**可能原因**： 集群创建时或手动开启了删除保护。
+
+**诊断**：
+
+```bash
+tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]' \
+  --filter "ClusterStatusSet[0].ClusterDeletionProtection"
+# expected: true（开启删除保护）
+```
+
+**修复**：
+
+```bash
+tccli tke DisableClusterDeletionProtection --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
+# expected: exit 0
+
+# 验证
+tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]' \
+  --filter "ClusterStatusSet[0].ClusterDeletionProtection"
+# expected: false（已关闭）
+```
+
+**验证**：
+
+```bash
+tccli tke DeleteCluster --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
+# expected: exit 0 (不再返回删除保护错误)
+```
+
+## 升级
+
+如果以上步骤无法解决问题，收集以下信息提交工单:
+
+```bash
+# 1. 集群基本信息
+tccli tke DescribeClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]' > cluster-info.json
+
+# 2. 集群状态详情
+tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]' > cluster-status.json
+
+# 3. 最近操作日志（从控制台获取 CloudAudit 日志）
+# 或运行: tccli cloudaudit LookUpEvents --LookupAttributes '[{"AttributeKey":"ResourceName","AttributeValue":"<CLUSTER_ID>"}]'
+
+# 4. 错误 RequestId
+# 从之前失败的 API 响应中获取 RequestId
+```
+
+提交到: [腾讯云工单系统](https://console.cloud.tencent.com/workorder)，附带以上 JSON 文件和 RequestId。
+
+## 下一步
+
+- [状态机](reference/states.md) — 集群/节点池/节点状态枚举与含义
+- [错误码](reference/error-codes.md) — `UnsupportedOperation`/`LimitExceeded` 等诊断
+- [配额和限制](reference/quotas.md) — `LimitExceeded` 的配额阈值
+- [管理访问端点](networking/endpoints.md) — kubectl 连接失败的端点配置
+- [认证配置](security/auth.md) — kubeconfig 获取与轮转
+- [删除集群](clusters/delete.md) — 删除保护与残留清理
+
