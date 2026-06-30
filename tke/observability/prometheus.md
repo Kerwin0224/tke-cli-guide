@@ -1,0 +1,244 @@
+---
+doc_type: How-to
+subtype: 6A
+fused: true
+---
+# Prometheus 监控入门
+
+> 创建 Prometheus 实例、关联集群 Agent、查询采集目标。Prometheus 是 TKE 监控的核心。异步操作。
+
+## 概述
+
+Prometheus 监控三步：创建实例 → 关联集群 Agent（采集） → 查询目标与指标。
+
+| 操作 | 接口 | 作用 |
+|:-----|:-----|:-----|
+| 创建实例 | `RunPrometheusInstance` | 部署独立 Prometheus 服务 |
+| 关联 Agent | `CreatePrometheusClusterAgent` | 集群内装 Agent，上报指标 |
+| 查询目标 | `DescribePrometheusTargets` | 看采集目标状态 |
+| 查询实例 | `DescribePrometheusInstancesOverview` | 看实例列表 |
+
+> Prometheus 是 TKE 2018-05-25 旧版独有功能（2022-05-01 新版无），命令须带 `--version 2018-05-25`。相关 Action 共 48 个，本文覆盖入口 3 个核心操作，其余见 [告警配置](prometheus-alerting.md)/[配置与模板](prometheus-config.md)/[Agent 管理](prometheus-agent.md)。
+
+## 准备工作
+
+### 环境检查
+
+```bash
+tccli --version
+# expected: tccli 版本号
+
+tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]' \
+  --filter "ClusterStatusSet[0].ClusterState"
+# expected: "Running"
+```
+
+### 资源检查
+
+```bash
+# 确认无现存 Prometheus 实例（避免重复）
+tccli tke DescribePrometheusInstancesOverview --region ap-guangzhou --Limit 3
+# expected: 实例列表（空则无实例）
+
+# 子网（创建实例需指定）
+tccli vpc DescribeSubnets --region <REGION> --Filters '[{"Name":"vpc-id","Values":["<VPC_ID>"]}]' \
+  --filter "SubnetSet[].SubnetId" --output text
+# expected: 子网 ID 列表
+```
+
+## 关键字段
+
+> 来源：`tccli tke RunPrometheusInstance` / `CreatePrometheusClusterAgent` / `DescribePrometheusTargets` 的 `--generate-cli-skeleton`（实测）。
+
+### RunPrometheusInstance
+
+| 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
+|:------|------|:--------:|------------|---------------|
+| InstanceId | string | 是 | 实例名，全局唯一 | `InvalidParameterValue` |
+| SubnetId | string | 是 | VPC 子网 ID | `ResourceNotFound.SubnetId` |
+
+> `RunPrometheusInstance` 入参极简（仅 InstanceId + SubnetId），其他配置（规格/地域）用默认或后续修改。
+
+### CreatePrometheusClusterAgent
+
+| 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
+|:------|------|:--------:|------------|---------------|
+| InstanceId | string | 是 | Prometheus 实例 ID | `ResourceNotFound` |
+| Agents | list | 是 | Agent 列表（含 ClusterId） | `InvalidParameterValue` |
+
+### DescribePrometheusTargets
+
+| 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
+|:------|------|:--------:|------------|---------------|
+| InstanceId | string | 是 | Prometheus 实例 ID | `ResourceNotFound` |
+| ClusterType | string | 否 | 集群类型 | — |
+| ClusterId | string | 否 | 集群 ID | `ResourceNotFound` |
+| Filters | list | 否 | 过滤器 | `InvalidParameterValue` |
+
+## 操作步骤
+
+### 步骤 1：决策 — 实例规格
+
+#### 为什么用独立 Prometheus 实例
+
+- **独立实例（推荐）**: 独立 Prometheus 服务，数据隔离，可长期存储
+- **集群内置**: 集群内临时 Prometheus，数据随集群销毁
+- **默认推荐**: 生产用独立实例；测试可用集群内置
+- **能换吗?**: 独立实例创建后可改规格，但不能转为集群内置
+
+### 步骤 2：创建实例 — 最小化
+
+```bash
+tccli tke RunPrometheusInstance --version 2018-05-25 --region ap-guangzhou \
+  --InstanceId "<INSTANCE_NAME>" --SubnetId "<SUBNET_ID>"
+# expected: exit 0, 返回实例 ID
+```
+
+| 占位符 | 含义 | 约束 | 如何获取 |
+|:------------|:-----|:-----|:---------|
+| `<INSTANCE_NAME>` | Prometheus 实例名 | 全局唯一 | 自定义，如 `prod-monitor` |
+| `<SUBNET_ID>` | VPC 子网 ID | 须存在 | `tccli vpc DescribeSubnets` |
+
+### 步骤 3：关联集群 Agent
+
+```bash
+tccli tke CreatePrometheusClusterAgent --version 2018-05-25 --region ap-guangzhou \
+  --InstanceId "<INSTANCE_ID>" \
+  --Agents '[{"ClusterId":"<CLUSTER_ID>","EnableScaling":true}]'
+# expected: exit 0, Agent 以 DaemonSet 部署到集群
+```
+
+> `Agents` 是数组，可一次关联多个集群。`EnableScaling=true` 允许 Agent 随节点扩缩容自动调度。
+
+### 步骤 4：查询采集目标
+
+```bash
+tccli tke DescribePrometheusTargets --version 2018-05-25 --region ap-guangzhou \
+  --InstanceId "<INSTANCE_ID>" --ClusterId "<CLUSTER_ID>"
+# expected: 采集目标列表，含 up 状态
+```
+
+### 步骤 5：验证
+
+```bash
+# 查看实例状态
+tccli tke DescribePrometheusInstancesOverview --region ap-guangzhou \
+  --filter "Instances[].{id:InstanceId,name:InstanceName,state:InstanceStatus}"
+# expected: 实例状态为运行中
+```
+
+| 维度 | 命令 | 预期 |
+|:-----|:-----|:-----|
+| 实例运行 | `DescribePrometheusInstancesOverview` → `InstanceStatus` | 运行中 |
+| Agent 就绪 | `DescribePrometheusClusterAgents`（见 [Agent 管理](prometheus-agent.md)） | Agent Ready |
+| 采集目标 up | `DescribePrometheusTargets` | 目标 `up` 状态为 1 |
+| 指标可查 | `DescribePrometheusRecordRules`（见 [配置](prometheus-config.md)） | 指标返回 |
+
+## 清理
+
+> **副作用警告**：删除 Prometheus 实例会销毁所有监控数据。Agent 会从集群卸载。
+
+```bash
+# 1. 卸载 Agent
+tccli tke DeletePrometheusClusterAgent --version 2018-05-25 --region ap-guangzhou \
+  --InstanceId "<INSTANCE_ID>" --ClusterId "<CLUSTER_ID>"
+# expected: exit 0
+
+# 2. 删除实例（实例删除 Action 需核实归属服务，见 gap）
+# 实例删除可能在监控类服务，先用 help 确认
+tccli tke help --version 2018-05-25 2>&1 | /usr/bin/grep -oE '<[A-Za-z]*DeletePrometheus[A-Za-z]*>' | tr -d '<>'
+```
+
+> ⚠️ `DeletePrometheusInstance` 在 tke 服务可能不存在（实例删除需核实归属）。确认无对应 Action 后，到控制台删除。
+
+## 故障恢复
+
+### 命令返回错误 (exit ≠ 0)
+
+| 现象 | 诊断 | 根因 | 修复 |
+|:--------|:----------|:------------|:-----|
+| `InvalidParameterValue.InstanceId` | 查实例名格式 | 实例名含非法字符或已存在 | 换全局唯一名称 |
+| `ResourceNotFound.SubnetId` | `tccli vpc DescribeSubnets` | 子网不存在 | 用存在子网 |
+| `ResourceNotFound` (InstanceId) | `DescribePrometheusInstancesOverview` | Prometheus 实例不存在 | 先 `RunPrometheusInstance` |
+| `FailedOperation` | `DescribeClusterStatus` 看集群状态 | 集群非 Running | 等集群 Running |
+| `UnknownAction` | 检查 `--version` | 未带 `--version 2018-05-25` 误走新版 | 显式带 `--version 2018-05-25` |
+
+### 命令成功但状态不对 (exit = 0)
+
+| 现象 | 诊断 | 根因 | 修复 |
+|:--------|:----------|:------------|:-----|
+| 实例长时间 Creating | `DescribePrometheusInstancesOverview` | 子网资源不足 | 换子网或提工单 |
+| Agent 关联但目标全 down | `DescribePrometheusTargets` | Agent 未就绪或网络不通 | 查 Agent Pod 日志，确认安全组 |
+| 无指标数据 | `DescribePrometheusRecordRules` | 采集配置未生效 | 见 [配置与模板](prometheus-config.md) |
+
+## 实例与模板同步查询
+
+> Prometheus 实例详情、初始化状态、模板同步状态查询。
+
+```bash
+# 查询实例详情 (按 InstanceId)
+tccli tke DescribePrometheusInstance --InstanceId "<PROM_INSTANCE_ID>" --region <REGION>
+# expected: exit 0, 实例配置详情
+
+# 查询实例初始化状态 (创建后轮询用)
+tccli tke DescribePrometheusInstanceInitStatus --InstanceId "<PROM_INSTANCE_ID>" --region <REGION>
+# expected: exit 0, 初始化阶段与进度
+
+# 查询实例概览列表 (支持 Filters 过滤)
+tccli tke DescribePrometheusOverviews --Limit 10 --region <REGION>
+# expected: exit 0, 实例概览列表
+```
+
+> ⚠️ Prometheus 接口需单独授权。实测 `DescribePrometheusOverviews` 未授权时返回 `UnauthorizedOperation: 您未授权访问该接口。请求由云API拦截`。需在 CAM 开通 Prometheus 相关权限。
+
+```bash
+# 查询模板同步状态 (按 TemplateId)
+tccli tke DescribePrometheusTempSync --TemplateId "<TEMPLATE_ID>" --region <REGION>
+# expected: exit 0, 模板同步目标列表
+
+tccli tke DescribePrometheusTemplateSync --TemplateId "<TEMPLATE_ID>" --region <REGION>
+# expected: exit 0, 模板同步详情
+
+# 删除模板同步 (TemplateId + Targets[] 定位)
+tccli tke DeletePrometheusTempSync --TemplateId "<TEMPLATE_ID>" --region <REGION> \
+  --Targets '[{"Region":"<REGION>","InstanceId":"<PROM_INSTANCE_ID>"}]'
+# expected: exit 0
+
+tccli tke DeletePrometheusTemplateSync --TemplateId "<TEMPLATE_ID>" --region <REGION> \
+  --Targets '[{"Region":"<REGION>","InstanceId":"<PROM_INSTANCE_ID>"}]'
+# expected: exit 0
+```
+
+> `DescribePrometheusTempSync`/`TemplateSync` 用 `TemplateId` 查同步状态；`DeletePrometheusTempSync`/`TemplateSync` 用 `TemplateId`+`Targets[]`（Region+InstanceId）定位删除目标。模板同步配置见 [配置与模板](prometheus-config.md)。
+
+## 下一步
+
+- [Prometheus 告警配置](prometheus-alerting.md) — 告警策略与规则
+- [Prometheus 配置与模板](prometheus-config.md) — 模板同步与记录规则
+- [Prometheus Agent 管理](prometheus-agent.md) — Agent 安装与采集目标
+- [可观测性概览](index.md) — 监控全景
+- [故障排查](../troubleshooting.md) — 监控无数据诊断
+
+## 控制台替代方案
+
+[容器服务控制台 - Prometheus 监控](https://console.cloud.tencent.com/tke2/prometheus)
+
+## Action 清单
+
+| Action | 类型 | 版本 | 说明 |
+|:-------|:-----|:-----|:-----|
+| `RunPrometheusInstance` | 主操作 | 2018-05-25 | 创建独立 Prometheus 实例 |
+| `CreatePrometheusClusterAgent` | 主操作 | 2018-05-25 | 关联集群 Agent（DaemonSet） |
+| `DeletePrometheusClusterAgent` | 清理 | 2018-05-25 | 卸载集群 Agent |
+| `DeletePrometheusTemplateSync` | 清理 | 2018-05-25 | 删除模板同步（TemplateId+Targets） |
+| `DeletePrometheusTempSync` | 清理 | 2018-05-25 | 删除模板同步（短名） |
+| `DescribePrometheusInstance` | 验证 | 2018-05-25 | 实例详情 |
+| `DescribePrometheusInstanceInitStatus` | 验证 | 2018-05-25 | 初始化状态与进度 |
+| `DescribePrometheusInstancesOverview` | 验证 | 2018-05-25 | 实例概览列表（含 Filters） |
+| `DescribePrometheusOverviews` | 验证 | 2018-05-25 | 实例概览（需 CAM 授权） |
+| `DescribePrometheusTargets` | 验证 | 2018-05-25 | 采集目标 up 状态 |
+| `DescribePrometheusRecordRules` | 验证 | 2018-05-25 | 记录规则 |
+| `DescribePrometheusClusterAgents` | 验证 | 2018-05-25 | Agent 就绪状态 |
+| `DescribePrometheusTemplateSync` | 验证 | 2018-05-25 | 模板同步详情 |
+| `DescribePrometheusTempSync` | 验证 | 2018-05-25 | 模板同步目标列表 |
+| `DescribeClusterStatus` | 验证 | 2018-05-25 | 确认集群 Running |
