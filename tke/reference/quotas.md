@@ -4,7 +4,7 @@ subtype: 8C
 ---
 # TKE 配额与限制
 
-> 资源配额与 API 限频。配额默认值来自腾讯云官方文档，API 限频来自 TKE API 概览页实测。超限信号列给出触发限制时看到的错误码。
+> 资源配额与 API 限频。配额默认值来自腾讯云官方文档，API 限频来自 TKE API 概览页。超限信号列给出触发限制时看到的错误码。
 
 ## 资源配额
 
@@ -53,16 +53,20 @@ tccli tke DescribeClusterStatus --region <REGION> --ClusterIds '["<CLUSTER_ID>"]
 
 ## 资源用量查询
 
-> 集群资源用量（CRD/Pod/节点）、Pod 计费与抵扣、预留实例利用率的查询。
+> 集群资源用量（CRD/节点）查询，核对是否接近配额上限。
 
 ```bash
-# 集群资源用量 (CRD 等存量, 核对是否接近上限)
+# 集群资源用量 (CRD/Pod/RS/ConfigMap 等存量, 核对是否接近上限)
 tccli tke DescribeResourceUsage --ClusterId "<CLUSTER_ID>" --region <REGION>
-# expected: exit 0, CRDUsage 含 Name/Usage/Details[]
+# expected: exit 0, 返回 5 个用量字段: CRDUsage/PodUsage/RSUsage/ConfigMapUsage/OtherUsage
 ```
 ```json
 {
-    "CRDUsage": {"Name": "CRD", "Usage": 10, "Details": [{"Name": "example-crd.example.com", "Usage": 2}]}
+    "CRDUsage": {"Name": "CRD", "Usage": 10, "Details": [{"Name": "example-crd.example.com", "Usage": 2}]},
+    "PodUsage": 5,
+    "RSUsage": 3,
+    "ConfigMapUsage": 2,
+    "OtherUsage": {"Name": "Other", "Usage": 1}
 }
 ```
 
@@ -70,7 +74,15 @@ tccli tke DescribeResourceUsage --ClusterId "<CLUSTER_ID>" --region <REGION>
 # 节点资源 (含预留实例, 需 NodeName)
 tccli tke DescribePostNodeResources --ClusterId "<CLUSTER_ID>" --NodeName "<NODE_NAME>" --region <REGION>
 # expected: exit 0, ReservedInstanceSet[]
+```
 
+> `DescribeResourceUsage` 返回 5 类资源存量（`CRDUsage`/`PodUsage`/`RSUsage`/`ConfigMapUsage`/`OtherUsage`，核对是否接近上限）。`DescribePostNodeResources` 查节点资源含预留实例绑定。
+
+## Pod 成本核算与预留实例抵扣
+
+> Pod 计费、按规格估算可创建数、预留实例抵扣率与利用率——成本核算任务，区别于上文的配额用量查询。
+
+```bash
 # 按规格查询 Pod (CPU/Mem/GPU 规格 + 可用区, 创建前估算)
 tccli tke DescribePodsBySpec --Cpu 2 --Memory 4 --Zone "<ZONE>" --ClusterId "<CLUSTER_ID>" --region <REGION>
 # expected: exit 0, 可创建 Pod 数
@@ -83,12 +95,14 @@ tccli tke DescribePodChargeInfo --ClusterId "<CLUSTER_ID>" --Namespace "<NS>" --
 tccli tke DescribePodDeductionRate --Zone "<ZONE>" --ClusterId "<CLUSTER_ID>" --region <REGION>
 # expected: exit 0, 抵扣率
 
-# 预留实例利用率明细 (Filters 过滤, 属预留实例域)
+# 预留实例利用率明细 (查询, 不绑集群)
 tccli tke DescribeRIUtilizationDetail --Limit 20 --region <REGION>
 # expected: exit 0, 预留实例利用明细
 ```
 
-> `DescribeResourceUsage` 返回 CRD 等资源存量（核对是否接近上限）。`DescribePodsBySpec` 按规格估算可创建 Pod 数。`DescribePodChargeInfo`/`DescribePodDeductionRate` 是 Pod 计费与预留实例抵扣（预留实例域，见 [排除说明](#)）。`DescribeRIUtilizationDetail` 属预留实例（D34 已排除，仅查询参考）。
+> `DescribePodsBySpec` 按规格估算可创建 Pod 数。`DescribePodChargeInfo`/`DescribePodDeductionRate` 是 Pod 计费与预留实例抵扣。`DescribeRIUtilizationDetail` 查询预留实例利用率。
+>
+> **预留实例域边界**：本指南排除的是预留实例的**写操作**（购买/退还/续费/改范围，共 6 个，见 [README 排除表](../../README.md#本指南不覆盖哪些操作)）；预留实例的**查询用量**操作（`DescribeRIUtilizationDetail`）与 Pod 成本核算同属一个用户任务，纳入本篇覆盖，不排除。
 
 ## 相关文档
 

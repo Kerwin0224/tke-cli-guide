@@ -12,7 +12,7 @@ fused: true
 
 实例同步（Replication）在主实例与从实例间建立同步规则，主实例推送的镜像按规则自动复制到从实例所在地域。典型场景：跨地域容灾、就近拉取加速。
 
-> ⚠️ **实例规格限制（实测）**：实例同步**仅支持 standard / premium 实例**，basic 实例不支持。在 basic 实例上调用 `ManageReplication` 返回 `UnsupportedOperation: ManageReplication function only supports standard and premium instance`。使用前确认实例规格。
+> ⚠️ **实例规格限制**：实例同步**仅支持 standard / premium 实例**，basic 实例不支持。在 basic 实例上调用 `ManageReplication` 返回 `UnsupportedOperation: ManageReplication function only supports standard and premium instance`。使用前确认实例规格。
 
 ## 决策依据
 
@@ -55,11 +55,9 @@ basic 实例不能作主也不能作从。需先 [创建实例](../instances/cre
 | `ReplicationRegionId` | CreateReplicationInstance | 是 | 从实例地域数字 ID |
 | `SyncTag` | CreateReplicationInstance | 否 | 是否同步标签 |
 
-> 参数名实测自各 Action `--generate-cli-skeleton`（P7）。
-
 ### TCR 地域数字 ID（ReplicationRegionId 取值）
 
-实测 `tccli tcr DescribeRegions`：
+`tccli tcr DescribeRegions`：
 
 | 地域 | ID | 别名 |
 |:-----|:--:|:----:|
@@ -176,19 +174,19 @@ tccli tcr DeleteReplicationInstance --region <SOURCE_REGION> \
 | 跨账号同步失败 | 未配 `PeerReplicationOption` | 同账号免配；跨账号需 `PeerRegistryUin`/`PeerRegistryToken` |
 | `DescribeReplicationPolicies` 分页无效 | 该接口用 `Page/PageSize` 非 `Offset/Limit` | 改用 `--Page 1 --PageSize 20` |
 
-> ⚠️ **分页字段不一致（实测）**：`DescribeReplicationInstances` 用 `Offset/Limit`，`DescribeReplicationPolicies` 用 `Page/PageSize`。同一功能域分页契约不同，切换接口时核对。
+> ⚠️ **分页字段不一致**：`DescribeReplicationInstances` 用 `Offset/Limit`，`DescribeReplicationPolicies` 用 `Page/PageSize`。同一功能域分页契约不同，切换接口时核对。
 
 ```bash
 # 查询同步规则列表（RegistryId + Page/PageSize 分页，非 Offset/Limit）
 tccli tcr DescribeReplicationPolicies --region <SOURCE_REGION> \
   --RegistryId <SOURCE_REGISTRY_ID> --Page 1 --PageSize 20
-# expected: exit 0, 返回已配置的同步规则列表
+# expected: exit 0，返回 ReplicationPolicyInfoList[]+TotalCount
 
 # 查询从实例创建任务状态（ReplicationRegistryId + ReplicationRegionId 定位）
 tccli tcr DescribeReplicationInstanceCreateTasks --region <SOURCE_REGION> \
   --ReplicationRegistryId <REPLICATION_REGISTRY_ID> \
   --ReplicationRegionId <DEST_REGION_ID>
-# expected: exit 0, 返回从实例创建任务进度（Creating→Success/Failed）
+# expected: exit 0，返回 TaskDetail+Status（无任务时为空；从实例创建进度 Creating→Success/Failed）
 ```
 
 > `DescribeReplicationPolicies` 用 `Page`/`PageSize`（从 1 开始的页码），与同域 `DescribeReplicationInstances` 的 `Offset`/`Limit` 不同——切换接口必须改分页参数。`DescribeReplicationInstanceCreateTasks` 用 `ReplicationRegistryId`（从实例 ID，步骤 1 返回）+ `ReplicationRegionId`（从实例地域数字 ID）查创建任务，区别于 `DescribeReplicationInstanceSyncStatus` 查的是同步状态。
@@ -198,16 +196,3 @@ tccli tcr DescribeReplicationInstanceCreateTasks --region <SOURCE_REGION> \
 - 创建 standard 实例（同步前提）：[创建实例](../instances/create.md)
 - 镜像推送（同步的源头）：[推送与拉取镜像](../images/push-pull.md)
 - 仓库与命名空间管理：[仓库管理](../repositories/manage.md)
-
-## Action 清单
-
-| Action | 类型 | 说明 |
-|:-------|:-----|:-----|
-| `CreateReplicationInstance` | 主操作 | 创建从实例（ReplicationRegionId + SyncTag） |
-| `ManageReplication` | 主操作 | 配置同步规则（嵌套 Rule + PeerReplicationOption） |
-| `DescribeReplicationInstances` | 验证 | 查询从实例列表（Offset/Limit） |
-| `DescribeReplicationInstanceCreateTasks` | 验证 | 查询从实例创建任务状态 |
-| `DescribeReplicationInstanceSyncStatus` | 验证 | 查询同步状态（ShowReplicationLog） |
-| `DescribeReplicationPolicies` | 验证 | 查询同步规则（Page/PageSize） |
-| `DeleteReplicationRule` | 清理 | 删除同步规则 |
-| `DeleteReplicationInstance` | 清理 | 删除从实例 |

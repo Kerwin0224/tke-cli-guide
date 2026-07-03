@@ -24,7 +24,7 @@ fused: false
 | 证书 | SSL 证书，域名匹配 | `CertificateId` 对应的证书必须覆盖该域名 |
 | 证书来源 | SSL 证书服务 | `tccli ssl DescribeCertificates` 获取 ID |
 
-> ⚠️ 实测：`CertificateId` 必须是 SSL 服务中真实存在的证书，且证书域名需匹配 `DomainName`。传不存在的证书 ID 返回 `FailedOperation.CertificateNotFound 证书不存在`（此校验先于 CAM 权限发生）。
+> ⚠️ `CertificateId` 必须是 SSL 服务中真实存在的证书，且证书域名需匹配 `DomainName`。传不存在的证书 ID 返回 `FailedOperation.CertificateNotFound 证书不存在`（此校验先于 CAM 权限发生）。
 
 ### 是否用自定义域名
 
@@ -38,8 +38,6 @@ fused: false
 | `DomainName` | Create/Delete | 是 | 自定义域名（已备案） |
 | `CertificateId` | Create/Delete | 是 | SSL 证书 ID（SSL 服务） |
 | `Limit`/`Offset` | Describe | 否 | 分页 |
-
-> 参数名实测自各 Action `--generate-cli-skeleton`（P7）。
 
 ## 操作步骤
 
@@ -123,19 +121,10 @@ tccli tcr DeleteInstanceCustomizedDomain --region <REGION> \
 | `docker login` 报证书错误 | 证书过期 / DNS 未生效 | 续期证书，重新绑定；确认 DNS 解析 |
 | 域名无法备案 | 域名未在工信部备案（大陆实例） | 完成备案，或用境外地域实例 |
 
-> 实测错误样本：传不存在的 `CertificateId` → `code:FailedOperation.DependenceError ... CertificateNotFound, Message:证书不存在`（校验先于 CAM 权限）。
+> 错误样本：传不存在的 `CertificateId` → `code:FailedOperation.DependenceError ... CertificateNotFound, Message:证书不存在`（校验先于 CAM 权限）。
 
 ## 下一步
 
 - 实例访问凭证（Token/VPC）：[访问管理](manage-access.md)
 - 创建企业版实例：[创建实例](create.md)
 - 镜像推送拉取：[推送与拉取镜像](../images/push-pull.md)
-
-## Action 清单
-
-| Action | 类型 | 跨产品 | 说明 |
-|:-------|:-----|:------:|:-----|
-| `CreateInstanceCustomizedDomain` | 主操作 | ssl | 绑定域名（需 CertificateId） |
-| `DescribeInstanceCustomizedDomain` | 验证 | — | 查询域名列表（Limit/Offset） |
-| `DeleteInstanceCustomizedDomain` | 清理 | — | 解绑域名（DomainName + CertificateId） |
-| `ssl:DescribeCertificates` | 前置 | ssl | 获取 CertificateId（跨产品） |

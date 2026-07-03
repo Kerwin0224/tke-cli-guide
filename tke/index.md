@@ -30,6 +30,12 @@ graph TD
 | 安全工程师 | 审计、加密、认证、权限控制 | [安全](security/index.md) |
 | 架构师 | 多集群、混合云、边缘计算 | [专用工作负载](specialized/index.md) |
 
+## 触发条件
+
+- 你要在腾讯云上运行/管理 Kubernetes 集群（创建、查询、升级、删除）— 本域是入口
+- 你已读完 [快速入门](../quickstart/tke-first-cluster.md)，想深入某个具体操作（节点池/网络/安全/可观测）— 看下方下一步或 [集群管理](clusters/index.md)
+- 你遇到 TKE API 双版本困惑（`2018-05-25` vs `2022-05-01` 哪个该用）— 直接看 [API 版本选择](#api-版本选择)
+
 ## 核心概念
 
 | 概念 | 含义 | 为什么重要 |
@@ -40,7 +46,7 @@ graph TD
 | Addon | 集群插件（网络、存储、监控） | 扩展集群功能，如 CBS CSI、Nginx Ingress |
 | Endpoint | 集群 API Server 的访问入口 | 公网/内网访问 kubectl 的方式 |
 | Release | 集群内应用发布（类 Helm） | 管理应用的生命周期 |
-| API 版本 | 2018-05-25（旧，全功能 270 Action）vs 2022-05-01（新，官方当前版本 22 Action） | 决定用哪版 API；同名 Action 契约可能不同，命令须显式带 `--version` |
+| API 版本 | 2018-05-25（旧，全功能 271 Action）vs 2022-05-01（新，官方当前版本 22 Action） | 决定用哪版 API；同名 Action 契约可能不同，命令须显式带 `--version` |
 
 ## Cluster 类型
 
@@ -88,7 +94,7 @@ TKE 有两个 API 版本，tccli 默认走 `2018-05-25`，但**官方当前版�
 
 ```bash
 tccli tke DescribeClusters --region ap-guangzhou --Limit 1
-# expected: { "Response": { "TotalCount": ..., "Clusters": [...] } }
+# expected: { "TotalCount": ..., "Clusters": [...] }（tccli 默认剥离 Response 包装层）
 ```
 
 ## 下一步
@@ -96,3 +102,4 @@ tccli tke DescribeClusters --region ap-guangzhou --Limit 1
 - [创建集群](clusters/create.md) — 创建你的第一个 TKE 集群
 - [节点池](nodes/index.md) — 给集群添加工作节点
 - [网络](networking/index.md) — 配置集群访问端点
+- [应用发布](releases/index.md) — 用 Helm Release 部署应用

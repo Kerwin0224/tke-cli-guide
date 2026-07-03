@@ -19,7 +19,7 @@ fused: false
 | 查询命名空间 | `DescribeNamespacePersonal` | 看已有命名空间 |
 | 推送/拉取 | docker CLI | 镜像传输 |
 
-> 个人版无实例概念，所有操作直接在账号下的个人版空间进行。配额实测：命名空间 2000、仓库 10000。
+> 个人版无实例概念，所有操作直接在账号下的个人版空间进行。配额：命名空间 2000、仓库 10000。
 
 ## 准备工作
 
@@ -36,7 +36,7 @@ docker --version
 ### 资源检查
 
 ```bash
-# 查看个人版配额（实测 Data.LimitInfo[]）
+# 查看个人版配额（Data.LimitInfo[]）
 tccli tcr DescribeUserQuotaPersonal
 # expected: Data.LimitInfo 含 namespace/repo 配额
 
@@ -47,7 +47,7 @@ tccli tcr DescribeNamespacePersonal --Namespace "" --Limit 10 --Offset 0
 
 ## 关键字段
 
-> 来源：`--generate-cli-skeleton` 实测。个人版 Action 入参极简。
+> 来源：`--generate-cli-skeleton`。个人版 Action 入参极简。
 
 ### CreateUserPersonal
 
@@ -90,7 +90,7 @@ tccli tcr CreateUserPersonal --Password "<PASSWORD>"
 ```bash
 # 修改个人版用户密码（仅 Password，用户名系统分配不可改）
 tccli tcr ModifyUserPasswordPersonal --Password "<NEW_PASSWORD>"
-# expected: exit 0
+# expected: exit 0; 账号未初始化个人版用户报 ResourceNotFound.ErrNoUser
 ```
 
 ### 步骤 2：创建命名空间
@@ -139,9 +139,9 @@ tccli tcr DescribeNamespacePersonal --Namespace "<NAMESPACE_NAME>" --Limit 10 --
 tccli tcr DescribeImagePersonal --Namespace "<NAMESPACE_NAME>" --RepoName "<REPO_NAME>" --Limit 10 --Offset 0
 # expected: 含刚推送的 tag
 
-# 查仓库详情（RepoName 定位，个人版用 RepoName 非 RepositoryName）
-tccli tcr DescribeRepositoryPersonal --RepoName "<REPO_NAME>" --Limit 10 --Offset 0
-# expected: 含目标仓库及 Public/Private 属性
+# 查仓库详情（RepoName 须为 "namespace/repo" 格式，无 Limit/Offset 参数）
+tccli tcr DescribeRepositoryPersonal --RepoName "<NAMESPACE_NAME>/<REPO_NAME>"
+# expected: exit 0, 返回 Data 对象含仓库属性；仓库不存在报 ResourceNotFound.ErrNoRepo
 ```
 
 | 维度 | 命令 | 预期 |
@@ -203,18 +203,3 @@ tccli tcr DescribeNamespacePersonal --Namespace "<NAMESPACE_NAME>" --Limit 10 --
 ## 控制台替代方案
 
 [容器镜像服务控制台 - 个人版](https://console.cloud.tencent.com/tcr/personal)
-
-## Action 清单
-
-| Action | 类型 | 版本 | 说明 |
-|:-------|:-----|:-----|:-----|
-| `CreateUserPersonal` | 主操作 | TCR | 创建个人版用户（docker login 账号） |
-| `CreateNamespacePersonal` | 主操作 | TCR | 创建个人版命名空间 |
-| `CreateRepositoryPersonal` | 主操作 | TCR | 创建个人版仓库（入参 RepoName） |
-| `ModifyUserPasswordPersonal` | 主操作 | TCR | 修改个人版用户密码 |
-| `DescribeImagePersonal` | 验证 | TCR | 查询个人版镜像版本 |
-| `DescribeNamespacePersonal` | 验证 | TCR | 查询个人版命名空间 |
-| `DescribeUserQuotaPersonal` | 验证 | TCR | 查询个人版配额 |
-| `DeleteImagePersonal` | 清理 | TCR | 删除个人版镜像 |
-| `DeleteRepositoryPersonal` | 清理 | TCR | 删除个人版仓库 |
-| `DeleteNamespacePersonal` | 清理 | TCR | 删除个人版命名空间 |

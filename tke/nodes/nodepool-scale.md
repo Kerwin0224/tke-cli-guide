@@ -49,7 +49,7 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_I
 
 ## 关键字段
 
-> 来源：`tccli tke ModifyNodePoolDesiredCapacityAboutAsg --generate-cli-skeleton`（实测）。此 Action 仅 3 个参数——只改期望数，不改节点池配置。
+> 来源：`tccli tke ModifyNodePoolDesiredCapacityAboutAsg --generate-cli-skeleton`。此 Action 仅 3 个参数——只改期望数，不改节点池配置。
 
 | 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
 |:------|------|:--------:|------------|---------------|
@@ -193,7 +193,7 @@ tccli tke DeleteClusterAsGroups --ClusterId "<CLUSTER_ID>" --region <REGION> \
 
 ### 查询 ASG 活动与调整节点池区间
 
-> 扩容不增长时查 ASG 活动历史定位根因（机型售罄/子网 IP 不足）；`DesiredCapacity` 超区间时先 `ModifyClusterNodePool` 调 Min/Max。两者参数以 `--generate-cli-skeleton` 实测为准。
+> 扩容不增长时查 ASG 活动历史定位根因（机型售罄/子网 IP 不足）；`DesiredCapacity` 超区间时先 `ModifyClusterNodePool` 调 Min/Max。两者参数以 `--generate-cli-skeleton` 为准。
 
 ```bash
 # 查询集群 ASG 活动与实例数（ClusterId + AutoScalingGroupIds[] + 分页）
@@ -201,14 +201,14 @@ tccli tke DescribeClusterAsGroups --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" \
   --AutoScalingGroupIds '["<ASG_ID>"]' \
   --Offset 0 --Limit 20
-# expected: AutoScalingGroupSet[] 含 MinSize/MaxSize/CurrentSize/Activity
+# expected: exit 0，返回 TotalCount+ClusterAsGroupSet[]（含 MinSize/MaxSize/CurrentSize/Activity）
 
 # 调整节点池 Min/Max 区间（突破 DesiredCapacity 区间限制前先调此）
 tccli tke ModifyClusterNodePool --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" \
   --NodePoolId "<NODE_POOL_ID>" \
   --MaxNodesNum 20 --MinNodesNum 2
-# expected: exit 0
+# expected: exit 0; 节点池不存在报 FailedOperation.RecordNotFound
 ```
 
 | 占位符 | 含义 | 如何获取 |
@@ -257,25 +257,3 @@ tccli tke ModifyClusterNodePool --region ap-guangzhou \
 ## 控制台替代方案
 
 [容器服务控制台 - 节点池](https://console.cloud.tencent.com/tke2/nodepool)
-
-## Action 清单
-
-| Action | 类型 | 版本 | 说明 |
-|:-------|:-----|:-----|:-----|
-| `ModifyNodePoolDesiredCapacityAboutAsg` | 主操作 | 2018-05-25 | 改期望数（轻量，3 参数） |
-| `ModifyClusterNodePool` | 主操作 | 2018-05-25 | 改全部配置（含 Min/Max） |
-| `DrainClusterVirtualNode` | 主操作 | 2018-05-25 | 排水节点（缩容前安全操作） |
-| `RemoveNodeFromNodePool` | 清理 | 2018-05-25 | 移出节点池（保留 CVM） |
-| `ScaleOutClusterMaster` | 主操作 | 2018-05-25 | 扩容 Master（透传 CVM JSON） |
-| `ScaleInClusterMaster` | 主操作 | 2018-05-25 | 缩容 Master（InstanceId+InstanceDeleteMode） |
-| `ModifyClusterAsGroupAttribute` | 主操作 | 2018-05-25 | 修改单 ASG 属性（Min/Max） |
-| `ModifyClusterAsGroupOptionAttribute` | 主操作 | 2018-05-25 | 修改集群级 autoscaler 选项 |
-| `DeleteClusterAsGroups` | 清理 | 2018-05-25 | 删除 ASG（KeepInstance 保留节点） |
-| `DescribeClusterNodePools` | 验证 | 2018-05-25 | 节点池状态与期望数 |
-| `DescribeClusterAsGroups` | 验证 | 2018-05-25 | ASG 活动与实例数 |
-| `DescribeClusterAsGroupOption` | 验证 | 2018-05-25 | 集群级 autoscaler 选项 |
-| `DescribeClusterInstances` | 验证 | 2018-05-25 | 节点 Ready 状态 |
-| `DescribeClusters` | 验证 | 2018-05-25 | 确认集群 ID |
-| `DescribeClusterStatus` | 验证 | 2018-05-25 | 集群 Running + 节点数配额 |
-| `DescribeZoneInstanceConfigInfos` | 验证 | 2022-05-01 | 机型库存查询 |
-| `cvm:DescribeZoneInstanceConfigInfos` | 跨产品 | cvm | 机型售罄诊断 |

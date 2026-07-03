@@ -22,15 +22,16 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_I
 | `tccli tke DescribeClusterInstances --ClusterId "<ID>"` | 节点列表 + 各节点状态 | 节点不能加入/运行异常时 |
 | `tccli tke DescribeClusterKubeconfig --ClusterId "<ID>"` | kubeconfig 是否可获取 | kubectl 连接失败时 |
 | `tccli tke DescribeClusterEndpoints --ClusterId "<ID>"` | 访问端点状态 | 无法连接 API Server 时 |
-| `tccli tke DescribeTasks --Filter '[{"Name":"cluster-id","Values":["<ID>"]}]' --Latest true` | 异步任务进度 | 操作卡住时 |
+| `tccli tke DescribeTasks --Filter '[{"Name":"ClusterId","Values":["<ID>"]},{"Name":"TaskType","Values":["node_upgrade"]}]' --Latest true` | 异步任务进度 | 操作卡住时 |
 
-> `DescribeTasks` 入参是 `Filter`+`Latest`（实测 `--generate-cli-skeleton`），无 `TaskIds` 参数——按 `cluster-id` 等过滤 + `Latest=true` 只取每个任务最新状态。参数以 tccli 骨架为准，勿凭记忆传 `--TaskIds`。
+> `DescribeTasks` 入参是 `Filter`+`Latest`，无 `TaskIds` 参数。**`Filter` 内 `TaskType` 必传**（不传报 `InvalidParameter.Param: PARAM_ERROR(TaskType is empty)`），取值如 `node_upgrade`/`add_cluster_cidr`/`node_upgrade_ctl`；`ClusterId` 在 `Filter` 内（注意大小写 `ClusterId` 非 `cluster-id`）。`Latest=true` 只取最新一条。无匹配任务返回空 `Tasks[]` 或 `FailedOperation.TaskNotFound`。
 
 ```bash
-# 查询集群的异步任务进度（Filter 按 cluster-id 过滤，Latest=true 取最新状态）
+# 查询集群的异步任务进度（Filter 内 ClusterId + TaskType 必传，Latest=true 取最新）
 tccli tke DescribeTasks --region ap-guangzhou \
-  --Filter '[{"Name":"cluster-id","Values":["<CLUSTER_ID>"]}]' --Latest true
-# expected: exit 0, TaskSet[] 含任务状态（Running/Succeeded/Failed）
+  --Filter '[{"Name":"ClusterId","Values":["<CLUSTER_ID>"]},{"Name":"TaskType","Values":["node_upgrade"]}]' \
+  --Latest true
+# expected: exit 0, 返回 {"Tasks": [...], "RequestId": "..."}；无任务时 Tasks 为空或报 FailedOperation.TaskNotFound
 ```
 
 ## 常见问题

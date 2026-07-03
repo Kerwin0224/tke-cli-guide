@@ -47,7 +47,7 @@ tccli tcr DescribeTagRetentionRules --region <REGION> --RegistryId "<REGISTRY_ID
 
 ## 关键字段
 
-> 来源：`tccli tcr CreateTagRetentionRule --generate-cli-skeleton`（实测）。
+> 来源：`tccli tcr CreateTagRetentionRule --generate-cli-skeleton`。
 
 | 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
 |:------|------|:--------:|------------|---------------|
@@ -79,7 +79,7 @@ tccli tcr ModifyTagRetentionRule --region <REGION> \
   --RegistryId "<REGISTRY_ID>" --RetentionId <RETENTION_ID> --NamespaceId <NAMESPACE_ID> \
   --CronSetting "0 3 * * *" \
   --RetentionRule '{"Key":"nDays","Value":30}'
-# expected: exit 0
+# expected: exit 0; RetentionId 不存在时报 InvalidParameter
 ```
 
 > `ModifyTagRetentionRule` 用 `RetentionId`（整数，来自 `DescribeTagRetentionRules`）定位规则，`RetentionRule`/`CronSetting` 覆盖式更新。`NamespaceId` 仍需传（规则绑命名空间）。改后用 `DescribeTagRetentionRules` 确认新值，或 `CreateTagRetentionExecution` 手动触发验证效果。
@@ -139,7 +139,7 @@ tccli tcr DescribeTagRetentionExecution --region <REGION> --RegistryId "<REGISTR
 tccli tcr DescribeTagRetentionExecutionTask --region <REGION> \
   --RegistryId "<REGISTRY_ID>" --RetentionId <RETENTION_ID> --ExecutionId <EXECUTION_ID> \
   --Offset 0 --Limit 20
-# expected: exit 0, 返回该次执行删除的镜像版本明细 + 失败原因
+# expected: 返回 RetentionTaskList[]+TotalCount; RetentionId 不存在报 InvalidParameter.ErrorTcrInvalidParameter: no such Retention policy
 ```
 
 | 维度 | 命令 | 预期 |
@@ -197,13 +197,13 @@ tccli tcr DescribeWebhookTrigger --RegistryId "<REGISTRY_ID>" --Namespace "<NAME
 ```
 
 ```bash
-# 创建触发器 (RegistryId + Namespace + 嵌套 Trigger 对象含 Name/Targets/事件类型)
+# 创建触发器 (RegistryId + Namespace + 嵌套 Trigger 对象，5 个必填字段: Name/Targets/EventTypes/Condition/Enabled)
 tccli tcr CreateWebhookTrigger --RegistryId "<REGISTRY_ID>" --Namespace "<NAMESPACE>" --region <REGION> \
-  --Trigger '{"Name":"<TRIGGER_NAME>","TriggerType":"push","Targets":[{"Type":"webhook","Address":"<URL>"}]}'
-# expected: exit 0, 返回触发器 Id
+  --Trigger '{"Name":"<TRIGGER_NAME>","EventTypes":["pushImage"],"Condition":".*","Enabled":true,"Targets":[{"Type":"webhook","Address":"<URL>"}]}'
+# expected: exit 0 返回 Trigger（含 Id）; 缺 EventTypes/Condition/Enabled 报 InvalidParameter.ErrorTcrInvalidParameter: non zero value required
 ```
 
-> `CreateWebhookTrigger` 的 `Trigger` 是嵌套对象（含 `Name`/`TriggerType`/`Targets[]`），`Targets[].Address` 是回调 URL。创建后用 `DescribeWebhookTrigger` 查列表，执行日志查 `DescribeWebhookTriggerLog`。
+> `CreateWebhookTrigger` 的 `Trigger` 嵌套对象有 5 个必填字段：`Name`/`Targets[]`/`EventTypes[]`（触发动作如 `pushImage`）/`Condition`（正则触发规则）/`Enabled`。缺任一报 `InvalidParameter.ErrorTcrInvalidParameter: non zero value required`。创建后用 `DescribeWebhookTrigger` 查列表，执行日志查 `DescribeWebhookTriggerLog`。
 ```json
 {"TotalCount": 0, "Triggers": [], "RequestId": "..."}
 ```
@@ -225,21 +225,35 @@ tccli tcr DeleteWebhookTrigger --RegistryId "<REGISTRY_ID>" --Namespace "<NAMESP
 # 查询触发器执行日志（RegistryId + Namespace + Id 定位触发器，分页取日志）
 tccli tcr DescribeWebhookTriggerLog --RegistryId "<REGISTRY_ID>" --Namespace "<NAMESPACE>" \
   --Id <TRIGGER_ID> --Offset 0 --Limit 20 --region <REGION>
-# expected: exit 0, 返回触发器每次回调的日志（成功/失败 + 状态码）
+# expected: 返回 TotalCount+Logs[]; Namespace 不存在报 ResourceNotFound.TcrResourceNotFound: namespace not found
 ```
 
 ## GC 垃圾回收任务
 
-> GC（垃圾回收）清理镜像层占用的存储。删除镜像后，GC 释放底层存储。属生命周期存储管理。
+> GC（垃圾回收）清理镜像层占用的存储。删除镜像后，GC 释放底层存储。属生命周期存储管理。GC 完整闭环：创建 → 查状态 → 终止。
+
+### 创建 GC 任务
 
 ```bash
-# 查询 GC 任务列表
+# 创建 GC 任务（RegistryId + GCParameters 嵌套配置；建议先 DryRun=true 预览）
+tccli tcr CreateGCJob --RegistryId "<REGISTRY_ID>" --region <REGION> \
+  --GCParameters '{"DryRun":false}'
+# expected: exit 0，返回 {"RequestId":"..."}（无 JobId 字段，任务用 DescribeGCJobs 查 Jobs[] 状态）
+```
+
+> `GCParameters` 含 `DryRun` 试跑开关。GC 删除镜像层后释放存储，**不可逆**，建议先 `DryRun=true` 预览影响范围再正式执行。
+
+### 查询 GC 任务
+
+```bash
 tccli tcr DescribeGCJobs --RegistryId "<REGISTRY_ID>" --region <REGION>
 # expected: exit 0, Jobs[] (无任务则空)
 ```
 ```json
 {"Jobs": [], "RequestId": "..."}
 ```
+
+### 终止 GC 任务
 
 ```bash
 # 终止进行中的 GC 任务
@@ -259,26 +273,3 @@ tccli tcr TerminateGCJob --RegistryId "<REGISTRY_ID>" --region <REGION>
 ## 控制台替代方案
 
 [容器镜像服务控制台 - 版本保留](https://console.cloud.tencent.com/tcr/retention)
-
-## Action 清单
-
-| Action | 类型 | 版本 | 说明 |
-|:-------|:-----|:-----|:-----|
-| `CreateTagRetentionRule` | 主操作 | TCR | 创建版本保留规则（latestPushedK/nDays） |
-| `ModifyTagRetentionRule` | 主操作 | TCR | 修改保留规则 |
-| `CreateTagRetentionExecution` | 主操作 | TCR | 手动触发保留规则执行 |
-| `CreateWebhookTrigger` | 主操作 | TCR | 创建 Webhook 触发器 |
-| `ModifyWebhookTrigger` | 主操作 | TCR | 修改触发器（嵌套 Trigger 对象） |
-| `DescribeTagRetentionRules` | 验证 | TCR | 查询保留规则列表 |
-| `DescribeTagRetentionExecution` | 验证 | TCR | 查询保留执行历史 |
-| `DescribeTagRetentionExecutionTask` | 验证 | TCR | 查询执行任务详情 |
-| `DescribeGCJobs` | 验证 | TCR | 查询 GC 垃圾回收任务 |
-| `DescribeWebhookTrigger` | 验证 | TCR | 查询 Webhook 触发器列表 |
-| `DescribeWebhookTriggerLog` | 验证 | TCR | 查询触发器执行日志 |
-| `DescribeImages` | 验证 | TCR | 查询镜像版本（TCR 镜像查询，非 TKE） |
-| `DescribeNamespaces` | 验证 | TCR | 查询命名空间（含 NamespaceId） |
-| `DescribeInstances` | 验证 | TCR | 查询实例 |
-| `DescribeInstanceStatus` | 验证 | TCR | 查询实例状态 |
-| `DeleteTagRetentionRule` | 清理 | TCR | 删除保留规则 |
-| `TerminateGCJob` | 清理 | TCR | 终止进行中的 GC 任务 |
-| `DeleteWebhookTrigger` | 清理 | TCR | 删除触发器（按 Id+Namespace） |

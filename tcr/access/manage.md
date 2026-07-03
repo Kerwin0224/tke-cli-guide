@@ -18,7 +18,7 @@ fused: true
 | 公网白名单 | 开发者本地推送 | `CreateSecurityPolicy` | IP 白名单（需固定 IP） |
 | 服务账号 | K8s 内 Pod 拉取 | `CreateServiceAccount` | 服务账号凭证 |
 
-> 长期凭证（CI/CD）用控制台生成或服务账号，临时凭证用 `CreateInstanceToken`（TokenType=temp）。详见 [推送拉取镜像](../images/push-pull.md)。
+> 长期凭证（CI/CD）用 `CreateInstanceToken --TokenType longterm`（可禁用/删除），临时凭证用 `--TokenType temp`（默认，1 小时过期）。详见 [访问管理 — Token 生命周期](../instances/manage-access.md#token-生命周期闭环)。
 
 ## 准备工作
 
@@ -55,7 +55,7 @@ tccli tcr DescribeInternalEndpoints --region <REGION> --RegistryId "<REGISTRY_ID
 
 ### ManageInternalEndpoint（VPC 内网）
 
-> 来源：`tccli tcr ManageInternalEndpoint --generate-cli-skeleton`（实测）。
+> 来源：`tccli tcr ManageInternalEndpoint --generate-cli-skeleton`。
 
 | 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
 |:------|------|:--------:|------------|---------------|
@@ -68,7 +68,7 @@ tccli tcr DescribeInternalEndpoints --region <REGION> --RegistryId "<REGISTRY_ID
 
 ### CreateSecurityPolicy（公网白名单）
 
-> 来源：`tccli tcr CreateSecurityPolicy --generate-cli-skeleton`（实测）。
+> 来源：`tccli tcr CreateSecurityPolicy --generate-cli-skeleton`。
 
 | 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
 |:------|------|:--------:|------------|---------------|
@@ -78,7 +78,7 @@ tccli tcr DescribeInternalEndpoints --region <REGION> --RegistryId "<REGISTRY_ID
 
 ### CreateServiceAccount
 
-> 来源：`tccli tcr CreateServiceAccount --generate-cli-skeleton`（实测）。
+> 来源：`tccli tcr CreateServiceAccount --generate-cli-skeleton`。
 
 | 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
 |:------|------|:--------:|------------|---------------|
@@ -103,12 +103,7 @@ tccli tcr DescribeInternalEndpoints --region <REGION> --RegistryId "<REGISTRY_ID
 
 ### 步骤 2：VPC 内网接入 — 最小化
 
-```bash
-tccli tcr ManageInternalEndpoint --region <REGION> \
-  --RegistryId "<REGISTRY_ID>" --Operation Open \
-  --VpcId "<VPC_ID>" --SubnetId "<SUBNET_ID>"
-# expected: exit 0, 异步开通 VPC 内网 DNS
-```
+> VPC 内网接入（`ManageInternalEndpoint` 开启实例内网访问 VPC 链接）属实例级访问开关，完整命令见 [实例访问管理 — 开启内网访问](../instances/manage-access.md#步骤-5开启内网访问-可选)。本篇聚焦访问策略层（白名单/服务账号/DNS），端点开关归实例访问篇，避免双篇重复。VPC 内网开通后，本篇 [内网 DNS 解析](#内网-dns-解析) 配置私有域名。
 
 > VPC 内网开通是异步操作，DNS 生效需等待。用 `DescribeInternalEndpoints` 轮询直到出现接入记录。
 
@@ -157,7 +152,7 @@ tccli tcr DescribeSecurityPolicies --region <REGION> --RegistryId "<REGISTRY_ID>
 # 服务账号列表（RegistryId + EmbedPermission=true 带权限，Filters 按名过滤）
 tccli tcr DescribeServiceAccounts --region <REGION> --RegistryId "<REGISTRY_ID>" \
   --EmbedPermission true --Offset 0 --Limit 20
-# expected: 含目标服务账号及其 Permissions
+# expected: exit 0，返回 ServiceAccounts[]+TotalCount（EmbedPermission=true 时含 Permissions）
 ```
 
 | 维度 | 命令 | 预期 |
@@ -172,9 +167,9 @@ tccli tcr DescribeServiceAccounts --region <REGION> --RegistryId "<REGISTRY_ID>"
 > **副作用警告**：关闭 VPC 内网会断开该 VPC 内所有拉取访问。删除白名单会阻断对应 IP 的访问。
 
 ```bash
-# 关闭 VPC 内网
+# 关闭 VPC 内网（端点开关归实例访问篇）
 tccli tcr ManageInternalEndpoint --region <REGION> \
-  --RegistryId "<REGISTRY_ID>" --Operation Close --VpcId "<VPC_ID>"
+  --RegistryId "<REGISTRY_ID>" --Operation Close --VpcId "<VPC_ID>"  # 见 instances/manage-access.md
 # expected: exit 0
 
 # 删除白名单
@@ -287,29 +282,3 @@ tccli tcr DeleteServiceAccount --RegistryId "<REGISTRY_ID>" --Name "<SA_NAME>" -
 ## 控制台替代方案
 
 [容器镜像服务控制台 - 访问控制](https://console.cloud.tencent.com/tcr/access)
-
-## Action 清单
-
-| Action | 类型 | 版本 | 说明 |
-|:-------|:-----|:-----|:-----|
-| `CreateInstanceToken` | 主操作 | TCR | 创建实例访问 Token（CI/CD 凭证） |
-| `ManageExternalEndpoint` | 主操作 | TCR | 开关公网访问端点 |
-| `ManageInternalEndpoint` | 主操作 | TCR | 开关 VPC 内网接入 |
-| `CreateSecurityPolicy` | 主操作 | TCR | 添加公网白名单 IP（单条） |
-| `CreateMultipleSecurityPolicy` | 主操作 | TCR | 批量添加公网白名单 |
-| `CreateServiceAccount` | 主操作 | TCR | 创建服务账号（长期凭证） |
-| `CreateInternalEndpointDns` | 主操作 | TCR | 创建内网 DNS 解析 |
-| `ModifySecurityPolicy` | 主操作 | TCR | 修改单条白名单（按 PolicyIndex） |
-| `ModifyServiceAccount` | 主操作 | TCR | 修改服务账号属性 |
-| `ModifyServiceAccountPassword` | 主操作 | TCR | 修改服务账号密码（Random 随机） |
-| `DescribeExternalEndpointStatus` | 验证 | TCR | 查询公网端点状态 |
-| `DescribeInternalEndpoints` | 验证 | TCR | 查询 VPC 内网接入列表 |
-| `DescribeInternalEndpointDnsStatus` | 验证 | TCR | 查询内网 DNS 解析状态（入参 VpcSet） |
-| `DescribeSecurityPolicies` | 验证 | TCR | 查询公网白名单列表 |
-| `DescribeServiceAccounts` | 验证 | TCR | 查询服务账号列表 |
-| `DescribeInstances` | 验证 | TCR | 查询实例列表 |
-| `DescribeInstanceStatus` | 验证 | TCR | 查询实例状态 |
-| `DeleteSecurityPolicy` | 清理 | TCR | 删除单条白名单 |
-| `DeleteMultipleSecurityPolicy` | 清理 | TCR | 批量删除白名单 |
-| `DeleteServiceAccount` | 清理 | TCR | 删除服务账号 |
-| `DeleteInternalEndpointDns` | 清理 | TCR | 删除内网 DNS 解析 |

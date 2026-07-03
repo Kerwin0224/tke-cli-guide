@@ -29,10 +29,10 @@ fused: true
 | 1 | tccli 已安装 (>= 3.0) | `tccli --version` | `3.1.117.1` 或更高 |
 | 2 | 凭证已配置 | `tccli tcr DescribeRegions` | 返回 `"RequestId"`，无 Error |
 | 3 | 目标地域可用 | `tccli tcr DescribeRegions` | `ap-guangzhou` 的 `Status` 为 `alluser` |
-| 4 | Docker 已安装 (>= v24) | `docker --version` | `Docker version 24.x.x` 或更高（实测 29.6.0） |
+| 4 | Docker 已安装 (>= v24) | `docker --version` | `Docker version 24.x.x` 或更高（29.6.0） |
 | 5 | Docker daemon 运行中 | `docker info 2>&1` | `Server Version: 29.x.x` 或更高 |
 
-> 凭证未配置 → `tccli configure` 或 `tccli auth login`。
+> 未安装 tccli → [安装 tccli](../getting-started/install.md)。凭证未配置 → [配置凭证](../getting-started/credentials.md)（`tccli configure` 或 `tccli auth login`）。
 > Docker 安装参考 [Docker 官方指南](https://docs.docker.com/get-docker/)。
 
 ```bash
@@ -360,13 +360,13 @@ echo "$TCR_TOKEN" | docker login "$TCR_ENDPOINT" -u "$TCR_USERNAME" --password-s
 
 > ⚠️ 切勿 `docker login -p <TOKEN>` — 明文暴露在 shell 历史。始终用 `--password-stdin`。
 
-> ⚠️ **实测边界**: 本环境 docker daemon 运行在 colima 虚拟机（Ubuntu 24.04, OpenSSL 3.5.7）
+> ⚠️ **边界**: 本环境 docker daemon 运行在 colima 虚拟机（Ubuntu 24.04, OpenSSL 3.5.7）
 > 内，因 colima VM 网络栈对 TLS 握手包的处理限制，docker login 报
 > `TLS handshake timeout`（TCP 443 可达但 TLS ClientHello 后连接 reset）。
-> 经分层诊断确认：host 侧 `curl` 实测能连通 TCR 端点（exit 0），
+> 经分层诊断确认：host 侧 `curl`能连通 TCR 端点（exit 0），
 > 端点/Token 均有效，**根因是 colima VM 网络栈限制，非 TLS 库版本、非 TCR 端点、非 Token 问题**。
-> 命令格式、endpoint 结构、Token 结构均已实测确认正确。下方 docker push 命令同理。
-> docker push 成功后，用 `tccli tcr DescribeImages` 验证（tccli 侧可实测）。
+> 命令格式、endpoint 结构、Token 结构均已正确。下方 docker push 命令同理。
+> docker push 成功后，用 `tccli tcr DescribeImages` 验证（tccli 侧可）。
 
 ### 2.3 创建命名空间
 
@@ -560,23 +560,3 @@ tccli tcr DescribeInstances --region ap-guangzhou \
 开启公网端点、创建命名空间、管理 Token、查看镜像、删除实例。
 
 ---
-
-## Action 清单
-
-本文涉及的全部 Action，按用途分类：
-
-| 分类 | Action | 用途 | 出现位置 |
-|:-----|:-------|:-----|:---------|
-| 主 | `CreateInstance` | 创建企业版实例 | Step 1 |
-| 主 | `CreateNamespace` | 创建命名空间 | Step 2.3 |
-| 主 | `CreateInstanceToken` | 创建访问 Token | Step 2.1 |
-| 主 | `ManageExternalEndpoint` | 开启公网访问端点 | Step 1.5 |
-| 验证 | `DescribeInstances` | 查询实例详情与列表 | Step 1 / 3 |
-| 验证 | `DescribeInstanceStatus` | 查询实例运行状态 | Step 1（waiter） |
-| 验证 | `DescribeExternalEndpointStatus` | 查询公网端点状态 | Step 1.5 |
-| 验证 | `DescribeImages` | 查询镜像列表 | Step 2.5 |
-| 验证 | `CheckInstanceName` | 预检实例名可用性 | Step 1 |
-| 验证 | `DescribeRegions` | 查询可用地域 | Step 0 |
-| 清理 | `DeleteInstance` | 删除实例及关联资源 | Step 3 |
-| 清理 | `DeleteImage` | 删除镜像 tag | （备选） |
-| 跨产品 | docker CLI | 登录、打标签、推送、拉取镜像 | Step 2.2 / 2.4 |

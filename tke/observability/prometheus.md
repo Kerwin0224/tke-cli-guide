@@ -48,7 +48,7 @@ tccli vpc DescribeSubnets --region <REGION> --Filters '[{"Name":"vpc-id","Values
 
 ## 关键字段
 
-> 来源：`tccli tke RunPrometheusInstance` / `CreatePrometheusClusterAgent` / `DescribePrometheusTargets` 的 `--generate-cli-skeleton`（实测）。
+> 来源：`tccli tke RunPrometheusInstance` / `CreatePrometheusClusterAgent` / `DescribePrometheusTargets` 的 `--generate-cli-skeleton`。
 
 ### RunPrometheusInstance
 
@@ -189,7 +189,7 @@ tccli tke DescribePrometheusOverviews --Limit 10 --region <REGION>
 # expected: exit 0, 实例概览列表
 ```
 
-> ⚠️ Prometheus 接口需单独授权。实测 `DescribePrometheusOverviews` 未授权时返回 `UnauthorizedOperation: 您未授权访问该接口。请求由云API拦截`。需在 CAM 开通 Prometheus 相关权限。
+> ⚠️ Prometheus 接口需单独授权。`DescribePrometheusOverviews` 未授权时返回 `UnauthorizedOperation: 您未授权访问该接口。请求由云API拦截`。需在 CAM 开通 Prometheus 相关权限。
 
 ```bash
 # 查询模板同步状态 (按 TemplateId)
@@ -222,23 +222,3 @@ tccli tke DeletePrometheusTemplateSync --TemplateId "<TEMPLATE_ID>" --region <RE
 ## 控制台替代方案
 
 [容器服务控制台 - Prometheus 监控](https://console.cloud.tencent.com/tke2/prometheus)
-
-## Action 清单
-
-| Action | 类型 | 版本 | 说明 |
-|:-------|:-----|:-----|:-----|
-| `RunPrometheusInstance` | 主操作 | 2018-05-25 | 创建独立 Prometheus 实例 |
-| `CreatePrometheusClusterAgent` | 主操作 | 2018-05-25 | 关联集群 Agent（DaemonSet） |
-| `DeletePrometheusClusterAgent` | 清理 | 2018-05-25 | 卸载集群 Agent |
-| `DeletePrometheusTemplateSync` | 清理 | 2018-05-25 | 删除模板同步（TemplateId+Targets） |
-| `DeletePrometheusTempSync` | 清理 | 2018-05-25 | 删除模板同步（短名） |
-| `DescribePrometheusInstance` | 验证 | 2018-05-25 | 实例详情 |
-| `DescribePrometheusInstanceInitStatus` | 验证 | 2018-05-25 | 初始化状态与进度 |
-| `DescribePrometheusInstancesOverview` | 验证 | 2018-05-25 | 实例概览列表（含 Filters） |
-| `DescribePrometheusOverviews` | 验证 | 2018-05-25 | 实例概览（需 CAM 授权） |
-| `DescribePrometheusTargets` | 验证 | 2018-05-25 | 采集目标 up 状态 |
-| `DescribePrometheusRecordRules` | 验证 | 2018-05-25 | 记录规则 |
-| `DescribePrometheusClusterAgents` | 验证 | 2018-05-25 | Agent 就绪状态 |
-| `DescribePrometheusTemplateSync` | 验证 | 2018-05-25 | 模板同步详情 |
-| `DescribePrometheusTempSync` | 验证 | 2018-05-25 | 模板同步目标列表 |
-| `DescribeClusterStatus` | 验证 | 2018-05-25 | 确认集群 Running |

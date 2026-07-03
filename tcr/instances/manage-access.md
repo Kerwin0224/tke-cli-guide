@@ -23,7 +23,7 @@ TCR 实例默认不对外开放访问。你需要按顺序配置: ① 开启访�
 ```bash
 # 确认实例存在且为 Running
 tccli tcr DescribeInstances --region ap-guangzhou --RegistryIds '["<REGISTRY_ID>"]'
-# expected: { "Response": { "Registries": [{ "Status": "Running" }] } }
+# expected: { "Registries": [{ "Status": "Running" }] }
 ```
 
 ## 配置项
@@ -60,7 +60,14 @@ tccli tcr DescribeExternalEndpointStatus \
 
 ### 步骤 3：创建访问 Token
 
-Token 是 docker login 的密码。`TokenType=longterm` 创建长期凭证（生产推荐）。
+Token 是 docker login 的密码。两种类型：
+
+| TokenType | 有效期 | 适用 | 能否删除 |
+|:----------|:-------|:-----|:--------:|
+| `temp`（默认） | 1 小时自动过期 | 临时推送、调试 | 自动过期，无需删 |
+| `longterm` | 长期有效 | 生产 CI/CD | ✅ `DeleteInstanceToken` |
+
+> 生产 CI/CD 用 `longterm`（持久）；临时推送用 `temp`（默认，过期自动失效）。详见 [推送拉取镜像](../images/push-pull.md)。
 
 ```bash
 tccli tcr CreateInstanceToken \
@@ -68,10 +75,22 @@ tccli tcr CreateInstanceToken \
   --RegistryId "<REGISTRY_ID>" \
   --TokenType longterm \
   --Desc "CI/CD Token"
-# expected: { "Response": { "Token": "<LONG_TOKEN_STRING>", "Username": "..." } }
+# expected: { "Token": "<LONG_TOKEN_STRING>", "Username": "..." }（tccli 默认剥离 Response 包装层）
 ```
 
-> ⚠️ **Token 只显示一次。** 保存好返回的 `Token` 值，离开后就无法再次获取。
+> ⚠️ **Token 只显示一次。** 保存好返回的 `Token` 值与 `TokenId`（删除时要用），离开后就无法再次获取 Token 值。
+
+#### Token 生命周期闭环
+
+```
+创建(CreateInstanceToken) → 使用(docker login) → [temp 自动过期 / longterm 禁用或删除]
+```
+
+- **禁用长期 Token**（保留凭证记录，可再启用）：`tccli tcr ModifyInstanceToken --region <REGION> --RegistryId "<ID>" --TokenId "<TOKEN_ID>" --Enable false`
+- **删除长期 Token**（彻底移除凭证）：`tccli tcr DeleteInstanceToken --region <REGION> --RegistryId "<ID>" --TokenId "<TOKEN_ID>"`，expected exit 0
+- **查询 Token 列表**：`tccli tcr DescribeInstanceToken --region <REGION> --RegistryId "<ID>"`
+
+> 长期凭证泄露后，先 `ModifyInstanceToken --Enable false` 禁用止损，再 `DeleteInstanceToken` 删除。temp 凭证 1 小时自动过期，无需手动清理。
 
 获取实例的公网域名:
 
@@ -93,25 +112,14 @@ docker login <REGISTRY_DOMAIN> --username <USERNAME> --password <TOKEN>
 
 强烈建议: 限制公网访问来源。不要用 `0.0.0.0/0`（对全互联网开放）除非你清楚知道风险。
 
-```bash
-tccli tcr CreateSecurityPolicy \
-  --region ap-guangzhou \
-  --RegistryId "<REGISTRY_ID>" \
-  --CidrBlock "<YOUR_IP>/32" \
-  --Description "Office IP"
-# expected: exit 0
-```
-
-| 占位符 | 含义 | 如何获取 |
-|------------|------|---------|
-| `<YOUR_IP>/32` | 你的公网 IP (只允许你) | `curl ifconfig.me` |
+> 白名单策略（`CreateSecurityPolicy` / `DeleteSecurityPolicy` / `ModifySecurityPolicy` / 多策略批量 `CreateMultipleSecurityPolicy`）的完整命令见 [访问控制 — 公网白名单](../access/manage.md#公网白名单)。本篇聚焦实例级访问开关（端点 + Token），白名单写操作归访问控制篇，避免双篇重复。
 
 #### 为什么不用 0.0.0.0/0
 
 - **`<YOUR_IP>/32` vs `0.0.0.0/0`**: `/32` 只允许你自己访问；`0.0.0.0/0` 对全互联网开放
 - **安全风险**: `0.0.0.0/0` + Token 泄露 = 任何人可读写你的镜像仓库
 - **默认推荐**: 开发期用 IP 白名单；生产环境用 VPC 内网 + 白名单
-- **能改吗?**: 随时可以修改/删除白名单规则
+- **能改吗?**: 随时可以修改/删除白名单规则（见 [访问控制](../access/manage.md)）
 
 ### 步骤 5：开启内网访问 (可选)
 
@@ -148,16 +156,16 @@ tccli tcr DescribeSecurityPolicies --region ap-guangzhou --RegistryId "<ID>"
 
 ```bash
 # 关闭公网
-tccli tcr ManageExternalEndpoint --registryId "<ID>" --Operation Close
+tccli tcr ManageExternalEndpoint --RegistryId "<ID>" --Operation Close
 
 # 关闭内网
-tccli tcr ManageInternalEndpoint --registryId "<ID>" --Operation Close
+tccli tcr ManageInternalEndpoint --RegistryId "<ID>" --Operation Close
 
 # 禁用 Token
-tccli tcr ModifyInstanceToken --registryId "<ID>" --TokenId "<TOKEN_ID>" --Enable false
+tccli tcr ModifyInstanceToken --RegistryId "<ID>" --TokenId "<TOKEN_ID>" --Enable false
 
-# 删除白名单
-tccli tcr DeleteSecurityPolicy --registryId "<ID>" --PolicyIndex <INDEX>
+# 白名单删除（写操作归访问控制篇）
+tccli tcr DeleteSecurityPolicy --RegistryId "<ID>" --PolicyIndex <INDEX>  # 见 access/manage.md
 ```
 
 ## 故障恢复
@@ -188,19 +196,3 @@ tccli tcr DeleteSecurityPolicy --registryId "<ID>" --PolicyIndex <INDEX>
 ## 控制台替代方案
 
 [TCR 控制台 - 访问控制](https://console.cloud.tencent.com/tcr/instance)
-
-## Action 清单
-
-| Action | 类型 | 版本 | 说明 |
-|:-------|:-----|:-----|:-----|
-| `CreateInstanceToken` | 主操作 | TCR | 创建访问 Token（longterm 长期凭证） |
-| `CreateSecurityPolicy` | 主操作 | TCR | 添加公网白名单 IP |
-| `ManageExternalEndpoint` | 主操作 | TCR | 开关公网访问端点 |
-| `ManageInternalEndpoint` | 主操作 | TCR | 开关 VPC 内网接入 |
-| `ModifyInstanceToken` | 主操作 | TCR | 禁用/启用 Token（Enable false） |
-| `DescribeInstanceToken` | 验证 | TCR | 查询 Token 状态 |
-| `DescribeSecurityPolicies` | 验证 | TCR | 查询白名单列表 |
-| `DescribeInternalEndpoints` | 验证 | TCR | 查询内网接入 |
-| `DescribeExternalEndpointStatus` | 验证 | TCR | 查询公网端点状态 |
-| `DescribeInstances` | 验证 | TCR | 查询实例（含域名） |
-| `DeleteSecurityPolicy` | 清理 | TCR | 删除白名单（按 PolicyIndex） |

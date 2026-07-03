@@ -7,7 +7,7 @@ fused: true
 
 > 扩缩容独立集群（INDEPENDENT_CLUSTER）的 Master/etcd 节点。仅独立集群适用——托管集群 Master 由腾讯云运维，无此操作。
 
-> 本文档所有 Action 属 **TKE 2018-05-25（默认版本）**，无需显式 `--version`。入参骨架、枚举值、错误码均来自真机实测（P2）与 tccli 自带 `api.json` 权威定义（P7），非文档转述。
+> 本文档所有 Action 属 **TKE 2018-05-25（默认版本）**，无需显式 `--version`。
 
 ## 概述
 
@@ -20,7 +20,13 @@ fused: true
 
 操作是**异步**的：命令返回即提交，Master 节点进入 `MasterScaling` 状态，需轮询直到 `Running`。
 
-> ⚠️ **仅独立集群可用**：实测在托管集群调用稳定返回 `InvalidParameter: only independent cluster allowed to scale master or etcd`。集群类型创建后不可切换（见 [创建集群](create.md)）。
+> ⚠️ **仅独立集群可用**：在托管集群调用稳定返回 `InvalidParameter: only independent cluster allowed to scale master or etcd`。集群类型创建后不可切换（见 [创建集群](create.md)）。
+
+## 触发条件
+
+- 独立集群 Master 负载持续偏高或 HA 冗余不足（`DescribeClusters` 的 `ClusterMaterNodeNum` 接近瓶颈）— 用 `ScaleOutClusterMaster` 扩容
+- 独立集群 Master 过剩或有故障节点需下线 — 用 `ScaleInClusterMaster` 缩容（缩容须保 etcd 多数派 ≥3 奇数）
+- 托管集群误调本接口报 `only independent cluster allowed` — 改用独立集群，托管 Master 不可扩缩容
 
 ## 准备工作
 
@@ -44,29 +50,39 @@ tccli tke DescribeClusterStatus --region <REGION> --ClusterIds '["<CLUSTER_ID>"]
   --filter "ClusterStatusSet[0].ClusterState" --output text
 # expected: Running
 
-# 2. 查当前 Master 节点（独立集群 Master 不在 DescribeClusterInstances 工作节点列表，
-#    用 DescribeClusterStatus 看节点计数；Master 节点 CVM 用 cvm:DescribeInstances 按 集群标签查）
-tccli tke DescribeClusterStatus --region <REGION> --ClusterIds '["<CLUSTER_ID>"]' \
-  --filter "ClusterStatusSet[0].{nodes:ClusterRunningNodeNum,failed:ClusterFailedNodeNum}" --output text
-# expected: 节点数 + 失败节点数
+# 2. 查当前 Master 节点（独立集群 Master 用 --InstanceRole MASTER 查；
+#    ClusterRunningNodeNum 仅计工作节点，Master 计数看 DescribeClusters 的 ClusterMaterNodeNum）
+tccli tke DescribeClusterInstances --region <REGION> --ClusterId "<CLUSTER_ID>" --InstanceRole MASTER \
+  --filter "InstanceSet[].{id:InstanceId,role:InstanceRole,state:InstanceState}" --output text
+# expected: Master 节点列表（MASTER_ETCD 角色，含 InstanceId 供 ScaleIn 用）
+
+# Master 数量计数（DescribeClusters 旧版 ClusterMaterNodeNum/ClusterEtcdNodeNum 字段）
+tccli tke DescribeClusters --region <REGION> --ClusterIds '["<CLUSTER_ID>"]' --version 2018-05-25 \
+  --filter "Clusters[0].{master:ClusterMaterNodeNum,etcd:ClusterEtcdNodeNum}" --output text
+# expected: master 数 + etcd 数
 ```
 
-> ⚠️ **CAM 标签授权（实测）**：`ScaleOut/ScaleInClusterMaster` 要求目标集群带特定标签（实测要求 `billing` 标签，CAM 匹配 `qcs:resource_tag`）才放行。不带标签的独立集群被拒，错误码与修复见 [§故障恢复](#故障恢复)。此约束与 [维护窗口](maintenance-window.md) 同款。
+> ⚠️ **CAM 标签授权**：`ScaleOut/ScaleInClusterMaster` 要求目标集群带特定标签（要求 `billing` 标签，CAM 匹配 `qcs:resource_tag`）才放行。不带标签的独立集群被拒，错误码与修复见 [§故障恢复](#故障恢复)。此约束与 [维护窗口](maintenance-window.md) 同款。
+>
+> ⚠️ **`ScaleInClusterMaster` 为内测能力**：缩容 Master 节点功能需先提工单开通，未开通账号调用会被拒。`ScaleOutClusterMaster` 无此限制。生产缩容 Master 前先确认账号已开通该能力。
 
 ## 关键字段
-
-> 来源：`tccli tke ScaleOutClusterMaster/ScaleInClusterMaster --generate-cli-skeleton` + tccli `api.json` 枚举定义（实测 P7）。
 
 ### ScaleOutClusterMaster — 扩容
 
 | 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
 |:------|------|:--------:|------------|---------------|
 | ClusterId | string | 是 | 独立集群 ID | `InvalidParameter`（托管集群）/ `ResourceNotFound` |
-| RunInstancesForNode | list | 是 | 节点角色 + CVM 透传参数 | `InvalidParameterValue` |
+| RunInstancesForNode | list | 否 | 节点角色 + CVM 透传参数（新建 CVM 加入，与 `ExistedInstancesForNode` 二选一） | `InvalidParameterValue` |
 | RunInstancesForNode[].NodeRole | string | 是 | `MASTER_ETCD` / `WORKER`（扩 Master 用 `MASTER_ETCD`） | `InvalidParameterValue` |
 | RunInstancesForNode[].RunInstancesPara | list of string | 是 | CVM 创建参数 JSON 字符串，详见 [CVM RunInstances](https://cloud.tencent.com/document/api/213/15730)，与 [创建集群](create.md) 同款透传 | CVM 侧校验错误 |
+| ExistedInstancesForNode | list | 否 | **已有 CVM 重装加入 Master**（与 `RunInstancesForNode` 二选一，不新建 CVM） | `InvalidParameterValue` |
+| ExistedInstancesForNode[].NodeRole | string | 是 | `MASTER_ETCD` / `WORKER`（同上） | `InvalidParameterValue` |
+| ExistedInstancesForNode[].ExistedInstancesPara | object | 是 | 已存在实例的重装参数（InstanceId 等） | `ResourceNotFound` |
 
-> `NodeRole` 枚举（api.json 权威）：`MASTER_ETCD`（Master+etcd 同机）/ `WORKER`。`MASTER_ETCD` 仅独立集群可用，数量 3～7 建议奇数，最小配置 4C8G。扩容 Master 一律用 `MASTER_ETCD`。
+> `NodeRole` 枚举：`MASTER_ETCD`（Master+etcd 同机）/ `WORKER`。`MASTER_ETCD` 仅独立集群可用，数量 3～7 建议奇数，最小配置 4C8G。扩容 Master 一律用 `MASTER_ETCD`。
+>
+> **两条扩容路径**：`RunInstancesForNode` 新建 CVM 加入 Master（本文主示例）；`ExistedInstancesForNode` 把**已有 CVM 重装**为 Master 节点（不新建实例，复用存量 CVM，适合预先备好机器的场景）。两者二选一，同传报错。
 
 ### ScaleInClusterMaster — 缩容
 
@@ -176,7 +192,7 @@ tccli tke DescribeClusterStatus --region <REGION> --ClusterIds '["<CLUSTER_ID>"]
 | 维度 | 命令 | 预期 |
 |:-----|:-----|:-----|
 | 集群状态 | `DescribeClusterStatus` → `ClusterState` | `MasterScaling` → `Running` |
-| Master 数量 | 控制台 Master 节点列表，或 `tccli cvm DescribeInstances` 按集群标签过滤 Master CVM（独立集群 Master 不在 `DescribeClusterInstances` 工作节点列表，`ClusterRunningNodeNum` 仅计工作节点） | 扩容后增加，缩容后减少，且 ≥3 奇数 |
+| Master 数量 | `tccli tke DescribeClusters --version 2018-05-25 --ClusterIds '["<CLUSTER_ID>"]' --filter "Clusters[0].{master:ClusterMaterNodeNum,etcd:ClusterEtcdNodeNum}"`（独立集群 Master 数在 `ClusterMaterNodeNum`/`ClusterEtcdNodeNum` 字段，不在 `DescribeClusterInstances` 工作节点列表，`ClusterRunningNodeNum` 仅计工作节点） | 扩容后增加，缩容后减少，且 ≥3 奇数 |
 | etcd 健康 | 集群 `Running` 后 `kubectl get nodes`（用 kubeconfig） | 所有 Master 节点 Ready |
 | 集群可用性 | `kubectl get --raw='/healthz'` 或 `kubectl get pods -n kube-system`（`kubectl get cs` 在 K8s 1.19+ 已弃用，1.34 集群不返回） | 控制面健康 |
 
@@ -186,7 +202,7 @@ tccli tke DescribeClusterStatus --region <REGION> --ClusterIds '["<CLUSTER_ID>"]
 
 > **缩容即清理**：`ScaleInClusterMaster --InstanceDeleteMode terminate` 直接销毁 Master CVM，无独立清理步骤。`retain` 模式保留的 CVM 需到 CVM 侧手动销毁（`tccli cvm TerminateInstances`，仅按量计费）。
 >
-> **计费提示（P8）**：Master CVM 按 CVM 计费规则收费，扩容即新增 CVM 费用，缩容 `terminate` 后立即停止计费。独立集群无集群管理费（与托管集群的差异，见 [创建集群](create.md)）。
+> **计费提示**：Master CVM 按 CVM 计费规则收费，扩容即新增 CVM 费用，缩容 `terminate` 后立即停止计费。独立集群无集群管理费（与托管集群的差异，见 [创建集群](create.md)）。
 
 ## 故障恢复
 
@@ -211,6 +227,15 @@ tccli tke DescribeClusterStatus --region <REGION> --ClusterIds '["<CLUSTER_ID>"]
 
 > etcd 多数派破坏是最严重故障——缩容必须保留 ≥3 且奇数个 `MASTER_ETCD` 节点。生产环境缩容前先扩后缩（扩新节点 → 确认加入 → 缩旧节点），全程保持多数派。
 
+## 收尾确认
+
+```bash
+# 一次性核对：集群已回 Running + Master 数量达预期且为奇数（保 etcd 多数派）
+tccli tke DescribeClusterStatus --region <REGION> --ClusterIds '["<CLUSTER_ID>"]' \
+  --filter "ClusterStatusSet[0].{state:ClusterState}"
+# expected: state=Running（MasterScaling 结束）→ 配合 DescribeClusters 旧版 ClusterMaterNodeNum 核对 Master 数为奇数，扩缩容闭环完成
+```
+
 ## 下一步
 
 - [创建集群](create.md) — 独立集群与托管集群的类型决策
@@ -221,17 +246,3 @@ tccli tke DescribeClusterStatus --region <REGION> --ClusterIds '["<CLUSTER_ID>"]
 ## 控制台替代方案
 
 [容器服务控制台 - 集群详情 - Master 节点](https://console.cloud.tencent.com/tke2/cluster)
-
-## Action 清单
-
-| Action | 类型 | 版本 | 说明 |
-|:-------|:-----|:-----|:-----|
-| `ScaleOutClusterMaster` | 主操作 | 2018-05-25 | 扩容独立集群 Master/etcd（`RunInstancesForNode`，NodeRole=MASTER_ETCD） |
-| `ScaleInClusterMaster` | 主操作 | 2018-05-25 | 缩容指定 Master/etcd（`ScaleInMasters`，NodeRole=MASTER/ETCD/MASTER_ETCD） |
-| `DescribeClusters` | 验证 | 2018-05-25 | 确认集群类型为 INDEPENDENT_CLUSTER |
-| `DescribeClusterStatus` | 验证 | 2018-05-25 | 轮询 MasterScaling→Running + 节点计数 |
-| `DescribeOSImages` | 验证 | 2018-05-25 | 获取 Master CVM 镜像 ID |
-| `DescribeRegions` | 验证 | 2018-05-25 | 凭证有效性检查 |
-| `cvm:DescribeInstances` | 跨产品 | cvm | 查 Master CVM ID（缩容目标） |
-| `cvm:TerminateInstances` | 跨产品 | cvm | 清理 retain 模式保留的 CVM |
-| `cvm:DescribeZones` | 跨产品 | cvm | 获取可用区（扩容参数） |

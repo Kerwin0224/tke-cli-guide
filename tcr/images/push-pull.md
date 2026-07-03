@@ -56,12 +56,12 @@ tccli tcr DescribeNamespaces --region <REGION> --RegistryId "<REGISTRY_ID>" \
 
 ### tccli: CreateInstanceToken
 
-> 来源：`tccli tcr CreateInstanceToken --generate-cli-skeleton` + 实测响应。
+> 来源：`tccli tcr CreateInstanceToken --generate-cli-skeleton` + 响应。
 
 | 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
 |:------|------|:--------:|------------|---------------|
 | RegistryId | string | 是 | `tcr-xxxxxxxx` | `ResourceNotFound` |
-| TokenType | string | 是 | `temp`（临时，1 小时有效）；长期凭证用控制台生成 | `InvalidParameter`（实测 `long`/`permanent` 均非法，仅 `temp` 合法） |
+| TokenType | string | 否 | `temp`（默认，临时 1 小时）/ `longterm`（长期，CI/CD）；
 | Desc | string | 否 | 凭证描述 | — |
 
 > 响应字段：`Username`（docker login 用户名）、`Token`（docker login 密码）、`ExpTime`（过期时间戳）、`TokenId`。临时 Token 1 小时过期，CI/CD 用长期凭证见 [访问控制](../access/manage.md)。
@@ -188,10 +188,11 @@ tccli tcr DescribeImages --region <REGION> \
 
 | 现象 | 诊断 | 根因 | 修复 |
 |:--------|:----------|:------------|:-----|
-| `InvalidParameter` (CreateInstanceToken) | 检查 `TokenType` | `TokenType` 非法（如 `long`） | 用 `temp`（实测唯一合法值） |
+| `InvalidParameter` (CreateInstanceToken) | 检查 `TokenType` | `TokenType` 非法（如 `long`/`permanent`） | 用 `temp` 或 `longterm`（
 | `unauthorized: authentication required` (docker) | `DescribeInstanceToken` 查状态 | Token 过期或未 login | 重新 `CreateInstanceToken` + `docker login` |
 | `denied: requested access to the resource is denied` (docker push) | `DescribeNamespaces` 查权限 | 命名空间 Private 且 Token 无 push 权限 | 配置访问策略，见 [访问控制](../access/manage.md) |
 | `unknown: repository not found` (docker push) | `DescribeRepositories` 查仓库 | 仓库不存在 | 先 `CreateRepository` |
+| `unknown: repository not found` 或 `project not found` (docker push) | `DescribeNamespaces` 查命名空间 | 命名空间不存在 | 先 [创建命名空间](../repositories/manage.md)，命名空间不存在时 push 报 project not found |
 | `ResourceNotFound` (tccli) | 核对 RegistryId/命名空间/仓库 | ID 或名称错 | 确认参数值 |
 
 ### 命令成功但状态不对 (exit = 0)
@@ -216,7 +217,7 @@ tccli tcr DescribeImageManifests --RegistryId "<REGISTRY_ID>" --NamespaceName "<
 # expected: exit 0, 镜像 manifest (架构/层/摘要)
 ```
 
-> ⚠️ `NamespaceName` 必须是实例中已存在的命名空间。实测传不存在命名空间返回 `InternalError.ErrorTcrUnauthorized: project not found: <namespace>`。先用 `DescribeNamespaces` 确认命名空间存在。
+> ⚠️ `NamespaceName` 必须是实例中已存在的命名空间。传不存在命名空间返回 `InternalError.ErrorTcrUnauthorized: project not found: <namespace>`。先用 `DescribeNamespaces` 确认命名空间存在。
 
 ```bash
 # 复制镜像 (同实例内, SourceRepo+DestinationRepo)
@@ -239,23 +240,3 @@ tccli tcr DuplicateImage --RegistryId "<REGISTRY_ID>" --region <REGION> \
 ## 控制台替代方案
 
 [容器镜像服务控制台 - 镜像管理](https://console.cloud.tencent.com/tcr/image)
-
-## Action 清单
-
-| Action | 类型 | 版本 | 说明 |
-|:-------|:-----|:-----|:-----|
-| `CreateInstanceToken` | 主操作 | TCR | 创建临时访问 Token（TokenType=temp，1 小时） |
-| `CreateRepository` | 主操作 | TCR | 创建仓库（push 前提） |
-| `DuplicateImage` | 主操作 | TCR | 同实例内镜像复制（跨命名空间/仓库） |
-| `DescribeImages` | 验证 | TCR | 查询镜像版本（TCR 镜像查询，非 TKE） |
-| `DescribeImageManifests` | 验证 | TCR | 查询镜像 manifest（架构/层） |
-| `DescribeRepositories` | 验证 | TCR | 查询仓库列表 |
-| `DescribeNamespaces` | 验证 | TCR | 查询命名空间 |
-| `DescribeInstances` | 验证 | TCR | 查询实例（含 PublicDomain） |
-| `DescribeInstanceStatus` | 验证 | TCR | 查询实例状态 |
-| `DescribeExternalEndpointStatus` | 验证 | TCR | 查询公网端点状态（push/pull 前提） |
-| `DescribeInstanceToken` | 验证 | TCR | 查询 Token 状态（诊断 unauthorized） |
-| `DeleteImage` | 清理 | TCR | 删除指定镜像版本（不可恢复） |
-| `docker login` | 跨产品 | docker | 登录仓库建立会话 |
-| `docker push` | 跨产品 | docker | 推送镜像（tag + push） |
-| `docker pull` | 跨产品 | docker | 拉取镜像 |

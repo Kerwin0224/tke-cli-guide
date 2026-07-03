@@ -8,7 +8,7 @@ subtype: 7B
 
 ```bash
 tccli tcr DescribeInstances --region ap-guangzhou
-# expected: { "Response": { "TotalCount": "≥0", "Registries": [...] } }
+# expected: { "TotalCount": "≥0", "Registries": [...] }
 ```
 
 正常输出： 每个实例 `Status: "Running"`。任何非 Running 状态（`Creating`/`Deleting`/异常）或实例完全不出现在列表中，见 [状态机](reference/states.md) 或下方。
@@ -51,7 +51,7 @@ tccli tcr ModifyInstanceToken --region ap-guangzhou \
   --Enable true
 # expected: exit 0
 
-# 方案 2: 创建新临时 Token（实测 TokenType 仅 temp 合法）
+# 方案 2: 创建新临时 Token（temp 默认 1 小时过期；长期用 longterm）
 tccli tcr CreateInstanceToken --region ap-guangzhou \
   --RegistryId "<REGISTRY_ID>" \
   --TokenType temp \

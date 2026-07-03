@@ -45,7 +45,7 @@ tccli tcr DescribeNamespaces --region <REGION> --RegistryId "<REGISTRY_ID>" \
 
 ### CreateNamespace
 
-> 来源：`tccli tcr CreateNamespace --generate-cli-skeleton`（实测）。
+> 来源：`tccli tcr CreateNamespace --generate-cli-skeleton`。
 
 | 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
 |:------|------|:--------:|------------|---------------|
@@ -54,10 +54,12 @@ tccli tcr DescribeNamespaces --region <REGION> --RegistryId "<REGISTRY_ID>" \
 | IsPublic | boolean | 是 | `true`（公开，任何人可拉）/ `false`（私有，需凭证） | `InvalidParameterValue` |
 | TagSpecification | object | 否 | 标签 | — |
 | IsAutoScan | boolean | 否 | 自动安全扫描，默认 false | — |
+| IsPreventVUL | boolean | 否 | 漏洞阻断开关，开启后推送镜像含指定等级漏洞会被拒，默认 false | — |
+| Severity | string | 否（`IsPreventVUL=true` 时需设置） | 阻断漏洞等级枚举：`low` / `medium` / `high`。设 `high` 仅阻断高危漏洞，`low` 三级全阻断 | `InvalidParameter`（传非枚举值） |
 
 ### CreateRepository
 
-> 来源：`tccli tcr CreateRepository --generate-cli-skeleton`（实测）。
+> 来源：`tccli tcr CreateRepository --generate-cli-skeleton`。
 
 | 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
 |:------|------|:--------:|------------|---------------|
@@ -127,13 +129,13 @@ tccli tcr DescribeRepositories --region <REGION> --RegistryId "<REGISTRY_ID>" \
 
 ### 修改命名空间属性
 
-> 命名空间可见性、自动扫描、漏洞阻断可后续修改。`ModifyNamespace` 覆盖式更新，参数以 `--generate-cli-skeleton` 实测为准（`IsPublic`/`IsAutoScan`/`IsPreventVUL` 等）。
+> 命名空间可见性、自动扫描、漏洞阻断可后续修改。`ModifyNamespace` 覆盖式更新，参数以 `--generate-cli-skeleton` 为准（`IsPublic`/`IsAutoScan`/`IsPreventVUL` 等）。
 
 ```bash
 # 修改命名空间可见性（RegistryId + NamespaceName 定位）
 tccli tcr ModifyNamespace --region <REGION> \
   --RegistryId "<REGISTRY_ID>" --NamespaceName "<NAMESPACE_NAME>" --IsPublic false
-# expected: exit 0
+# expected: exit 0; 命名空间不存在报 ResourceNotFound.TcrResourceNotFound
 ```
 
 | 占位符 | 含义 | 如何获取 |
@@ -228,21 +230,3 @@ tccli tcr DownloadHelmChart --RegistryId "<REGISTRY_ID>" --region <REGION> \
 ## 控制台替代方案
 
 [容器镜像服务控制台 - 仓库管理](https://console.cloud.tencent.com/tcr/repository)
-
-## Action 清单
-
-| Action | 类型 | 版本 | 说明 |
-|:-------|:-----|:-----|:-----|
-| `CreateNamespace` | 主操作 | TCR | 创建命名空间（IsPublic 必填） |
-| `CreateRepository` | 主操作 | TCR | 创建仓库 |
-| `ModifyNamespace` | 主操作 | TCR | 修改命名空间可见性 |
-| `ModifyRepository` | 主操作 | TCR | 修改仓库属性（简述/详述） |
-| `DownloadHelmChart` | 主操作 | TCR | 下载 Helm Chart 包 |
-| `DescribeNamespaces` | 验证 | TCR | 查询命名空间列表 |
-| `DescribeRepositories` | 验证 | TCR | 查询仓库列表 |
-| `DescribeInstances` | 验证 | TCR | 查询实例 |
-| `DescribeInstanceStatus` | 验证 | TCR | 查询实例状态 |
-| `DescribeChartDownloadInfo` | 验证 | TCR | 查询 Helm Chart 下载信息 |
-| `DeleteNamespace` | 清理 | TCR | 删除命名空间（级联删仓库） |
-| `DeleteRepository` | 清理 | TCR | 删除仓库 |
-| `DeleteRepositoryTags` | 清理 | TCR | 批量删除仓库标签 |

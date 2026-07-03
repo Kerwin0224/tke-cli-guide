@@ -44,7 +44,7 @@ tccli tke DescribeAddon --region ap-guangzhou --ClusterId "<CLUSTER_ID>" --Addon
 
 ## 关键字段
 
-> 来源：`tccli tke InstallAddon --generate-cli-skeleton` + `UpdateAddon`（实测）。
+> 来源：`tccli tke InstallAddon --generate-cli-skeleton` + `UpdateAddon`。
 
 ### InstallAddon
 
@@ -65,6 +65,22 @@ tccli tke DescribeAddon --region ap-guangzhou --ClusterId "<CLUSTER_ID>" --Addon
 | UpdateStrategy | string | 否 | 更新策略（如 `rolling`） |
 
 > `RawValues` 是 base64 编码的 JSON 配置。用 `echo '<json>' | base64` 生成。查询时返回的 `RawValues` 可 `echo '<base64>' | base64 -d` 解码看配置。
+
+### 查询可用插件 (GetTkeAppChartList)
+
+安装前查可用插件 chart 列表，按集群架构过滤：
+
+| 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
+|:------|------|:--------:|------------|---------------|
+| ChartName | string | 否 | 插件名关键词 | — |
+| Arch | string | 否 | 架构枚举：`amd64` / `arm64` / `arm32`。须与节点架构匹配，否则装上后 Pod 因镜像架构不符起不来 | `InvalidParameterValue` |
+
+```bash
+tccli tke GetTkeAppChartList --region ap-guangzhou --Arch amd64
+# expected: ChartList[] 含 ChartName/ChartVersion/Arch，按架构过滤
+```
+
+> `Arch` 三值代表三种 CPU 架构。ARM 集群（如鲲鹏）必须传 `arm64`/`arm32`，x86 集群传 `amd64`。装错架构的插件 Pod 会报 `ImagePullBackOff` 或 `CrashLoopBackOff`。
 
 ## 操作步骤
 
@@ -89,13 +105,13 @@ tccli tke InstallAddon --region ap-guangzhou \
 | `<CLUSTER_ID>` | 集群 ID | `cls-xxxxxxxx` | `tccli tke DescribeClusters` |
 | `<ADDON_NAME>` | 插件名 | 官方插件列表 | `tccli tke DescribeAddonValues` |
 
-> 安装前用 `DescribeAddonValues` 查插件在该集群的可用版本与默认配置（参数以 `--generate-cli-skeleton` 实测为准）：
+> 安装前用 `DescribeAddonValues` 查插件在该集群的可用版本与默认配置（参数以 `--generate-cli-skeleton` 为准）：
 
 ```bash
 # 查询插件可用版本与配置值（ClusterId + AddonName 定位）
 tccli tke DescribeAddonValues --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" --AddonName "<ADDON_NAME>"
-# expected: exit 0, 返回插件可用版本列表与默认 Values
+# expected: 返回 Values+DefaultValues; 插件模板渲染异常报 ResourceUnavailable（如 cfs 插件 nil pointer）
 ```
 | `<VERSION>` | 插件版本 | 兼容集群版本 | `tccli tke DescribeAddonValues` |
 
@@ -206,7 +222,7 @@ tccli tke DeleteImageCaches --region <REGION> --ImageCacheIds '["<CACHE_ID>"]'
 # expected: exit 0
 ```
 
-> `CreateImageCache` 创建 CVM 实例制作快照，需 VpcId/SubnetId/SecurityGroupIds（有 CVM 计费成本，P8）。`GetMostSuitableImageCache` 按镜像列表匹配已有缓存，`Snapshotter` 如 `overlayfs`。`UpdateImageCache` 可配 `ImageRegistryCredentials[]`（私有镜像仓库凭证）。
+> `CreateImageCache` 创建 CVM 实例制作快照，需 VpcId/SubnetId/SecurityGroupIds（有 CVM 计费成本）。`GetMostSuitableImageCache` 按镜像列表匹配已有缓存，`Snapshotter` 如 `overlayfs`。`UpdateImageCache` 可配 `ImageRegistryCredentials[]`（私有镜像仓库凭证）。
 
 ## 下一步
 
@@ -217,21 +233,3 @@ tccli tke DeleteImageCaches --region <REGION> --ImageCacheIds '["<CACHE_ID>"]'
 ## 控制台替代方案
 
 [容器服务控制台 - 插件管理](https://console.cloud.tencent.com/tke2/addon)
-
-## Action 清单
-
-| Action | 类型 | 版本 | 说明 |
-|:-------|:-----|:-----|:-----|
-| `InstallAddon` | 主操作 | 2018-05-25 | 安装插件到集群（异步） |
-| `UpdateAddon` | 主操作 | 2018-05-25 | 升级版本或改配置 |
-| `CreateImageCache` | 主操作 | 2018-05-25 | 创建镜像缓存（有 CVM 计费） |
-| `UpdateImageCache` | 主操作 | 2018-05-25 | 更新镜像缓存 |
-| `DeleteAddon` | 清理 | 2018-05-25 | 卸载插件（移除资源） |
-| `DeleteImageCaches` | 清理 | 2018-05-25 | 删除镜像缓存（批量） |
-| `DescribeAddon` | 验证 | 2018-05-25 | 插件状态（Phase） |
-| `DescribeAddonValues` | 验证 | 2018-05-25 | 插件可用版本与配置 |
-| `DescribeImageCaches` | 验证 | 2018-05-25 | 镜像缓存列表 |
-| `GetMostSuitableImageCache` | 验证 | 2018-05-25 | 按镜像列表匹配缓存 |
-| `GetTkeAppChartList` | 验证 | 2018-05-25 | TKE 内置 Chart 列表 |
-| `DescribeClusters` | 验证 | 2018-05-25 | 确认集群 ID |
-| `DescribeClusterStatus` | 验证 | 2018-05-25 | 确认集群 Running |

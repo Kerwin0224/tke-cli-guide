@@ -24,14 +24,14 @@ fused: true
 ```bash
 # 确认集群 Running
 tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]'
-# expected: { "Response": { "ClusterStatusSet": [{ "ClusterState": "Running" }] } }
+# expected: { "ClusterStatusSet": [{ "ClusterState": "Running" }] }
 
 # 确认可选机型（2022-05-01 强类型可用区机型查询，Filters 按可用区过滤）
 tccli tke DescribeZoneInstanceConfigInfos \
   --version 2022-05-01 \
   --region ap-guangzhou \
   --Filters '[{"Name":"zone","Values":["ap-guangzhou-3"]}]'
-# expected: InstanceTypeConfig[] 含机型/状态/CPU/内存
+# expected: exit 0（Filters 不匹配时仅返回 RequestId；匹配时返回机型配置，输出字段不固定，以实际响应为准）
 
 # 跨产品对照（CVM 服务的同义查询，用于核对机型库存）
 tccli cvm DescribeZoneInstanceConfigInfos --region ap-guangzhou \
@@ -47,7 +47,7 @@ tccli cvm DescribeZoneInstanceConfigInfos --region ap-guangzhou \
 |-------|------|:--------:|------------|---------------|
 | ClusterId | string | 是 | `cls-xxxxxxxx` | `ResourceNotFound.ClusterId` |
 | Name | string | 是 | ≤60 字符 | `InvalidParameterValue.Name` |
-| Type | string | 是 | `Native` / `Regular` / `Super` / `External` | `InvalidParameterValue.Type` |
+| Type | string | 是 | `Native` / `Regular` / `Super` / `External`。`Super`=虚拟节点见 [虚拟节点](virtual-nodes.md)，`External`=扩展节点见 [扩展节点接入](external-nodes.md) | `InvalidParameterValue.Type` |
 | SubnetIds | array | 是 | 子网 ID 列表 | `ResourceNotFound.SubnetId` |
 | InstanceTypes | array | no (Native 自动) | 如 `["S5.MEDIUM4"]` | `InvalidParameterValue.InstanceTypes` |
 | Labels | array | 否 | `[{"Name":"env","Value":"prod"}]` | `InvalidParameterValue.Labels` |
@@ -55,6 +55,8 @@ tccli cvm DescribeZoneInstanceConfigInfos --region ap-guangzhou \
 | DeletionProtection | boolean | 否 | `true` / `false` | — |
 | ContainerRuntime | string | 否 | `containerd` / `docker` | `InvalidParameterValue.ContainerRuntime` |
 | NodePoolOs | string | 否 | `ubuntu20.04x86_64` / `tlinux3.1x86_64` | `InvalidParameterValue.Os` |
+| MachineType | string | 否（2022 新版，`Type=Native` 时） | 原生节点机器类型枚举：`Native`（CXM 类型原生节点，默认）/ `NativeCVM`（CVM 类型原生节点）。CXM 是腾讯云原生节点新型态 | `InvalidParameterValue` |
+| DataDisk.FileSystem | string | 否（透传 CVM 数据盘） | 数据盘文件系统枚举：`ext3` / `ext4` / `xfs`。未格式化的盘自动格式化为 ext4（tlinux 格式化为 xfs） | `InvalidParameterValue` |
 
 ## 操作步骤
 
@@ -63,7 +65,8 @@ tccli cvm DescribeZoneInstanceConfigInfos --region ap-guangzhou \
 #### 为什么选 Native
 
 - **Native vs Regular**: Native 节点池基于 MachineSet，支持原地升级、更细粒度的生命周期管理；Regular 基于 ASG，功能较基础
-- **Native vs Super**: Super 是虚拟节点（Serverless），按 Pod 计费，不需要管理节点；Native 需要 CVM，按实例计费
+- **Native vs Super**: Super 是虚拟节点（Serverless），按 Pod 计费，不需要管理节点；Native 需要 CVM，按实例计费。Super 专题见 [虚拟节点](virtual-nodes.md)
+- **Native vs External**: External 是自建 IDC 节点接入（混合云），注册流程与 CVM 节点池完全不同。External 专题见 [扩展节点接入](external-nodes.md)
 - **默认推荐**: Native —— 生产环境首选，功能最完整
 - **能改吗?**: 节点池类型创建后无法切换。Regular 可迁移（新建 Native 节点池 + 移出旧节点）
 
@@ -86,7 +89,7 @@ tccli tke CreateNodePool \
   --Type Native \
   --SubnetIds '["<SUBNET_ID>"]' \
   --DeletionProtection true
-# expected: { "Response": { "NodePoolId": "np-xxxxxxxx" }, "RequestId": "..." }
+# expected: { "NodePoolId": "np-xxxxxxxx", "RequestId": "..." }
 ```
 
 | 占位符 | 含义 | 约束 | 如何获取 |
@@ -96,6 +99,15 @@ tccli tke CreateNodePool \
 | `<SUBNET_ID>` | VPC 子网 ID | 必须在集群 VPC 内 | `tccli vpc DescribeSubnets` |
 
 ### 步骤 3：创建 — 增强：生产就绪
+
+> **选 OS 镜像**：`NodePoolOs` 取值（如 `ubuntu20.04x86_64`）须是 TKE 支持的镜像 `OsName`。先查可用镜像列表，取其 `OsName` 字段填入 `NodePoolOs`。
+
+```bash
+tccli tke DescribeImages --region ap-guangzhou
+# expected: { "TotalCount": 84, "ImageInstanceSet": [ { "Alias": "...", "OsName": "ubuntu20.04x86_64", "ImageId": "img-xxx", "OsCustomizeType": "GENERAL" } ], "RequestId": "..." }
+```
+
+> 返回 `ImageInstanceSet[]`，每项含 `Alias`（展示名）/`OsName`（填入 `NodePoolOs` 的值）/`ImageId`。`DescribeOSImages`（[集群配置](../clusters/configure.md)）返回的是 OS 聚合信息，与此处的镜像明细列表互补。
 
 指定机型、Labels、Taints、自定义 OS:
 
@@ -118,7 +130,7 @@ tccli tke CreateNodePool \
     {"Key":"workload-type","Value":"cpu","Effect":"NoSchedule"}
   ]' \
   --DeletionProtection true
-# expected: { "Response": { "NodePoolId": "np-xxxxxxxx" }, "RequestId": "..." }
+# expected: { "NodePoolId": "np-xxxxxxxx", "RequestId": "..." }
 ```
 
 ### 步骤 4：验证
@@ -144,10 +156,11 @@ tccli tke DescribeNodePools \
 
 ## 旧版路径：CreateClusterNodePool (2018-05-25)
 
-> 需要 AS 弹性伸缩组级精细控制时回退旧版。旧版透传 AS 原始 JSON 字符串，调用方自己拼 AS 参数；新版 `CreateNodePool` (2022-05-01) 用 `Native` 强类型对象，生产首选新版。参数名以 `tccli tke CreateClusterNodePool --version 2018-05-25 --generate-cli-skeleton` 实测为准。
+> 需要 AS 弹性伸缩组级精细控制时回退旧版。旧版透传 AS 原始 JSON 字符串，调用方自己拼 AS 参数；新版 `CreateNodePool` (2022-05-01) 用 `Native` 强类型对象，生产首选新版。参数名以 `tccli tke CreateClusterNodePool --version 2018-05-25 --generate-cli-skeleton` 为准。
 
 ```bash
 # 旧版创建节点池（透传 AS JSON 字符串：AutoScalingGroupPara + LaunchConfigurePara）
+# tccli 强制要求 --InstanceAdvancedSettings（即使空对象 {}），缺失报 "the following arguments are required: --InstanceAdvancedSettings"
 tccli tke CreateClusterNodePool \
   --version 2018-05-25 \
   --region ap-guangzhou \
@@ -155,14 +168,16 @@ tccli tke CreateClusterNodePool \
   --Name "<POOL_NAME>" \
   --AutoScalingGroupPara '<AS_GROUP_JSON>' \
   --LaunchConfigurePara '<AS_LAUNCH_CONFIG_JSON>' \
+  --InstanceAdvancedSettings '{}' \
   --EnableAutoscale false
-# expected: { "Response": { "NodePoolId": "np-xxxxxxxx" } }
+# expected: exit 0, 返回 NodePoolId
 ```
 
 | 占位符 | 含义 | 约束 |
 |:-------|:-----|:-----|
 | `<AS_GROUP_JSON>` | AS 弹性伸缩组配置 | JSON 字符串，含 MinSize/MaxSize/VpcId/SubnetId 等，需先 `tccli as CreateAutoScalingGroup` 拼 |
 | `<AS_LAUNCH_CONFIG_JSON>` | AS 启动配置 | JSON 字符串，含 InstanceType/ImageId/SecurityGroupIds 等 |
+| `InstanceAdvancedSettings` | 节点高级设置 | **tccli 强制必填**，无自定义传 `{}` |
 | `EnableAutoscale` | 是否启用弹性扩缩容 | `false`=固定节点数，`true`=按 AS 规则弹性 |
 
 > 旧版与新版契约不同：旧版 `CreateClusterNodePool` 透传 AS 字符串（`AutoScalingGroupPara`/`LaunchConfigurePara`），新版 `CreateNodePool` 用结构化 `Native` 对象（`SubnetIds`/`InstanceTypes`）。两版查询 Action 命名也不同（旧 `DescribeClusterNodePools` vs 新 `DescribeNodePools`），跨版本切换前用 `--generate-cli-skeleton` 逐字段核契约。
@@ -245,26 +260,3 @@ tccli tke ModifyNodePoolInstanceTypes --ClusterId "<CLUSTER_ID>" --region <REGIO
 ## 控制台替代方案
 
 [容器服务控制台 - 创建节点池](https://console.cloud.tencent.com/tke2/nodepool/create)
-
-## Action 清单
-
-| Action | 类型 | 版本 | 说明 |
-|:-------|:-----|:-----|:-----|
-| `CreateClusterNodePool` | 主操作 | 2018-05-25 | 创建节点池（透传 AS JSON 字符串） |
-| `CreateExternalNodePool` | 主操作 | 2018-05-25 | 创建第三方节点池 |
-| `CreateClusterVirtualNodePool` | 主操作 | 2018-05-25 | 创建虚拟节点池 |
-| `ModifyNodePoolInstanceTypes` | 主操作 | 2018-05-25 | 变更机型（滚动重建） |
-| `SetNodePoolNodeProtection` | 主操作 | 2018-05-25 | 设置节点保护（防缩容驱逐） |
-| `AddNodeToNodePool` | 主操作 | 2018-05-25 | 添加已有节点到节点池 |
-| `DescribeClusterNodePools` | 验证 | 2018-05-25 | 节点池列表 |
-| `DescribeClusterNodePoolDetail` | 验证 | 2018-05-25 | 节点池详情 |
-| `DescribeClusterInstances` | 验证 | 2018-05-25 | 节点状态查询 |
-| `DescribeClusters` | 验证 | 2018-05-25 | 确认集群 ID |
-| `DescribeClusterStatus` | 验证 | 2018-05-25 | 确认集群 Running |
-| `CreateNodePool` | 主操作 | 2022-05-01 | 创建节点池（Native 强类型抽象） |
-| `ModifyNodePool` | 主操作 | 2022-05-01 | 修改节点池配置（含关闭删除保护） |
-| `DeleteNodePool` | 清理 | 2022-05-01 | 删除节点池（销毁池内节点） |
-| `DescribeNodePools` | 验证 | 2022-05-01 | 节点池列表（去 Cluster 前缀） |
-| `DescribeZoneInstanceConfigInfos` | 验证 | 2022-05-01 | 可用区机型查询 |
-| `cvm:DescribeZoneInstanceConfigInfos` | 跨产品 | cvm | 查询可用机型 |
-| `vpc:DescribeSubnets` | 跨产品 | vpc | 子网 ID 确认 |

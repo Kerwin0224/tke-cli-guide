@@ -30,7 +30,7 @@ fused: false
 
 ## 配置项
 
-> 来源：`tccli tcr CreateImmutableTagRules --generate-cli-skeleton`（实测）。
+> 来源：`tccli tcr CreateImmutableTagRules --generate-cli-skeleton`。
 
 | 字段 | 类型 | 必填 | 作用 | 填错的影响 |
 |:------|------|:--------:|:-----|:-----------|
@@ -75,7 +75,7 @@ tccli tcr CreateImmutableTagRules --region <REGION> \
 ## 验证
 
 ```bash
-# 查看规则（实测响应含 Rules/EmptyNs/Total）
+# 查看规则（响应含 Rules/EmptyNs/Total）
 tccli tcr DescribeImmutableTagRules --region <REGION> --RegistryId "<REGISTRY_ID>" \
   --filter "Rules[].{repo:RepositoryPattern,tag:TagPattern,disabled:Disabled}"
 # expected: 规则列表
@@ -136,17 +136,3 @@ tccli tcr DeleteImmutableTagRules --region <REGION> \
 ## 控制台替代方案
 
 [容器镜像服务控制台 - 不可变规则](https://console.cloud.tencent.com/tcr/immutable)
-
-## Action 清单
-
-| Action | 类型 | 版本 | 说明 |
-|:-------|:-----|:-----|:-----|
-| `CreateImmutableTagRules` | 主操作 | TCR | 创建不可变标签规则（禁止覆盖 Tag） |
-| `ModifyImmutableTagRules` | 主操作 | TCR | 修改/禁用规则（Disabled=true） |
-| `CreateNamespace` | 主操作 | TCR | 创建命名空间（规则前提） |
-| `DescribeImmutableTagRules` | 验证 | TCR | 查询不可变规则列表 |
-| `DescribeNamespaces` | 验证 | TCR | 查询命名空间 |
-| `DescribeInstances` | 验证 | TCR | 查询实例 |
-| `DescribeInstanceStatus` | 验证 | TCR | 查询实例状态 |
-| `DescribeSecurityPolicies` | 验证 | TCR | 查询白名单（区分 denied 原因） |
-| `DeleteImmutableTagRules` | 清理 | TCR | 删除不可变规则 |

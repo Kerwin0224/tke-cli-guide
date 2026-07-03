@@ -8,8 +8,8 @@ fused: false
 > 在 TKE Prometheus 实例上为集群安装采集 Agent，上报集群内指标；管理 Agent 外部标签与采集目标状态。
 > 控制台: [容器服务 - 监控](https://console.cloud.tencent.com/tke2/monitor)
 
-> ⚠️ 本文档所有 Action 属 **TKE 2018-05-25（默认版本）**。入参骨架、错误码来自真机实跑（P2）。
-> ⚠️ **Prometheus 域 CAM 全拦截（实测）**：当前账号对 Prometheus 全部 Action 返回 `UnauthorizedOperation`，无可用 Prometheus 实例。出参结构因此标 **blocked**，授权后需回填真实响应。错误码与诊断已入 [§故障恢复](#故障恢复)。
+> ⚠️ 本文档所有 Action 属 **TKE 2018-05-25（默认版本）**。
+> ⚠️ 本篇出参结构未经验证，按实际响应为准；错误码与诊断见 [§故障恢复](#故障恢复)。
 
 ## 概述
 
@@ -37,7 +37,7 @@ Agent 与 Prometheus 实例的关系：实例是存储与查询后端，Agent �
 
 ## 配置项
 
-> 参数名实测自 `tccli tke CreatePrometheusClusterAgent --generate-cli-skeleton`（P7）。注意入参混用 `InstanceId`（实例）与 `ClusterId`（集群，小写 d）——契约不同，不可类推。
+> 注意入参混用 `InstanceId`（实例）与 `ClusterId`（集群，小写 d）——契约不同，不可类推。
 
 | 字段 | 类型 | 必填 | 默认值 | 有效值 | 填错的影响 |
 |:-----|:-----|:----:|:-------|:-------|:-----------|
@@ -69,7 +69,7 @@ tccli tke CreatePrometheusClusterAgent --region <REGION> \
 | `<REGION>` | 地域 | 如 `ap-guangzhou` | `tccli tke DescribeRegions` |
 | `<CLUSTER_ID>` | 集群 ID | 已存在集群 | `tccli tke DescribeClusters --region <REGION>` |
 
-> ⚠️ **写操作 CAM 授权（实测）**：`CreatePrometheusClusterAgent` 需 `tke:CreatePrometheusClusterAgent` 权限，本环境返回 `AuthFailure.UnauthorizedOperation`。授权后回填成功输出。
+> ⚠️ **写操作 CAM 授权**：`CreatePrometheusClusterAgent` 需 `tke:CreatePrometheusClusterAgent` 权限，本环境返回 `AuthFailure.UnauthorizedOperation`。授权后回填成功输出。
 
 ### 步骤 2：配置外部标签 — 增强
 
@@ -131,17 +131,17 @@ tccli tke DescribePrometheusTargets --region <REGION> \
 ```bash
 # 按集群查关联的 Prometheus 实例（ClusterId 定位，反向查「这集群被哪个实例采」）
 tccli tke DescribePrometheusAgentInstances --region <REGION> --ClusterId <CLUSTER_ID>
-# expected: exit 0, 返回该集群关联的 Prometheus 实例列表
+# expected: CAM 拦截 UnauthorizedOperation（云API网关层）；授权后返回 Instances[]
 
 # 按实例查 Agent 列表（InstanceId + 分页，区别于 DescribePrometheusClusterAgents）
 tccli tke DescribePrometheusAgents --region <REGION> \
   --InstanceId <PROM_INSTANCE_ID> --Offset 0 --Limit 20
-# expected: exit 0, 返回实例下的 Agent 列表
+# expected: CAM 拦截 UnauthorizedOperation（云API网关层）；授权后返回 Agents[]+Total
 ```
 
-> `DescribePrometheusAgentInstances`（按集群反向查实例，入参 `ClusterId`）与 `DescribePrometheusAgents`（按实例正向查 Agent，入参 `InstanceId`+分页）方向相反。`DescribePrometheusClusterAgents`（步骤 1 验证用）同向但返回结构略不同。三者按「已知什么查什么」选用，参数以 `--generate-cli-skeleton` 实测为准。
+> `DescribePrometheusAgentInstances`（按集群反向查实例，入参 `ClusterId`）与 `DescribePrometheusAgents`（按实例正向查 Agent，入参 `InstanceId`+分页）方向相反。`DescribePrometheusClusterAgents`（步骤 1 验证用）同向但返回结构略不同。三者按「已知什么查什么」选用。
 
-> ⚠️ **出参结构 blocked（实测 CAM 拦截）**：上述输出结构为依据入参骨架与官方文档推断，未经真机验证——当前账号对 `DescribePrometheusClusterAgents`/`DescribePrometheusTargets` 等返回 `UnauthorizedOperation: 您未授权访问该接口。请求由云API拦截`。授权后须用真实响应回填。
+> ⚠️ 上述输出结构为依据入参骨架与官方文档推断，未经验证，按实际响应为准。
 
 ## 回滚
 
@@ -170,7 +170,7 @@ tccli tke DescribePrometheusClusterAgents --region <REGION> --InstanceId <PROM_I
 | `UnauthorizedOperation` 您未授权访问该接口 (DescribePrometheus*) | 同上 | 读 Prometheus 域同样需 CAM 授权，与写操作错误码不同（读=云API拦截层，写=CAM策略层） | 申请 `tke:DescribePrometheus*` 读权限 |
 | `Unknown options` | `tccli tke <Action> --generate-cli-skeleton` | 参数名拼错（`ClusterId` 小写 d vs `InstanceId`） | 用骨架输出的真实参数名 |
 
-> ⚠️ **错误码分层（实测）**：Prometheus 域写操作（Create/Modify/Delete）返回 `AuthFailure.UnauthorizedOperation`（CAM 策略层，含 `tke:ActionName`），读操作（Describe）返回 `UnauthorizedOperation: 您未授权访问该接口。请求由云API拦截`（云 API 网关层）。两者根因同为缺 CAM 授权，但报错层级不同，排查时注意区分。
+> ⚠️ **错误码分层**：Prometheus 域写操作（Create/Modify/Delete）返回 `AuthFailure.UnauthorizedOperation`（CAM 策略层，含 `tke:ActionName`），读操作（Describe）返回 `UnauthorizedOperation: 您未授权访问该接口。请求由云API拦截`（云 API 网关层）。两者根因同为缺 CAM 授权，但报错层级不同，排查时注意区分。
 
 ### 命令成功但状态不对（exit = 0）
 
@@ -185,15 +185,3 @@ tccli tke DescribePrometheusClusterAgents --region <REGION> --InstanceId <PROM_I
 - [Prometheus 入门](prometheus.md) — 创建 Prometheus 实例（装 Agent 的前置）
 - [Prometheus 告警配置](prometheus-alerting.md) — 在指标基础上配告警
 - [Prometheus 配置与模板](prometheus-config.md) — 管理采集配置与记录规则
-
-## Action 清单
-
-| Action | 类型 | 版本 | 说明 |
-|:-------|:-----|:-----|:-----|
-| `CreatePrometheusClusterAgent` | 主操作 | 2018-05-25 | 为集群安装采集 Agent |
-| `ModifyPrometheusAgentExternalLabels` | 主操作 | 2018-05-25 | 修改 Agent 外部标签 |
-| `DeletePrometheusClusterAgent` | 清理 | 2018-05-25 | 删除集群 Agent（`Force` 强制） |
-| `DescribePrometheusClusterAgents` | 验证 | 2018-05-25 | 查询实例下的 Agent 列表 |
-| `DescribePrometheusAgents` | 验证 | 2018-05-25 | 查询 Agent（`InstanceId` 入参） |
-| `DescribePrometheusAgentInstances` | 验证 | 2018-05-25 | 按集群查关联的 Prometheus 实例 |
-| `DescribePrometheusTargets` | 验证 | 2018-05-25 | 查询采集目标状态（含 `lastError`） |

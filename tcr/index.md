@@ -59,7 +59,7 @@ graph TD
 
 ```bash
 tccli tcr DescribeInstances --region ap-guangzhou
-# expected: { "Response": { "TotalCount": ..., "Registries": [...] } }
+# expected: { "TotalCount": ..., "Registries": [...] }
 ```
 
 ## 导航

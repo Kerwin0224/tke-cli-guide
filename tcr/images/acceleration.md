@@ -8,8 +8,6 @@ fused: true
 > 为 TCR 企业版实例开启镜像加速服务，加速镜像拉取。
 > 控制台: [容器镜像服务 - 镜像加速](https://console.cloud.tencent.com/tcr/acceleration)
 
-> ⚠️ **类型纠偏（P2 实测）**：设计期（D34 最小片内设计）曾判此为 6B Configure「开关型」，实测 `CreateImageAccelerationService` 含 6+ 参数（VpcId/SubnetId/StorageType/PGroupId/Zone）且创建 CFS 存储资源，多失败模式，应升为 **Fused 6A**。本篇按 Fused 6A 规格。
-
 ## 概述
 
 镜像加速服务为 TCR 实例创建一个 CFS（云文件存储）加速后端，镜像层缓存在 CFS 中，拉取时从 CFS 就近读取，降低大镜像拉取延迟。`CFSVIP` 是加速后端访问入口。
@@ -46,7 +44,7 @@ fused: true
 | `PGroupId` | Create | 是 | CFS 权限组 ID |
 | `Zone` | Create | 是 | 可用区（与 SubnetId 一致） |
 
-> 参数名实测自各 Action `--generate-cli-skeleton`（P7）。`--PGroupId` 缺失报 `the following arguments are required: --PGroupId`（exit 252）。
+> `--PGroupId` 缺失报 `the following arguments are required: --PGroupId`（exit 252）。
 
 ## 操作步骤
 
@@ -115,7 +113,7 @@ tccli tcr DeleteImageAccelerateService --region <REGION> --RegistryId <REGISTRY_
 
 ## 副作用
 
-- **创建加速服务**会在指定 VPC/子网创建 CFS 文件存储，产生 CFS 存储费用（P8 透明性）。
+- **创建加速服务**会在指定 VPC/子网创建 CFS 文件存储，产生 CFS 存储费用。
 - **CFS 占用子网 IP**：需确保子网有可用 IP。
 - **删除加速服务**会释放 CFS，缓存镜像层丢失，下次拉取回退到普通模式。
 
@@ -130,18 +128,10 @@ tccli tcr DeleteImageAccelerateService --region <REGION> --RegistryId <REGISTRY_
 | `IsEnable` 始终 false | 创建异步未完成 | 轮询 `DescribeImageAccelerateService`，等 `Status` 正常 |
 | 拉取未加速 | 客户端未走 CFSVIP | 确认拉取走 `CFSVIP`，非默认域名 |
 
-> 实测参数校验样本：缺 `--PGroupId` → `tccli: error: the following arguments are required: --PGroupId`（exit 252，客户端解析错误）。
+> 参数校验样本：缺 `--PGroupId` → `tccli: error: the following arguments are required: --PGroupId`（exit 252，客户端解析错误）。
 
 ## 下一步
 
 - 镜像推送拉取（加速的对象）：[推送与拉取镜像](push-pull.md)
 - 实例访问配置：[访问管理](../instances/manage-access.md)
 - 实例同步（跨地域）：[实例同步](../replication/manage.md)
-
-## Action 清单
-
-| Action | 类型 | 跨产品 | 说明 |
-|:-------|:-----|:------:|:-----|
-| `CreateImageAccelerationService` | 主操作 | vpc/cfs | 创建加速服务（VpcId/SubnetId/StorageType/PGroupId/Zone） |
-| `DescribeImageAccelerateService` | 验证 | — | 查询状态（IsEnable/CFSVIP/Status） |
-| `DeleteImageAccelerateService` | 清理 | — | 删除加速服务（仅 RegistryId） |

@@ -13,8 +13,11 @@ fused: false
 
 | 能力 | 作用 | 规格 |
 |:-----|:-----|:-----|
-| 签名 | 用 KMS 密钥对镜像签名 | premium 专属 |
-| 验签 | 拉取时验证签名 | TKE 集成 |
+| 手动签名 | 用 KMS 密钥对已存在镜像签名 | premium 专属，tcli `CreateSignature` |
+| 签名策略 | 绑定 KMS 密钥+命名空间，push 时自动签名 | premium 专属，tcli `CreateSignaturePolicy` |
+| 验签 | 拉取时验证签名 | TKE 集成（非 tcli，见下） |
+
+> **产品边界**：tcr API 落地签名策略与手动签名；**自动签名**由策略触发（push 时 TCR 服务侧执行，无需 tcli 调用）；**验签**在 TKE 侧部署签名准入控制器（K8s 准入 webhook，非 tcli）。tcr 文档覆盖签名侧闭环，验签侧见 TKE 集成文档。
 
 > 签名是 premium 专属功能，basic/standard 不支持。需先在 KMS 服务创建密钥。
 
@@ -42,7 +45,7 @@ tccli kms ListKeys --region <REGION> --filter "Keys[].{id:KeyId,alias:Alias}" --
 
 ## 关键字段
 
-> 来源：`tccli tcr CreateSignaturePolicy --generate-cli-skeleton`（实测）。
+> 来源：`tccli tcr CreateSignaturePolicy --generate-cli-skeleton`。
 
 | 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
 |:------|------|:--------:|------------|---------------|
@@ -86,25 +89,26 @@ tccli tcr CreateSignaturePolicy --region <REGION> \
 ### 步骤 3：签名镜像
 
 ```bash
-# 创建签名（对指定镜像版本签名）
+# 创建签名（对指定镜像版本签名，须先有签名策略）
 tccli tcr CreateSignature --region <REGION> \
   --RegistryId "<REGISTRY_ID>" --NamespaceName "<NAMESPACE_NAME>" \
-  --RepositoryName "<REPOSITORY_NAME>" --ImageVersion "<TAG>" \
-  --SignaturePolicyName "<POLICY_NAME>"
+  --RepositoryName "<REPOSITORY_NAME>" --ImageVersion "<TAG>"
 # expected: exit 0
 ```
+
+> `CreateSignature` 入参仅 4 个（RegistryId/NamespaceName/RepositoryName/ImageVersion，全必填），签名所用密钥由该命名空间绑定的签名策略（步骤 2 `CreateSignaturePolicy`）决定，无需在签名命令指定策略名。
 
 ### 步骤 4：验证
 
 > ⚠️ TCR 无 `DescribeSignaturePolicies` 接口查询签名策略——通过控制台或 `CreateSignature` 不报错反证策略存在。
 
 ```bash
-# 验证策略存在：CreateSignature 成功即反证策略有效
+# 验证签名已生成：DescribeSignature 个人版无此接口，企业版用控制台查看；
+# CreateSignature 成功（exit 0）即反证签名策略有效且签名已生成
 tccli tcr CreateSignature --region <REGION> \
   --RegistryId "<REGISTRY_ID>" --NamespaceName "<NAMESPACE_NAME>" \
-  --RepositoryName "<REPOSITORY_NAME>" --ImageVersion "<TAG>" \
-  --SignaturePolicyName "<POLICY_NAME>" --DryRun true 2>&1 | /usr/bin/head -3
-# expected: 无 ResourceNotFound（策略存在）
+  --RepositoryName "<REPOSITORY_NAME>" --ImageVersion "<TAG>"
+# expected: exit 0（重复签名不报错，反证策略有效）
 ```
 
 | 维度 | 命令 | 预期 |
@@ -156,14 +160,3 @@ tccli tcr DeleteSignaturePolicy --region <REGION> \
 ## 控制台替代方案
 
 [容器镜像服务控制台 - 镜像签名](https://console.cloud.tencent.com/tcr/signature)
-
-## Action 清单
-
-| Action | 类型 | 版本 | 说明 |
-|:-------|:-----|:-----|:-----|
-| `CreateSignature` | 主操作 | TCR | 对指定镜像版本签名 |
-| `CreateSignaturePolicy` | 主操作 | TCR | 创建签名策略（绑定 KMS 密钥） |
-| `CreateNamespace` | 主操作 | TCR | 创建命名空间（签名前提） |
-| `DescribeNamespaces` | 验证 | TCR | 查询命名空间 |
-| `DescribeInstances` | 验证 | TCR | 查询实例（确认 premium 规格） |
-| `DeleteSignaturePolicy` | 清理 | TCR | 删除签名策略 |

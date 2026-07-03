@@ -7,6 +7,8 @@ fused: true
 
 > 升级集群 Master 的 Kubernetes 版本。异步操作，升级期间控制面不可管理但工作负载正常运行。**不可回滚**——只能继续升级到更高版本。
 
+> 本文档 Action 属 **TKE 2018-05-25**（`UpdateClusterVersion`/`DescribeAvailableClusterVersion`/`CancelUpgradePlan` 等均旧版独有）。注意 `CancelUpgradePlan` 用 `ClusterID`/`PlanID`（大写 ID），与多数集群接口的 `ClusterId`（小写 d）不同。`DescribeClusterInstances` 是两版同名且入参不兼容（旧 `InstanceIds`/`InstanceRole` vs 新 `SortBy`/`NeedTags`），本文走旧版，见 [节点实例操作](../nodes/instance-ops.md)。
+
 ## 概述
 
 升级分小版本（如 1.30.0 → 1.30.5）与大版本（如 1.30 → 1.34）。大版本升级风险高，建议逐版本升级而非跳版本。
@@ -18,6 +20,12 @@ fused: true
 | 大版本跳版本 | 紧急场景（1.30→1.34） | 高 | 不推荐，API 弃用风险 |
 
 操作是**异步**的：`UpdateClusterVersion` 返回即提交，集群进入 `Upgrading` 状态，需轮询直到 `Running`。
+
+## 触发条件
+
+- `DescribeAvailableClusterVersion` 返回的 `Versions` 非空（有更高版本可升）— 用本文升级 Master
+- 当前 K8s 版本将停止维护，或业务需新版 API/特性 — 逐版本升级（勿跳版本）
+- Master 升级后节点未跟随（`CheckInstancesUpgradeAble` 显示节点版本落后于 Master）— 跳到 [§单独升级节点版本](#单独升级节点版本)
 
 ## 准备工作
 
@@ -36,11 +44,11 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_I
 ```bash
 # 1. 查可升级版本（Versions 为空表示已是最新）
 tccli tke DescribeAvailableClusterVersion --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
-# expected: Versions 含目标版本；为空 [] 则无需升级
+# expected: 顶层返回 Versions + Clusters 字段；Versions 含目标版本，为空 [] 则无需升级
 
 # 2. 节点兼容性前置检查（UpgradeType 枚举: reset 重装升级 / hot 原地滚动小版本 / major 原地滚动大版本）
 tccli tke CheckInstancesUpgradeAble --region ap-guangzhou --ClusterId "<CLUSTER_ID>" --UpgradeType reset
-# expected: UpgradeAbleInstances[] 为空或 Total=0（无可升级节点=已最新）；返回 ClusterVersion/LatestVersion
+# expected: 返回 ClusterVersion/LatestVersion/UpgradeAbleInstances[]/Total/UnavailableVersionReason；UpgradeAbleInstances[] 为空或 Total=0（无可升级节点=已最新）
 
 # 3. 确认无进行中的升级任务（DescribeUpgradeTasks 不接受 --ClusterId，按 Offset/Limit 翻页）
 tccli tke DescribeUpgradeTasks --region ap-guangzhou --Offset 0 --Limit 20
@@ -53,17 +61,18 @@ tccli tke DescribeClusterKubeconfig --region ap-guangzhou --ClusterId "<CLUSTER_
 
 ## 关键字段
 
-> 来源：`tccli tke UpdateClusterVersion --generate-cli-skeleton`（实测）。
-
 | 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
 |:------|------|:--------:|------------|---------------|
 | ClusterId | string | 是 | `cls-xxxxxxxx` | `ResourceNotFound` |
 | DstVersion | string | 是 | 目标版本，如 `1.34.1`，须在 `DescribeAvailableClusterVersion` 返回列表中 | `InvalidParameterValue` / `FailedOperation` |
+| UpgradeType | string | 否（`UpgradeClusterInstances` 的 `Operation=create` 时需设置） | 枚举：`reset`（重装升级，支持大/小版本，节点系统盘重装）/ `hot`（原地滚动**小版本**热升级）/ `major`（原地滚动**大版本**升级）。`CheckInstancesUpgradeAble` 前置检查须传同一值 | `InvalidParameterValue`（如对大版本升级传 `hot`） |
 | MaxNotReadyPercent | float | 否 | 升级容忍度，0-100，默认低值（保守） | `InvalidParameterValue` |
 | SkipPreCheck | boolean | 否 | 跳过前置检查，**危险**，默认 false | 跳过后可能升级失败 |
 | ExtraArgs | object | 否 | Master 组件自定义参数（Etcd/KubeAPIServer/KubeControllerManager/KubeScheduler） | 各子字段校验 |
 
 > `DstVersion` 必须是 `DescribeAvailableClusterVersion` 返回的版本之一，不能用 `DescribeVersions` 的全量版本——后者含不可升级到的版本。
+
+> `UpgradeType` 三值代表三条独立升级路径（非可互换）：`reset` 重装节点系统盘（风险最高，但兼容性最强，大小版本都支持）；`hot` 原地滚动小版本（风险低，仅小版本）；`major` 原地滚动大版本（API 弃用风险，需先 `CheckInstancesUpgradeAble --UpgradeType major` 核兼容）。选错（如大版本传 `hot`）报 `InvalidParameterValue`。三条路径的决策见 [步骤 1](#步骤-1决策--选升级策略)。
 
 ## 操作步骤
 
@@ -75,15 +84,47 @@ tccli tke DescribeClusterKubeconfig --region ap-guangzhou --ClusterId "<CLUSTER_
 - **默认推荐**: 逐版本升级，生产环境尤其如此
 - **能回滚吗?**: 不能。集群版本升级不可回滚，只能继续升级到更高版本。节点版本可单独升级/降级，但 Master 不可
 
+#### 选哪个 UpgradeType（reset / hot / major）
+
+`UpgradeType` 决定节点跟随 Master 升级的方式，三值代表三条独立路径，**不可互换**：
+
+| UpgradeType | 做什么 | 适用版本 | 节点影响 | 风险 |
+|:------------|:-------|:---------|:---------|:-----|
+| `reset` | 重装升级（节点系统盘重装到新版本） | 大版本 + 小版本 | 系统盘重装，数据盘保留但 Pod 重调度 | 高（重装不可逆，失败需重建节点） |
+| `hot` | 原地滚动小版本热升级 | 仅小版本 | 滚动重启节点，不重装 | 低（原地，Pod 漂移少） |
+| `major` | 原地滚动大版本升级 | 仅大版本 | 滚动重启节点，不重装 | 中（API 弃用风险，须先核兼容） |
+
+- **reset vs hot/major**: reset 重装节点系统盘（兼容性最强但破坏性最大）；hot/major 原地滚动（保留节点，仅重启）
+- **hot vs major**: 同为原地滚动，区别在版本跨度——`hot` 只能小版本（如 1.30.0→1.30.5），`major` 只能大版本（如 1.30→1.34）
+- **默认推荐**: 小版本升级用 `hot`（风险最低）；大版本升级用 `major`（原地，比 reset 温和）；仅当 `hot`/`major` 兼容性检查不通过时回退 `reset`
+- **选错会怎样**: 大版本升级传 `hot` 报 `InvalidParameterValue`；`CheckInstancesUpgradeAble` 的 `UpgradeType` 必须与 `UpgradeClusterInstances` 一致，否则兼容性检查结果不对应
+
+> 三值各自的前置检查都走 `CheckInstancesUpgradeAble --UpgradeType <值>`，须与后续 `UpgradeClusterInstances --UpgradeType <值>` 传同一值。
+
 ### 步骤 2：前置检查
 
+`UpgradeType` 须与步骤 3 的升级命令传同一值。小版本升级用 `hot`，大版本用 `major`，回退场景用 `reset`：
+
 ```bash
+# 小版本前置检查（UpgradeType=hot）
+tccli tke CheckInstancesUpgradeAble --region ap-guangzhou \
+  --ClusterId "<CLUSTER_ID>" --UpgradeType hot
+# expected: UpgradeAbleInstances[] 为空或 Total=0（节点已最新）；有不兼容先处理节点；UnavailableVersionReason 含原因
+
+# 大版本前置检查（UpgradeType=major）——大版本升级必做，核 API 弃用兼容
+tccli tke CheckInstancesUpgradeAble --region ap-guangzhou \
+  --ClusterId "<CLUSTER_ID>" --UpgradeType major
+# expected: UpgradeAbleInstances[] 兼容；若 UnavailableVersionReason 非空，先处理不兼容节点或回退 reset
+
+# 回退场景：reset 重装前置检查（hot/major 不兼容时用）
 tccli tke CheckInstancesUpgradeAble --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" --UpgradeType reset
-# expected: UpgradeAbleInstances[] 为空或 Total=0（节点已最新）；若有不兼容，先处理节点
+# expected: UpgradeAbleInstances[] 兼容（reset 兼容性最强）
 ```
 
 ### 步骤 3：升级 — 最小化
+
+Master 升级（`UpdateClusterVersion` 不带 `UpgradeType`，它只升 Master 控制面；节点跟随升级用步骤 3a 的 `UpgradeClusterInstances`）：
 
 ```bash
 tccli tke UpdateClusterVersion --region ap-guangzhou \
@@ -95,6 +136,32 @@ tccli tke UpdateClusterVersion --region ap-guangzhou \
 |:------------|:-----|:-----|:---------|
 | `<CLUSTER_ID>` | 目标集群 ID | `cls-xxxxxxxx` | `tccli tke DescribeClusters` → `Clusters[].ClusterId` |
 | `<TARGET_VERSION>` | 目标版本 | 须在可升级列表 | `tccli tke DescribeAvailableClusterVersion` → `Versions[]` |
+
+### 步骤 3a：节点跟随升级 — 按 UpgradeType 选路径
+
+Master 升级后节点未自动跟随时，用 `UpgradeClusterInstances` 按选定的 `UpgradeType` 升级节点。三值三条路径，命令结构相同，仅 `--UpgradeType` 不同：
+
+```bash
+# 路径 1: hot 小版本热升级（原地滚动，风险最低）
+tccli tke UpgradeClusterInstances --region ap-guangzhou \
+  --ClusterId "<CLUSTER_ID>" --Operation create --UpgradeType hot \
+  --InstanceIds '["<INSTANCE_ID>"]'
+# expected: exit 0, 返回 RequestId（异步任务已提交）
+
+# 路径 2: major 大版本原地滚动（API 弃用风险，须先 CheckInstancesUpgradeAble --UpgradeType major 通过）
+tccli tke UpgradeClusterInstances --region ap-guangzhou \
+  --ClusterId "<CLUSTER_ID>" --Operation create --UpgradeType major \
+  --InstanceIds '["<INSTANCE_ID>"]'
+# expected: exit 0, 返回 RequestId
+
+# 路径 3: reset 重装升级（hot/major 不兼容时回退；系统盘重装，数据盘保留）
+tccli tke UpgradeClusterInstances --region ap-guangzhou \
+  --ClusterId "<CLUSTER_ID>" --Operation create --UpgradeType reset \
+  --InstanceIds '["<INSTANCE_ID>"]'
+# expected: exit 0, 返回 RequestId
+```
+
+> 三路径的 `UpgradeType` 必须与步骤 2 `CheckInstancesUpgradeAble` 一致，否则兼容性检查结果不对应。`reset` 会重装节点系统盘（Pod 重调度），`hot`/`major` 原地滚动重启（Pod 漂移少）。
 
 ### 步骤 4：升级 — 增强：金丝雀
 
@@ -124,15 +191,19 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_I
 |:-----|:-----|:-----|
 | 集群状态 | `DescribeClusterStatus` → `ClusterState` | `Upgrading` → `Running` |
 | 版本号 | `DescribeClusters --ClusterIds '["<ID>"]'` → `ClusterVersion` | 等于 `<TARGET_VERSION>` |
-| 升级任务 | `DescribeUpgradeTasks --Offset 0 --Limit 20` 取 `UpgradeTasks[].ID`，再 `DescribeUpgradeTaskDetail --ID "<ID>"` → `UpgradePlans[].Status` | `Succeeded` |
+| 升级任务 | `DescribeUpgradeTasks --Offset 0 --Limit 20` 取 `UpgradeTasks[].ID`，再 `DescribeUpgradeTaskDetail --ID "<ID>"` → `UpgradePlans[].Status` | `Succeed` |
 | 节点版本 | `CheckInstancesUpgradeAble --ClusterId "<ID>" --UpgradeType reset` → `ClusterVersion`/`UpgradeAbleInstances[].Version`（`DescribeClusterInstances` 不返回节点 K8s 版本） | 节点 Version 与 Master 一致 |
+
+> 版本号带 `-tke` 后缀是正常形态（如 `1.34.1-tke.5`），`ClusterVersion`/`LatestVersion` 均用此格式。`UpdateClusterVersion --DstVersion` 传纯版本号（如 `1.34.1`），由服务端匹配 `-tke` 衍生版。
 | kubectl 可用 | `kubectl get nodes`（用 kubeconfig） | 节点列表返回 |
 
 > 升级期间 `ClusterState=Upgrading`，可 `CancelUpgradePlan --ClusterID "<ID>" --PlanID "<PLAN_ID>"` 暂停（不是回滚，注意 `ClusterID`/`PlanID` 均大写 ID）。暂停后恢复需重新触发。
 
 ## 清理
 
-> **不可回滚**：集群版本升级后无法降级到旧版本。若升级失败导致集群不可用，只能 `DeleteCluster` 重建并用备份的 kubeconfig/配置恢复工作负载（P8 显式标注）。
+> **不可回滚**：集群版本升级后无法降级到旧版本。若升级失败导致集群不可用，只能 `DeleteCluster` 重建并用备份的 kubeconfig/配置恢复工作负载（升级前必备份，见 [集群备份](backup.md)；重建见 [删除集群](delete.md) + [创建集群](create.md)）。
+
+> **维护窗口交叉**：手动升级前建议设维护窗口排除项，冻结 TKE 托管组件的自动升级，避免自动升级与手动升级撞期。维护窗口配置见 [维护窗口](maintenance-window.md)。升级期间 `ClusterState=Upgrading` 不受维护窗口控制（手动操作优先）。
 
 ## 故障恢复
 
@@ -170,12 +241,14 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_I
 | `resume` | 继续已暂停的任务 |
 | `abort` | 终止任务 |
 
+`Operation=create` 的三值命令演示见 [步骤 3a](#步骤-3a节点跟随升级--按-upgradetype-选路径)（hot/major/reset 三路径）。本段补 `MaxNotReadyPercent` 金丝雀变体：
+
 ```bash
-# 开始升级指定节点（UpgradeType 同 CheckInstancesUpgradeAble: reset/hot/major）
+# 金丝雀升级指定节点（UpgradeType 同步骤 3a，加 MaxNotReadyPercent 容忍度）
 tccli tke UpgradeClusterInstances --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" \
   --Operation create \
-  --UpgradeType reset \
+  --UpgradeType hot \
   --InstanceIds '["<INSTANCE_ID>"]' \
   --MaxNotReadyPercent 30
 # expected: exit 0, 返回 RequestId（异步任务已提交）
@@ -184,38 +257,47 @@ tccli tke UpgradeClusterInstances --region ap-guangzhou \
 | 占位符 | 含义 | 约束 | 如何获取 |
 |:-------|:-----|:-----|:---------|
 | `<CLUSTER_ID>` | 集群 ID | `cls-xxxxxxxx` | `tccli tke DescribeClusters` → `Clusters[].ClusterId` |
-| `<INSTANCE_ID>` | 节点 CVM ID | `ins-xxxxxxxx` | `tccli tke DescribeClusterInstances`（旧版用 `--InstanceIds`/`--InstanceRole`，新版用 `--SortBy`/`--NeedTags`，两版入参不兼容 D30；本文走旧版 2018-05-25）→ 节点 InstanceId |
+| `<INSTANCE_ID>` | 节点 CVM ID | `ins-xxxxxxxx` | `tccli tke DescribeClusterInstances`（旧版用 `--InstanceIds`/`--InstanceRole`，新版用 `--SortBy`/`--NeedTags`，两版入参不兼容；本文走旧版 2018-05-25）→ 节点 InstanceId |
 
 任务状态用 `GetUpgradeInstanceProgress` 轮询；暂停/终止用 `--Operation pause`/`abort`。完整节点运维（接入/删除/升级）见 [节点实例操作](../nodes/instance-ops.md)。
 
 ### 升级任务进度与计划控制
 
-> 节点升级/Master 升级都是异步任务，三个 Action 覆盖「查进度—查详情—停计划」控制面。参数名大小写以 `--generate-cli-skeleton` 实测为准（注意 `ClusterID`/`PlanID` 大写 vs `ClusterId` 小写）。
+> 节点升级/Master 升级都是异步任务，三个 Action 覆盖「查进度—查详情—停计划」控制面。参数名大小写以各 Action 入参为准（注意 `ClusterID`/`PlanID` 大写 vs `ClusterId` 小写）。
 
 ```bash
 # 1. 查节点升级进度（ClusterId 小写 + Offset/Limit 分页）
 tccli tke GetUpgradeInstanceProgress --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" --Offset 0 --Limit 20
-# expected: 返回各节点升级进度（InstanceProgress[]）
+# expected: 集群无升级任务报 ResourceNotFound；有任务时返回 Total/Done/LifeState/Instances[]/ClusterStatus
 
 # 2. 查升级任务详情（ID 为任务 ID，来自 DescribeUpgradeTasks[].ID）
 tccli tke DescribeUpgradeTaskDetail --region ap-guangzhou \
   --ID "<TASK_ID>" --Offset 0 --Limit 20
-# expected: UpgradePlans[].Status = Succeeded / Running / Failed
+# expected: exit 0，返回 UpgradePlans[]+TotalCount（UpgradePlans[].Status = Pending/Processing/Running/Succeed/Failed/Cancelled）
 
 # 3. 暂停升级计划（ClusterID/PlanID 均大写；暂停非回滚，恢复需重新触发）
 tccli tke CancelUpgradePlan --region ap-guangzhou \
   --ClusterID "<CLUSTER_ID>" --PlanID <PLAN_ID>
-# expected: exit 0
+# expected: CAM 拦截 UnauthorizedOperation.CamNoAuth；授权后 exit 0
 ```
 
 | 占位符 | 含义 | 如何获取 |
 |:-------|:-----|:---------|
 | `<CLUSTER_ID>` | 集群 ID | `tccli tke DescribeClusters` → `Clusters[].ClusterId` |
 | `<TASK_ID>` | 升级任务 ID | `tccli tke DescribeUpgradeTasks --Offset 0 --Limit 20` → `UpgradeTasks[].ID` |
-| `<PLAN_ID>` | 升级计划 ID（整数） | `DescribeUpgradeTaskDetail --ID "<TASK_ID>"` → `UpgradePlans[].PlanID` |
+| `<PLAN_ID>` | 升级计划 ID（整数） | `DescribeUpgradeTaskDetail --ID "<TASK_ID>"` → `UpgradePlans[].ID`（字段名是 `ID`，非 `PlanID`） |
 
-> ⚠️ 大小写不一致是真实契约：`GetUpgradeInstanceProgress`/`DescribeUpgradeTaskDetail` 用任务语义参数，`CancelUpgradePlan` 的 `ClusterID`/`PlanID` 大写。切换接口前用 `--generate-cli-skeleton` 核对，勿凭记忆。
+> ⚠️ 大小写不一致是真实契约：`GetUpgradeInstanceProgress`/`DescribeUpgradeTaskDetail` 用任务语义参数，`CancelUpgradePlan` 的 `ClusterID`/`PlanID` 大写。切换接口前用 `tccli tke <Action> help` 核对入参名，勿凭记忆。
+
+## 收尾确认
+
+```bash
+# 一次性核对：集群已回到 Running + 版本已提升到目标版本
+tccli tke DescribeClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]' \
+  --filter "Clusters[0].{state:ClusterStatus,version:ClusterVersion}"
+# expected: state=Running, version=目标版本（如 1.34.1）→ Master 升级闭环完成；节点版本另用 CheckInstancesUpgradeAble 核对
+```
 
 ## 下一步
 
@@ -228,22 +310,3 @@ tccli tke CancelUpgradePlan --region ap-guangzhou \
 ## 控制台替代方案
 
 [容器服务控制台 - 集群升级](https://console.cloud.tencent.com/tke2/cluster)
-
-## Action 清单
-
-| Action | 类型 | 版本 | 说明 |
-|:-------|:-----|:-----|:-----|
-| `UpdateClusterVersion` | 主操作 | 2018-05-25 | 升级 Master 版本（异步，不可回滚） |
-| `UpgradeClusterInstances` | 主操作 | 2018-05-25 | 单独升级节点版本 |
-| `CancelUpgradePlan` | 清理 | 2018-05-25 | 暂停升级计划（`--ClusterID`/`--PlanID` 大写） |
-| `DeleteCluster` | 清理 | 2018-05-25 | 升级失败回退重建 |
-| `CheckInstancesUpgradeAble` | 验证 | 2018-05-25 | 节点升级兼容性前置检查 |
-| `DescribeAvailableClusterVersion` | 验证 | 2018-05-25 | 查可升级版本（区别于全量版本） |
-| `DescribeUpgradeTasks` | 验证 | 2018-05-25 | 升级任务列表（按 Offset/Limit） |
-| `DescribeUpgradeTaskDetail` | 验证 | 2018-05-25 | 升级任务详情与 Plan 状态 |
-| `GetUpgradeInstanceProgress` | 验证 | 2018-05-25 | 节点升级进度 |
-| `DescribeClusterInstances` | 验证 | 2018-05-25 | 查节点版本一致性 |
-| `DescribeClusterKubeconfig` | 验证 | 2018-05-25 | 备份 kubeconfig |
-| `DescribeClusters` | 验证 | 2018-05-25 | 确认版本号 |
-| `DescribeClusterStatus` | 验证 | 2018-05-25 | 轮询 Upgrading→Running |
-| `DescribeVersions` | 验证 | 2018-05-25 | 全量版本列表 |

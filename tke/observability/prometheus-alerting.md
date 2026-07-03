@@ -8,9 +8,9 @@ fused: true
 > 创建和管理 TKE Prometheus 告警策略与告警规则，配置全局通知渠道，查询告警历史。
 > 控制台: [容器服务 - 监控](https://console.cloud.tencent.com/tke2/monitor)
 
-> ⚠️ 本文档所有 Action 属 **TKE 2018-05-25（默认版本）**。入参骨架、错误码来自真机实跑（P2）。
-> ⚠️ **Prometheus 域 CAM 全拦截（实测）**：当前账号对 Prometheus 全部 Action 返回 `UnauthorizedOperation`，无可用实例。出参结构标 **blocked**，授权后回填。错误码与诊断已入 [§故障恢复](#故障恢复)。
-> ⚠️ 本文档为 **Fused Runbook**：合并 AlertPolicy / AlertRule / GlobalNotification 三层于一篇。
+> ⚠️ 本文档所有 Action 属 **TKE 2018-05-25（默认版本）**。
+> 本文合并 AlertPolicy / AlertRule / GlobalNotification 三层于一篇。
+> 输出结构以实际响应为准；错误码与诊断见 [§故障恢复](#故障恢复)。
 
 ## 概述
 
@@ -42,8 +42,6 @@ tccli tke DescribePrometheusInstancesOverview --region <REGION>
 告警规则依赖已采集的指标。确认 Agent 已安装、采集目标 up（见 [Prometheus Agent 管理](prometheus-agent.md)），否则规则因无数据永不触发。
 
 ## 关键字段
-
-> 参数名实测自各 Action 的 `--generate-cli-skeleton`（P7）。
 
 ### 告警策略/规则 AlertPolicy & AlertRule
 
@@ -117,26 +115,28 @@ Modify 为覆盖式：`AlertRule.Id` 指定改哪条，`Rules[]` 整体替换。
 
 ### 步骤 3b：AlertRule 独立 Action 流程（与 AlertPolicy 平行）
 
-> AlertPolicy 与 AlertRule 是两套独立 Action，入参结构几乎相同（都含 `AlertRule.{Name,Rules[],Id,TemplateId}`），但删除寻址不同。AlertRule 用 `InstanceId`+`AlertRule`+分页/`Filters` 查询。参数以 `--generate-cli-skeleton` 实测为准。
+> AlertPolicy 与 AlertRule 是两套独立 Action，入参结构几乎相同（都含 `AlertRule.{Name,Rules[],Id,TemplateId}`），但删除寻址不同。AlertRule 用 `InstanceId`+`AlertRule`+分页/`Filters` 查询。
+>
+> ⚠️ 下方 AlertRule 命令的出参结构未经验证，按实际响应为准。`Create` 返回 `Id`、`Describe` 返回 `AlertRules[]`+`Total`。
 
 ```bash
 # 1. 创建告警规则（独立 Action，AlertRule 单数入参含 Rules[]）
 tccli tke CreatePrometheusAlertRule --region <REGION> \
   --InstanceId <PROM_INSTANCE_ID> \
   --AlertRule '{"Name":"<RULE_NAME>","Rules":[{"Name":"<RULE_NAME>","Rule":"up == 0","For":"5m"}]}'
-# expected: exit 0, 返回 RequestId（含 AlertId）
+# expected: CAM 拦截 AuthFailure.UnauthorizedOperation（参数已验证）；授权后返回 Id
 
 # 2. 查询告警规则（InstanceId + Filters/Offset/Limit）
 tccli tke DescribePrometheusAlertRule --region <REGION> \
   --InstanceId <PROM_INSTANCE_ID> \
   --Filters '[{"Name":"Name","Values":["<RULE_NAME>"]}]' --Offset 0 --Limit 20
-# expected: exit 0, 返回告警规则列表
+# expected: CAM 拦截 UnauthorizedOperation（云API网关层）；授权后返回 AlertRules[]+Total
 
 # 3. 修改告警规则（AlertRule.Id 寻址，覆盖式）
 tccli tke ModifyPrometheusAlertRule --region <REGION> \
   --InstanceId <PROM_INSTANCE_ID> \
   --AlertRule '{"Name":"<RULE_NAME>","Id":"<ALERT_ID>","Rules":[{"Name":"<RULE_NAME>","Rule":"up == 0","For":"10m"}]}'
-# expected: exit 0
+# expected: CAM 拦截 AuthFailure.UnauthorizedOperation（参数已验证）；授权后 exit 0
 ```
 
 > AlertPolicy vs AlertRule 命令一一对应：`Create/Describe/Modify/Delete` × `PrometheusAlertPolicy|PrometheusAlertRule`。删除寻址不同——Policy 支持 `Names[]`/`AlertIds[]` 双寻址，Rule 仅 `AlertIds[]`（删规则须先从 `DescribePrometheusAlertRule` 取 AlertId）。混淆会报 `Unknown options`。
@@ -148,7 +148,7 @@ tccli tke ModifyPrometheusAlertRule --region <REGION> \
 tccli tke ModifyPrometheusGlobalNotification --region <REGION> \
   --InstanceId <PROM_INSTANCE_ID> \
   --Notification '{"Enabled":true,"Type":"amp","RepeatInterval":"10m","NotifyWay":["SMS","EMAIL"],"ReceiverGroups":["<RG_ID>"]}'
-# expected: exit 0
+# expected: CAM 拦截 AuthFailure.UnauthorizedOperation（参数已验证）；授权后 exit 0
 ```
 
 > `ModifyPrometheusGlobalNotification` 是实例级单例的覆盖式更新。一个实例只有一条全局通知，所有告警规则触发后都走它。修改前可先 `DescribePrometheusGlobalNotification` 取当前配置，避免遗漏已有渠道。
@@ -180,7 +180,7 @@ tccli tke DescribePrometheusGlobalNotification --region <REGION> --InstanceId <P
 | 告警已触发 | `DescribePrometheusAlertHistory --InstanceId <PROM_INSTANCE_ID> --RuleName <RULE_NAME>` | 含触发记录 |
 | 通知已送达 | 查对应渠道（SMS/EMAIL/接收组）日志 | 收到通知 |
 
-> ⚠️ **出参结构 blocked（实测 CAM 拦截）**：上述命令本环境均返回 `UnauthorizedOperation`，输出结构未经真机验证，授权后须用真实响应回填。`DescribePrometheusAlertHistory` 的 `StartTime`/`EndTime` 格式（预计为 ISO8601）亦需授权后实测确认。
+> ⚠️ 上述命令的出参结构未经验证，按实际响应为准。`DescribePrometheusAlertHistory` 的 `StartTime`/`EndTime` 格式（预计为 ISO8601）以实际响应为准。
 
 ## 清理
 
@@ -225,20 +225,3 @@ tccli tke DeletePrometheusAlertRule --region <REGION> \
 - [Prometheus 入门](prometheus.md) — 创建实例（告警的前置）
 - [Prometheus 配置与模板](prometheus-config.md) — 告警模板（Template）的配置侧
 - [故障排查](../troubleshooting.md) — 通用排障入口
-
-## Action 清单
-
-| Action | 类型 | 版本 | 说明 |
-|:-------|:-----|:-----|:-----|
-| `CreatePrometheusAlertPolicy` | 主操作 | 2018-05-25 | 创建告警策略（AlertRule 含 Rules[]） |
-| `DescribePrometheusAlertPolicy` | 验证 | 2018-05-25 | 查询告警策略 |
-| `ModifyPrometheusAlertPolicy` | 主操作 | 2018-05-25 | 修改策略（Id 寻址，覆盖式） |
-| `DeletePrometheusAlertPolicy` | 清理 | 2018-05-25 | 删除策略（Names 或 AlertIds） |
-| `CreatePrometheusAlertRule` | 主操作 | 2018-05-25 | 创建告警规则（独立 Action） |
-| `DescribePrometheusAlertRule` | 验证 | 2018-05-25 | 查询告警规则 |
-| `ModifyPrometheusAlertRule` | 主操作 | 2018-05-25 | 修改告警规则 |
-| `DeletePrometheusAlertRule` | 清理 | 2018-05-25 | 删除规则（仅 AlertIds） |
-| `DescribePrometheusAlertHistory` | 验证 | 2018-05-25 | 查询告警历史（RuleName+时间范围） |
-| `CreatePrometheusGlobalNotification` | 主操作 | 2018-05-25 | 创建全局通知（实例级单例） |
-| `DescribePrometheusGlobalNotification` | 验证 | 2018-05-25 | 查询全局通知 |
-| `ModifyPrometheusGlobalNotification` | 主操作 | 2018-05-25 | 修改全局通知 |

@@ -28,6 +28,7 @@ fused: true
 | 2 | 凭证已配置 | `tccli tke DescribeRegions` | 返回 `"RequestId"`，无 `Error` |
 | 3 | 目标地域可用 | `tccli tke DescribeRegions` | 输出含 `ap-guangzhou`、`Status` 非空 |
 | 4 | VPC 和子网已就绪 | `tccli vpc DescribeSubnets --region <REGION>` | 某子网 `AvailableIpAddressCount ≥ 10` |
+| 5 | kubectl 已安装（验证集群用） | `kubectl version --client` | Client Version 显示版本号 |
 
 ```bash
 tccli --version
@@ -38,7 +39,7 @@ tccli tke DescribeRegions \
 # expected: ap-guangzhou    alluser
 ```
 
-> 凭证未配置 → 执行 `tccli auth login`。缺少 VPC/子网 → 参考 [VPC 文档](https://cloud.tencent.com/document/product/215)。
+> 未安装 tccli → [安装 tccli](../getting-started/install.md)。凭证未配置 → [配置凭证](../getting-started/credentials.md)（`tccli configure` 或 `tccli auth login`）。缺少 VPC/子网 → [准备 VPC 与子网](../getting-started/prepare-vpc.md)。未装 kubectl → [kubectl 安装](https://kubernetes.io/docs/tasks/tools/)（验证集群用，非创建集群必需）。
 
 ---
 
@@ -375,17 +376,3 @@ tccli tke DescribeClusters --region <REGION> --ClusterIds '["<CLUSTER_ID>"]' \
 [TKE 控制台创建集群](https://console.cloud.tencent.com/tke2/cluster/create?rid=1)
 
 ---
-
-## Action 清单
-
-本文涉及的 API Action，按操作类型分组。
-
-| 分类 | Action | 用途 |
-|:-----|:-------|:-----|
-| 主操作 | `CreateCluster` | 创建集群 |
-| 验证操作 | `DescribeClusterStatus` | 查询集群健康状态（含 `ClusterState`、`ClusterDeletionProtection`） |
-| 验证操作 | `DescribeClusters` | 列表查询 / 单集群详情 |
-| 验证操作 | `DescribeClusterSecurity` | 获取 kubeconfig 与访问端点 |
-| 清理操作 | `DeleteCluster` | 删除集群 |
-| 清理操作 | `DisableClusterDeletionProtection` | 关闭删除保护 |
-| 跨产品 | `vpc:DescribeSubnets` | 查询 VPC 子网（获取 `SubnetId`） |

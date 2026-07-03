@@ -30,7 +30,7 @@ tccli tke CreateTKEEdgeCluster \
   --ClusterVersion "1.28.3" \
   --VpcId "<VPC_ID>" \
   --SubnetId "<SUBNET_ID>"
-# expected: { "Response": { "ClusterId": "cls-xxxxxxxx" } }
+# expected: { "ClusterId": "cls-xxxxxxxx" }
 ```
 
 ### 查询边缘集群
@@ -38,7 +38,7 @@ tccli tke CreateTKEEdgeCluster \
 ```bash
 # 列出所有边缘集群
 tccli tke DescribeTKEEdgeClusters --region ap-guangzhou
-# expected: { "Response": { "TotalCount": ..., "Clusters": [...] } }
+# expected: { "TotalCount": ..., "Clusters": [...] }
 
 # 查询状态
 tccli tke DescribeTKEEdgeClusterStatus --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
@@ -118,45 +118,47 @@ tccli tke DescribeTKEEdgeClusters --region ap-guangzhou
 
 ## 集群更新与诊断
 
-> 更新边缘集群属性、查可用版本与额外参数、外部 kubeconfig、CIDR 冲突检查、日志 Agent 卸载。参数以 `--generate-cli-skeleton` 实测为准（注意 Edge 域 `ClusterID` 大写 vs `ClusterId` 小写不一致）。
+> 更新边缘集群属性、查可用版本与额外参数、外部 kubeconfig、CIDR 冲突检查、日志 Agent 卸载。参数以 `--generate-cli-skeleton` 为准（注意 Edge 域 `ClusterID` 大写 vs `ClusterId` 小写不一致）。
+>
+> ⚠️ Edge 域多数 action 在 ap-guangzhou 返回 `UnsupportedRegion`（`DescribeEdgeClusterExtraArgs`/`CheckEdgeClusterCIDR`/`DescribeEdgeClusterInstances`）或 CAM 拦截（`DescribeEdgeAvailableExtraArgs`/`UpdateTKEEdgeCluster`/`UninstallEdgeLogAgent` 返回 `UnauthorizedOperation`/`AuthFailure.UnauthorizedOperation`）。仅 `DescribeAvailableTKEEdgeVersion` 可用（但 action 已废弃，edge 产品已下线）。下方命令参数名已验证（错误是地域/CAM/资源，非参数名）。
 
 ```bash
 # 更新边缘集群属性（ClusterId 小写 + ClusterName/ClusterDesc/PodCIDR 等覆盖式）
 tccli tke UpdateTKEEdgeCluster --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" --ClusterName "<NEW_NAME>" --ClusterDesc "<NEW_DESC>"
-# expected: exit 0
+# expected: CAM 拦截 AuthFailure.UnauthorizedOperation（参数已验证）；授权后 exit 0
 
-# 查询可升级到的边缘集群版本（ClusterId 定位）
-tccli tke DescribeAvailableTKEEdgeVersion --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
-# expected: 返回可用目标版本列表
+# 查询可升级到的边缘集群版本（无必填入参；action 已废弃，edge 产品下线）
+tccli tke DescribeAvailableTKEEdgeVersion --region ap-guangzhou
+# expected: exit 0，返回 Versions[]+EdgeVersionLatest+EdgeVersionCurrent（版本如 1.20.6/1.22.5/1.18.2）
 
 # 查询集群已生效的额外参数（ClusterId 定位）
 tccli tke DescribeEdgeClusterExtraArgs --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
-# expected: 返回集群当前 ExtraArgs
+# expected:  UnsupportedRegion（ap-guangzhou 不支持）；Edge 地域可用时返回 ClusterExtraArgs
 
 # 查询某版本可用的额外参数（ClusterVersion 定位，建集群/升级前用）
 tccli tke DescribeEdgeAvailableExtraArgs --region ap-guangzhou --ClusterVersion "<VERSION>"
-# expected: 返回该版本支持的 ExtraArgs 选项
+# expected: CAM 拦截 UnauthorizedOperation（参数已验证）；授权后返回 ClusterVersion+AvailableExtraArgs
 
 # 获取外部 kubeconfig（ClusterId 定位，区别于 DescribeTKEEdgeClusterCredential）
 tccli tke DescribeTKEEdgeExternalKubeconfig --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
-# expected: 返回外部访问用 kubeconfig
+# expected: 返回 UnknownParameter: failed to connect to user cluster（非边缘集群连不上）；边缘集群可用时返回 Kubeconfig
 
 # CIDR 冲突检查（建集群前用，VpcId + PodCIDR + ServiceCIDR 三参数）
 tccli tke CheckEdgeClusterCIDR --region ap-guangzhou \
   --VpcId "<VPC_ID>" --PodCIDR "<POD_CIDR>" --ServiceCIDR "<SERVICE_CIDR>"
-# expected: exit 0, 返回冲突列表（无冲突则空）
+# expected:  UnsupportedRegion（ap-guangzhou 不支持）；Edge 地域可用时返回 ConflictCode+ConflictMsg
 
 # 卸载边缘日志 Agent（ClusterId 定位，停止边缘日志采集）
 tccli tke UninstallEdgeLogAgent --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
-# expected: exit 0
+# expected: CAM 拦截 AuthFailure.UnauthorizedOperation（参数已验证）；授权后 exit 0
 ```
 
 ```bash
 # 查询边缘集群节点列表（注意 ClusterID 大写 + Filters/Offset/Limit）
 tccli tke DescribeEdgeClusterInstances --ClusterID "<CLUSTER_ID>" --region <REGION> \
   --Offset 0 --Limit 20
-# expected: exit 0, 返回边缘节点列表
+# expected:  UnsupportedRegion（ap-guangzhou 不支持，需 Edge 地域）；可用时返回 TotalCount+InstanceInfoSet
 ```
 
 > ⚠️ `DescribeEdgeClusterInstances` 用大写 `ClusterID`（同 `CreateEdgeCVMInstances`/`DescribeEdgeCVMInstances`），区别于 `UpdateTKEEdgeCluster`/`DescribeAvailableTKEEdgeVersion` 等的小写 `ClusterId`——Edge 域大小写不一致是真实契约，切换接口前用 `--generate-cli-skeleton` 核对。`CheckEdgeClusterCIDR` 不绑集群（建集群前用），需 `VpcId`+`PodCIDR`+`ServiceCIDR` 三参数。
@@ -212,38 +214,7 @@ tccli tke DeleteECMInstances --ClusterID "<CLUSTER_ID>" --region <REGION> --EcmI
 
 ## 下一步
 
-- [EKS 弹性集群](eks-cluster.md) — Serverless 集群（对比边缘）
-- [EKS 容器实例](eks-instances.md) — 无集群直接创建容器
+- [EKS 弹性集群](eks-cluster.md) — Serverless 集群与容器实例（对比边缘）
+- [虚拟节点 (超级节点)](../nodes/virtual-nodes.md) — 标准集群内的 Serverless 节点
 - [专用工作负载概览](index.md) — 边缘/EKS 选型
 - [标准集群概览](../clusters/index.md) — 对比标准集群
-
-## Action 清单
-
-| Action | 类型 | 版本 | 说明 |
-|:-------|:-----|:-----|:-----|
-| `CreateTKEEdgeCluster` | 主操作 | 2018-05-25 | 创建边缘集群 |
-| `UpdateTKEEdgeCluster` | 主操作 | 2018-05-25 | 更新边缘集群 |
-| `UpdateEdgeClusterVersion` | 主操作 | 2018-05-25 | 升级边缘集群版本 |
-| `CreateECMInstances` | 主操作 | 2018-05-25 | 创建 ECM 实例（`--ClusterID` 大写） |
-| `CreateEdgeCVMInstances` | 主操作 | 2018-05-25 | 创建 Edge CVM 实例 |
-| `CreateEdgeLogConfig` | 主操作 | 2018-05-25 | 创建边缘日志配置 |
-| `InstallEdgeLogAgent` | 主操作 | 2018-05-25 | 安装边缘日志 Agent |
-| `DeleteTKEEdgeCluster` | 清理 | 2018-05-25 | 删除边缘集群 |
-| `DeleteECMInstances` | 清理 | 2018-05-25 | 删除 ECM 实例（EcmIdSet[]） |
-| `DeleteEdgeCVMInstances` | 清理 | 2018-05-25 | 删除 Edge CVM 实例（CvmIdSet[]） |
-| `DeleteEdgeClusterInstances` | 清理 | 2018-05-25 | 删除边缘节点（`--ClusterId` 小写） |
-| `UninstallEdgeLogAgent` | 清理 | 2018-05-25 | 卸载边缘日志 Agent |
-| `DescribeTKEEdgeClusters` | 验证 | 2018-05-25 | 边缘集群列表 |
-| `DescribeTKEEdgeClusterStatus` | 验证 | 2018-05-25 | 边缘集群状态 |
-| `DescribeTKEEdgeClusterCredential` | 验证 | 2018-05-25 | 边缘集群凭证 |
-| `DescribeTKEEdgeExternalKubeconfig` | 验证 | 2018-05-25 | 外部 kubeconfig |
-| `DescribeTKEEdgeScript` | 验证 | 2018-05-25 | 边缘节点注册脚本 |
-| `DescribeAvailableTKEEdgeVersion` | 验证 | 2018-05-25 | 可升级版本 |
-| `DescribeEdgeClusterUpgradeInfo` | 验证 | 2018-05-25 | 升级信息 |
-| `DescribeEdgeClusterExtraArgs` | 验证 | 2018-05-25 | 集群参数 |
-| `DescribeEdgeAvailableExtraArgs` | 验证 | 2018-05-25 | 可用额外参数 |
-| `DescribeEdgeClusterInstances` | 验证 | 2018-05-25 | 边缘节点列表 |
-| `DescribeECMInstances` | 验证 | 2018-05-25 | ECM 实例列表 |
-| `DescribeEdgeCVMInstances` | 验证 | 2018-05-25 | Edge CVM 实例列表 |
-| `DescribeEdgeLogSwitches` | 验证 | 2018-05-25 | 日志开关状态 |
-| `CheckEdgeClusterCIDR` | 验证 | 2018-05-25 | CIDR 冲突检查 |

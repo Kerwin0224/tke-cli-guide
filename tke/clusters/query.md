@@ -19,6 +19,12 @@ fused: true
 
 操作是**同步**的，命令返回即完成。
 
+## 触发条件
+
+- 需要查看账号下有哪些集群、某集群的状态/版本/类型（创建后核对、日常巡检）— 用本文列表查询或单集群健康查询
+- 写操作（删除/升级/配置）前需确认目标集群 ID 与状态 — 用 `DescribeClusters`/`DescribeClusterStatus` 锁定目标
+- `--filter` 取字段返回空或 None，怀疑跨版本字段踩空 — 跳到 [§踩空陷阱](#跨版本取字段的踩空陷阱) 核对版本响应结构
+
 ## 准备工作
 
 ### 环境检查
@@ -35,77 +41,139 @@ tccli cvm DescribeRegions --region ap-guangzhou
 
 ```bash
 # 确认至少有一个集群可查
-tccli tke DescribeClusters --region ap-guangzhou --output text --filter "TotalCount"
+tccli tke DescribeClusters --region ap-guangzhou --version 2022-05-01 --output text --filter "TotalCount"
 # expected: 数字 ≥ 1
 ```
 
+## 两版同名 Action：DescribeClusters
+
+> `DescribeClusters` 在 TKE 两个 API 版本中**同名存在**，**入参两版完全一致**（5 字段：`ClusterIds`/`ClusterType`/`Filters`/`Limit`/`Offset`，可跨版本传参），但**响应结构不同**——同名≠同契约。调用时用 `--version` 显式指定版本，避免静默走默认版与意图错位。
+
+| 版本 | `--version` | 顶层字段 | `Clusters[]` 字段数 | 定位 |
+|:-----|:-----|:-----|:-----|:-----|
+| 2018-05-25（tccli 默认） | `--version 2018-05-25` | `TotalCount`/`Clusters`/`RequestId`（**无 `Errors`**） | **28**（含网络/节点数/运行时等） | 字段丰富，一次查询拿全部信息 |
+| 2022-05-01（官方当前版） | `--version 2022-05-01` | `TotalCount`/`Clusters`/**`Errors`**/`RequestId` | **10**（精简） | 官方当前版本，长期维护方向 |
+
+> **本文主示例走新版（2022-05-01，官方当前版）**。需要网络配置/节点数/运行时等丰富字段时走旧版（见 [§取丰富字段（旧版独有）](#取丰富字段旧版独有)）。两版 `Clusters[]` 共有 9 字段：`ClusterId`/`ClusterName`/`ClusterDescription`/`ClusterVersion`/`ClusterType`/`ClusterStatus`/`ClusterLevel`/`CreatedTime`/`TagSpecification`。
+
+### 跨版本取字段的踩空陷阱
+
+> `--filter`（JMESPath）按所调版本的响应结构取字段。**跨版本套用 `--filter` 表达式会踩空**——期待的字段在另一版不存在，JMESPath 不报错但返回 `None`（空），agent 据此判断会误以为"集群无此属性"。
+
+| 跨版本套用 | 旧版取新版独有 | 新版取旧版独有 |
+|:-----|:-----|:-----|
+| 字段 | `Errors`（顶层） | `ClusterNetworkSettings`/`ClusterNodeNum`/`ContainerRuntime`/`DeletionProtection`/`ClusterOs`/`ImageId`/`RuntimeVersion`/`Property`/`ClusterMaterNodeNum`/`ClusterEtcdNodeNum` 等 19 个 |
+| 结果 | 返回 `None` | 返回 `None` |
+| 根因 | 旧版响应顶层无 `Errors` | 新版 `Clusters[]` 精简掉这些字段 |
+
+双版本对照（ap-guangzhou，同一集群）：
+
+```bash
+# 旧版取 Errors → None（旧版顶层无此字段）
+tccli tke DescribeClusters --region ap-guangzhou --version 2018-05-25 --Limit 1 \
+  --filter "Errors" --output text
+# expected: None
+
+# 新版取 ClusterNetworkSettings → None（新版 Clusters[] 无此字段）
+tccli tke DescribeClusters --region ap-guangzhou --version 2022-05-01 --Limit 1 \
+  --filter "Clusters[0].ClusterNetworkSettings" --output text
+# expected: None
+```
+
+> **判据**：写 `--filter` 前，先确认所调版本的响应结构。首次用某版本时，先 `--Limit 1` 看顶层与 `Clusters[0]` 的实际字段名，再构造表达式。两版共有的 9 字段（ID/名称/状态/类型/版本/等级等）跨版本安全，其余按版本写。
+
 ## 关键字段
 
-> 来源：`tccli tke DescribeClusters --generate-cli-skeleton`（实测）。`DescribeClusters` 是两版同名 Action，**入参两版一致**（5 字段，可跨版本传参），但**响应不同**（同名≠同契约，D30）：旧版（2018-05-25，本文所用）响应顶层无 `Errors`，`Clusters[]` 字段更丰富（含 `ClusterNetworkSettings`/`ClusterNodeNum`/`Property` 等 28 字段）；新版（2022-05-01）响应顶层多 `Errors`，`Clusters[]` 字段精简（10 字段）。**用 `--filter` 取字段时按所调版本的响应结构写**，跨版本套用会 `KeyError`——期待 `Errors` 在旧版踩空，期待 `ClusterNetworkSettings` 在新版丢失。本文示例均按旧版响应结构。
+> `DescribeClusters` 入参两版一致（5 字段）：
 
 | 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
 |:------|------|:--------:|------------|---------------|
-| ClusterIds | list | 否 | `["cls-xxx"]`，为空查全部 | `ResourceNotFound` |
-| Filters | list | 否 | `Name`/`Values` 对，支持 ClusterName/ClusterType/ClusterStatus/vpc-id/tag-key | `InvalidParameterValue` |
-| Limit | int | 否 | 1-100，默认 20 | `InvalidParameterValue` |
-| Offset | int | 否 | 默认 0，分页偏移 | `InvalidParameterValue` |
-| ClusterType | string | 否 | `MANAGED_CLUSTER` / `INDEPENDENT_CLUSTER` | `InvalidParameterValue` |
+| ClusterIds | list | 否 | `["cls-xxx"]`，为空查全部；不存在的 ID 不报错，返回 `TotalCount=0` | — |
+| Filters | list | 否 | `Name`/`Values` 对，支持 ClusterName/ClusterType/ClusterStatus/vpc-id/tag-key/tag-value/Tags | `InvalidParameter.Param`（`invalid filter name`） |
+| Limit | int | 否 | 默认 20；超出范围被服务端截断，不报错 | — |
+| Offset | int | 否 | 默认 0，分页偏移 | — |
+| ClusterType | string | 否 | `MANAGED_CLUSTER` / `INDEPENDENT_CLUSTER` | `InvalidParameter` |
 
 > Filter 的 `ClusterStatus` 值用 `Running`（首字母大写），见 [状态机](../reference/states.md)。
 
 ## 操作步骤
 
-### Minimal — 列表查询（默认全部）
+### 最小化 — 列表查询（新版，官方当前版）
 
 ```bash
-tccli tke DescribeClusters --region ap-guangzhou --Limit 10
-# expected: TotalCount + Clusters 列表
+tccli tke DescribeClusters --region ap-guangzhou --version 2022-05-01 --Limit 10
+# expected: TotalCount + Clusters 列表（10 字段精简结构，顶层含 Errors）
 ```
 
 ```json
 {
     "TotalCount": 2,
     "Clusters": [
-        {"ClusterId": "cls-example1", "ClusterName": "prod", "ClusterStatus": "Running", "ClusterVersion": "1.34.1", "ClusterType": "MANAGED_CLUSTER"},
-        {"ClusterId": "cls-example2", "ClusterName": "test", "ClusterStatus": "Running", "ClusterVersion": "1.30.0", "ClusterType": "INDEPENDENT_CLUSTER"}
+        {"ClusterId": "cls-example1", "ClusterName": "prod", "ClusterStatus": "Running", "ClusterVersion": "1.34.1", "ClusterType": "MANAGED_CLUSTER", "ClusterLevel": "L20", "VpcId": "vpc-example", "CreatedTime": "2026-01-01 00:00:00", "TagSpecification": []},
+        {"ClusterId": "cls-example2", "ClusterName": "test", "ClusterStatus": "Running", "ClusterVersion": "1.30.0", "ClusterType": "INDEPENDENT_CLUSTER", "ClusterLevel": "L5", "VpcId": "vpc-example", "CreatedTime": "2026-02-01 00:00:00", "TagSpecification": []}
     ],
+    "Errors": [],
     "RequestId": "xxx"
 }
 ```
 
-### Enhanced: JMESPath 投影（省 token）
+> 新版 `Clusters[]` 仅 10 字段（含 `VpcId`，旧版的 `VpcId` 在 `ClusterNetworkSettings.VpcId` 里）。顶层多 `Errors`（正常为空数组 `[]`，部分集群查询出错时填错误明细）。
 
-用 `--filter` 在 CLI 侧裁剪字段，只输出关心的列（实测字段名 `ClusterId`/`ClusterName`/`ClusterVersion`/`ClusterType`）：
+### 增强：JMESPath 投影（省 token）
+
+用 `--filter` 在 CLI 侧裁剪字段，只输出关心的列。两版共有的 9 字段跨版本安全：
 
 ```bash
-tccli tke DescribeClusters --region ap-guangzhou \
+tccli tke DescribeClusters --region ap-guangzhou --version 2022-05-01 \
   --filter "Clusters[?ClusterStatus=='Running'].{id:ClusterId,name:ClusterName,ver:ClusterVersion,type:ClusterType}" \
   --output text
-# expected: 每行一个集群，制表符分隔 id/name/ver/type
+# expected: 每行一个集群，制表符分隔
 ```
 
 ```text
-cls-example1	prod	1.34.1	MANAGED_CLUSTER
-cls-example2	test	1.30.0	INDEPENDENT_CLUSTER
+cls-example1	prod	MANAGED_CLUSTER	1.34.1
+cls-example2	test	INDEPENDENT_CLUSTER	1.30.0
 ```
+
+> ⚠️ `--output text` 的列序由 JMESPath 投影字段最终序列化决定，**非投影声明顺序**。声明 `{id,name,ver,type}` 与 `{ver,type,id,name}` 输出列序相同（均为 `id,name,type,ver`）。若需固定列顺序，改用 `--output json` 或在投影外用 `sort_by`/显式拼接。
 
 > `--filter`（JMESPath）和 `--Filters`（API 入参）是两回事：`--Filters` 让服务端按条件返回，`--filter` 让 CLI 本地裁剪。两者可叠加——先 `--Filters` 服务端过滤，再 `--filter` 本地投影。
 
-### Enhanced: 服务端过滤 + 分页
+### 增强：服务端过滤 + 分页
 
 ```bash
 # 按状态过滤（服务端）
-tccli tke DescribeClusters --region ap-guangzhou \
+tccli tke DescribeClusters --region ap-guangzhou --version 2022-05-01 \
   --Filters '[{"Name":"ClusterStatus","Values":["Running"]}]' \
   --Limit 10 --Offset 0
 # expected: TotalCount = Running 集群数
 
 # 翻页（超过 Limit 时）
-tccli tke DescribeClusters --region ap-guangzhou --Limit 10 --Offset 10
+tccli tke DescribeClusters --region ap-guangzhou --version 2022-05-01 --Limit 10 --Offset 10
 # expected: 第 11-20 个集群；不足时 TotalCount 不变但 Clusters 变少
 ```
 
+### 取丰富字段（旧版独有）
+
+> 需要网络配置、节点数、容器运行时、删除保护等字段时走旧版——这些字段新版 `Clusters[]` 已精简（19 个旧版独有字段在新版丢失）。旧版是 tccli 默认版，可省略 `--version`，但为自证意图建议显式标注。
+
+```bash
+tccli tke DescribeClusters --region ap-guangzhou --version 2018-05-25 \
+  --filter "Clusters[?ClusterStatus=='Running'].{id:ClusterId,name:ClusterName,net:ClusterNetworkSettings.VpcId,nodes:ClusterNodeNum,rt:ContainerRuntime,del:DeletionProtection}" \
+  --output text
+# expected: 含网络/节点数/运行时/删除保护（这些字段新版取会返回 None）
+```
+
+```text
+cls-example1	prod	vpc-example	4	containerd	True
+cls-example2	test	vpc-example	0	containerd	False
+```
+
+> 旧版 `Clusters[]` 28 字段中，19 个新版没有：`ClusterNetworkSettings`（含 VpcId/子网/CIDR）、`ClusterNodeNum`/`ClusterMaterNodeNum`/`ClusterEtcdNodeNum`（节点计数）、`ContainerRuntime`/`RuntimeVersion`（运行时）、`DeletionProtection`（删除保护）、`ClusterOs`/`ImageId`/`OsCustomizeType`（镜像）、`Property`/`ProjectId`/`CdcId`/`IsHighAvailability`/`ClusterCategory`/`SecurityModeConfig`/`EnableExternalNode`/`AutoUpgradeClusterLevel`/`QGPUShareEnable`。查这些字段必须走旧版。
+
 ### 单集群健康全貌
+
+> `DescribeClusterStatus` 返回单集群运行状态（非列表查询），字段与 `DescribeClusters` 不同：状态字段叫 `ClusterState`（非 `ClusterStatus`）。
 
 ```bash
 tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]'
@@ -130,6 +198,8 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_I
 }
 ```
 
+> `ClusterInstanceState` 为 `-` 表示空集群（`ClusterRunningNodeNum=0`）；有节点且健康为 `AllNormal`。`ClusterDeletionProtection` 是布尔值（`true`/`false`）。
+
 ### 单集群访问地址与凭证
 
 ```bash
@@ -140,6 +210,7 @@ tccli tke DescribeClusterEndpoints --region ap-guangzhou --ClusterId "<CLUSTER_I
 
 ```json
 {
+    "CertificationAuthority": "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----\n",
     "ClusterExternalEndpoint": "",
     "ClusterIntranetEndpoint": "",
     "ClusterDomain": "cls-example.ccs.tencent-cloud.com",
@@ -148,12 +219,38 @@ tccli tke DescribeClusterEndpoints --region ap-guangzhou --ClusterId "<CLUSTER_I
     "ClusterIntranetDomain": "cls-example.ccs.tencent-cloud.com",
     "SecurityGroup": "",
     "ClusterIntranetSubnetId": "",
-    "CertificationAuthority": "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----\n",
+    "IntranetSecurityGroup": "",
     "RequestId": "xxx"
 }
 ```
 
-> `ClusterExternalEndpoint`/`ClusterIntranetEndpoint` 为空表示未开启外网/内网访问端点，见 [管理端点](../networking/endpoints.md)。`ClusterExternalACL`（非 `SecurityPolicy`）是外网访问白名单。`DescribeClusterSecurity` 返回完整访问凭证（实测字段：`UserName`/`Password`/`CertificationAuthority`/`Kubeconfig`/`Domain`/`PgwEndpoint`/`JnsGwEndpoint`/`SecurityPolicy`/`ClusterExternalEndpoint`），用于配置 kubectl，见 [认证配置](../security/auth.md)。
+> `ClusterExternalEndpoint`/`ClusterIntranetEndpoint` 为空表示未开启外网/内网访问端点，见 [管理端点](../networking/endpoints.md)。`ClusterExternalACL`（非 `SecurityPolicy`）是外网访问白名单；`SecurityGroup`/`IntranetSecurityGroup` 分别是外网/内网端点的安全组。
+
+### 集群访问凭证
+
+`DescribeClusterSecurity` 返回完整访问凭证（kubeconfig/密码/CA），用于配置 kubectl，见 [认证配置](../security/auth.md)。
+
+```bash
+tccli tke DescribeClusterSecurity --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
+# expected: exit 0, 返回 Kubeconfig/Password/UserName/CertificationAuthority/Domain/PgwEndpoint/JnsGwEndpoint/SecurityPolicy/ClusterExternalEndpoint
+```
+
+```json
+{
+    "UserName": "admin",
+    "Password": "********",
+    "CertificationAuthority": "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----\n",
+    "ClusterExternalEndpoint": "",
+    "Domain": "cls-example.ccs.tencent-cloud.com",
+    "PgwEndpoint": "",
+    "SecurityPolicy": null,
+    "Kubeconfig": "apiVersion: v1\nkind: Config\n...",
+    "JnsGwEndpoint": null,
+    "RequestId": "xxx"
+}
+```
+
+> `Kubeconfig` 是可直接写入文件的完整 kubeconfig；`Password` 是集群访问密码；`SecurityPolicy` 是集群访问策略组（注意：外网访问白名单是 `DescribeClusterEndpoints` 的 `ClusterExternalACL`，非此字段）。配置 kubectl 见 [认证配置](../security/auth.md)。
 
 ### 集群配置查询
 
@@ -167,11 +264,11 @@ tccli tke DescribeClusterLevelAttribute --ClusterID "<CLUSTER_ID>" --region <REG
 ```json
 {
     "TotalCount": 9,
-    "Items": [{"Name": "5节点", "Alias": "L5", "NodeCount": 5, "PodCount": 150, "Enable": true}]
+    "Items": [{"Name": "5节点", "Alias": "L5", "NodeCount": 5, "PodCount": 150, "ConfigMapCount": 128, "RSCount": 900, "CRDCount": 150, "OtherCount": 150, "Enable": true}]
 }
 ```
 
-> ⚠️ `DescribeClusterLevelAttribute`/`DescribeClusterLevelChangeRecords` 用 `--ClusterID`（大写 ID），与其他集群接口的 `--ClusterId`（小写 d）不同——大小写写错报 `Unknown options`。
+> ⚠️ `DescribeClusterLevelAttribute`/`DescribeClusterLevelChangeRecords` 用 `--ClusterID`（大写 ID），与其他集群接口的 `--ClusterId`（小写 d）不同——大小写写错报 `Unknown options`。`Items[]` 每项含各资源上限：`NodeCount`/`PodCount`/`ConfigMapCount`/`RSCount`/`CRDCount`/`OtherCount`，`Enable=false` 的等级（如 L1000+）需工单开通。
 
 ```bash
 # 集群控制器状态 (route-controller / node-ipam-controller 等)
@@ -203,13 +300,7 @@ tccli tke DescribeClusterLevelChangeRecords --ClusterID "<CLUSTER_ID>" --region 
 
 > 集群等级价格、子账号 RBAC 关系、标签批量修改状态查询。
 
-```bash
-# 查询集群等级价格 (不绑集群, 按 ClusterLevel; 用真实枚举 L5/L20/L50/L100/L200/L500)
-tccli tke GetClusterLevelPrice --ClusterLevel L20 --region <REGION>
-# expected: exit 0, Cost/TotalCost/Policy (实测 L5→13/L20→37/L50→47/L100→83; 传不存在的 L10 触发 FailedOperation.TradeCommon)
-```
-
-> `GetClusterLevelPrice` 属计费查询（P8 cost transparency），仅需 `ClusterLevel`（真实枚举 L5/L20/L50/L100/L200/L500；**无 L10**，传 L10 稳定触发 `FailedOperation.TradeCommon`）。等级属性见上文 [DescribeClusterLevelAttribute](#集群配置查询)。
+> `GetClusterLevelPrice`（集群等级价格查询，按 `ClusterLevel` 真实枚举 L20/L50/L100/L200/L500/L1000/L3000/L5000；**L5 不参与询价**（L5 仅供 `DescribeClusterLevelAttribute` 查询），传 L5 或 L10 等非询价枚举触发 `FailedOperation.TradeCommon`）属计费查询，主命令见 [配置集群属性 — 选等级决策](configure.md#为什么选这个等级)，本文不再重复。Pod 计费/预留实例查询见 [配额和限制](../reference/quotas.md)。
 
 ```bash
 # 查询集群 CommonName (RBAC 子账号/角色关系)
@@ -227,6 +318,11 @@ tccli tke DescribeBatchModifyTagsStatus --ClusterId "<CLUSTER_ID>" --region <REG
 
 > `DescribeClusterCommonNames` 查 RBAC 子账号（SubaccountUins）/角色（RoleIds）与集群的绑定关系。`DescribeBatchModifyTagsStatus` 查标签批量修改异步任务状态（`Status=done` 完成，`FailedResources[]` 失败资源）。
 
+| 占位符 | 含义 | 约束 | 获取方式 |
+|:-------|:-----|:-----|:---------|
+| `<SUB_UIN>` | 子账号 UIN | 数字串 | `tccli cam ListUsers` → 子账号 Uin；或控制台「访问管理 - 用户列表」 |
+| `<ROLE_ID>` | 角色 ID | `cam:role` 角色 ID | `tccli cam DescribeRoleList` → 角色的 RoleId |
+
 ## 验证
 
 > 只读操作，验证即确认输出结构正确、字段名匹配。
@@ -237,10 +333,11 @@ tccli tke DescribeBatchModifyTagsStatus --ClusterId "<CLUSTER_ID>" --region <REG
 | filter 字段名 | `DescribeClusters --filter "Clusters[0].ClusterId"` | 返回首个集群 ID，无 JMESPath 错误 |
 | 单集群状态 | `DescribeClusterStatus` | `ClusterState` 字段存在 |
 | 访问地址 | `DescribeClusterEndpoints` | `ClusterDomain` 字段存在 |
+| 版本一致性 | `DescribeClusters` 两版 `--filter "Clusters[0].ClusterId"` | 两版返回相同集群 ID（入参一致） |
 
 ## 清理
 
-> 只读操作，无副作用，无需清理（P8 显式标注）。
+> 只读操作，无副作用，无需清理。
 
 ## 故障恢复
 
@@ -248,8 +345,8 @@ tccli tke DescribeBatchModifyTagsStatus --ClusterId "<CLUSTER_ID>" --region <REG
 
 | 现象 | 诊断 | 根因 | 修复 |
 |:--------|:----------|:------------|:-----|
-| `RegionNotFound` | `tccli tke DescribeClusters --region <REGION>` | 地域不支持 | 换有效地域，如 `ap-guangzhou` |
-| `AuthFailure.SecretIdNotFound` | `tccli cvm DescribeRegions` | 凭证失效 | `tccli configure` 重新配置 |
+| `RegionNotFound` | `tccli tke DescribeClusters --region <REGION>` | 地域不支持 | 换等地域，如 `ap-guangzhou` |
+| `AuthFailure.SecretIdNotFound` | `tccli tke DescribeRegions` | 凭证失效 | 见 [配置凭证](../../getting-started/credentials.md) 重新配置 |
 | `InvalidParameterValue` | 检查 `--Filters` 的 Name/Values 格式 | Filter 名拼写错或值类型不对 | 用支持的 Filter 名（ClusterName/ClusterType/ClusterStatus/vpc-id/tag-key/tag-value/Tags） |
 | `ResourceNotFound` | `tccli tke DescribeClusters` 核对 ID | `ClusterIds` 里的集群不存在 | 确认集群 ID 格式 `cls-xxxxxxxx` |
 
@@ -258,11 +355,19 @@ tccli tke DescribeBatchModifyTagsStatus --ClusterId "<CLUSTER_ID>" --region <REG
 | 现象 | 诊断 | 根因 | 修复 |
 |:--------|:----------|:------------|:-----|
 | `TotalCount: 0` 但集群存在 | 换地域查 `tccli tke DescribeClusters --region <其他地域>` | region 不对，集群在别的地域 | 用正确地域重查 |
-| `--filter` 返回空但 `TotalCount > 0` | 先去掉 `--filter` 看 Clusters 字段名 | JMESPath 字段名拼错（如 `ClusterState` 写成 `cluster_state`） | 用响应实际字段名，区分大小写 |
+| `--filter` 返回空但 `TotalCount > 0` | 先去掉 `--filter` 看 Clusters 字段名 | JMESPath 字段名拼错（如 `ClusterState` 写成 `cluster_state`），或跨版本取了不存在的字段（见 [§踩空陷阱](#跨版本取字段的踩空陷阱)） | 用所调版本响应的实际字段名，区分大小写；查丰富字段走旧版 |
 | 分页遗漏集群 | 检查 Offset/Limit | 只读了前 N 条，未翻页 | 循环 `Offset += Limit` 直到 Clusters 为空 |
 | `DescribeClusterStatus` 返回空 ClusterStatusSet | 核对 ClusterIds 参数格式 | `ClusterIds` 未用 JSON 数组 | 传 `--ClusterIds '["cls-xxx"]'`（JSON 字符串数组） |
 
-> ⚠️ `--filter` 字段名必须匹配 API 实际响应键名。响应是 `Clusters` 就不能写 `clusters`，是 `ClusterState` 就不能写 `cluster_state`。首次用某接口时，先 `--Limit 1` 看响应结构，再构造 `--filter`。
+> ⚠️ `--filter` 字段名必须匹配 API 实际响应键名，且须与所调版本一致。响应是 `Clusters` 就不能写 `clusters`，是 `ClusterState` 就不能写 `cluster_state`。跨版本时，旧版独有字段（`ClusterNetworkSettings` 等）在新版取会返回 `None` 而非报错——这是静默踩空，最易误导。首次用某接口/版本时，先 `--Limit 1` 看响应结构，再构造 `--filter`。
+
+## 收尾确认
+
+```bash
+# 一次性核对：列表查询 + 单集群状态查询均可用（只读，无副作用）
+tccli tke DescribeClusters --region <REGION> --filter "TotalCount" --output text
+# expected: 数字 ≥ 0 → 列表查询通道正常，可据此进入写操作前的目标核对
+```
 
 ## 下一步
 
@@ -276,26 +381,3 @@ tccli tke DescribeBatchModifyTagsStatus --ClusterId "<CLUSTER_ID>" --region <REG
 ## 控制台替代方案
 
 [容器服务控制台 - 集群列表](https://console.cloud.tencent.com/tke2/cluster)
-
-## Action 清单
-
-| Action | 类型 | 版本 | 说明 |
-|:-------|:-----|:-----|:-----|
-| `AcquireClusterAdminRole` | 主操作 | 2018-05-25 | 获取集群管理员角色（权限） |
-| `AddClusterCIDR` | 主操作 | 2018-05-25 | 添加集群 CIDR |
-| `ModifyClusterAttribute` | 主操作 | 2018-05-25 | 修改集群属性 |
-| `ModifyClusterRuntimeConfig` | 主操作 | 2018-05-25 | 修改运行时配置 |
-| `ModifyMasterComponent` | 主操作 | 2018-05-25 | 修改 Master 组件参数 |
-| `DescribeClusters` | 验证 | 2018-05-25 | 列表查询（入参两版一致，响应不同见关键字字段段 D30） |
-| `DescribeClusterStatus` | 验证 | 2018-05-25 | 单集群健康全貌 |
-| `DescribeClusterSecurity` | 验证 | 2018-05-25 | kubeconfig + 密码 + CA |
-| `DescribeClusterEndpoints` | 验证 | 2018-05-25 | 访问端点地址 |
-| `DescribeClusterExtraArgs` | 验证 | 2018-05-25 | 当前组件额外参数 |
-| `DescribeClusterAvailableExtraArgs` | 验证 | 2018-05-25 | 可用额外参数（按版本+类型） |
-| `DescribeClusterLevelAttribute` | 验证 | 2018-05-25 | 集群等级属性（用 `--ClusterID` 大写） |
-| `DescribeClusterLevelChangeRecords` | 验证 | 2018-05-25 | 等级变更记录（用 `--ClusterID` 大写） |
-| `DescribeClusterCommonNames` | 验证 | 2018-05-25 | RBAC 子账号/角色绑定 |
-| `DescribeClusterControllers` | 验证 | 2018-05-25 | 控制器状态 |
-| `DescribeBatchModifyTagsStatus` | 验证 | 2018-05-25 | 标签批量修改异步状态 |
-| `GetClusterLevelPrice` | 验证 | 2018-05-25 | 集群等级价格（计费域） |
-| `DescribeRegions` | 验证 | 2018-05-25 | 凭证有效性检查 |

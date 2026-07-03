@@ -4,7 +4,7 @@ subtype: 8B
 ---
 # TCR 实例状态机
 
-> 企业版实例的状态机。状态值来自 `DescribeInstanceStatus` 响应的 `Status` 字段，以实测 + 官方文档为准。个人版无状态机（共享服务，无独立实例生命周期）。
+> 企业版实例的状态机。状态值来自 `DescribeInstanceStatus` 响应的 `Status` 字段，以官方文档为准。个人版无状态机（共享服务，无独立实例生命周期）。
 
 ## 查询命令
 
@@ -33,11 +33,11 @@ tccli tcr DescribeInstanceStatus --region <REGION> --RegistryIds '["<REGISTRY_ID
 }
 ```
 
-> 实测：`Status` 是实例整体状态，`Conditions` 是过程明细（`Type`/`Status`/`Reason`）。稳定态下 `Conditions[0].Status` 与顶层 `Status` 一致；过渡态下 `Conditions` 反映正在进行的子流程。
+> `Status` 是实例整体状态，`Conditions` 是过程明细（`Type`/`Status`/`Reason`）。稳定态下 `Conditions[0].Status` 与顶层 `Status` 一致；过渡态下 `Conditions` 反映正在进行的子流程。
 
 ## 企业版实例状态 (Status)
 
-> 来源：`DescribeInstanceStatus` 响应。实测值 `Running`；枚举来自腾讯云 TCR 官方文档。
+> 来源：`DescribeInstanceStatus` 响应。值 `Running`；枚举来自腾讯云 TCR 官方文档。
 
 | 状态 | 含义 | 触发条件 | 用户可执行操作 | 终态 |
 |:-----|:-----|:---------|:--------------|:----:|

@@ -32,7 +32,7 @@ TKE 日志分两类，采集方式不同：
 
 ### InstallLogAgent
 
-> 来源：`tccli tke InstallLogAgent --generate-cli-skeleton`（实测）。
+> 来源：`tccli tke InstallLogAgent --generate-cli-skeleton`。
 
 | 字段 | 类型 | 必填 | 作用 | 填错的影响 |
 |:------|------|:--------:|:-----|:-----------|
@@ -42,7 +42,7 @@ TKE 日志分两类，采集方式不同：
 
 ### EnableControlPlaneLogs
 
-> 来源：`tccli tke EnableControlPlaneLogs --generate-cli-skeleton`（实测）。
+> 来源：`tccli tke EnableControlPlaneLogs --generate-cli-skeleton`。
 
 | 字段 | 类型 | 必填 | 作用 |
 |:------|------|:--------:|:-----|
@@ -96,8 +96,19 @@ tccli tke EnableControlPlaneLogs --region ap-guangzhou \
 ```bash
 # 查看日志开关状态
 tccli tke DescribeLogSwitches --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]'
-# expected: 返回各集群日志开关状态
+# expected: exit 0, 返回 SwitchSet[] (每集群一项, 含 Audit/Event/Log/MasterLog 开关 + ClusterId)
 ```
+
+```json
+{
+    "SwitchSet": [
+        {"ClusterId": "cls-example", "Audit": false, "Event": false, "Log": true, "MasterLog": false}
+    ],
+    "RequestId": "xxx"
+}
+```
+
+> 字段含义：`Audit`=审计日志开关，`Event`=K8s 事件日志开关，`Log`=业务日志（CLS Agent）开关，`MasterLog`=控制面日志开关。任一为 `true` 表示该类日志已开启，`false` 表示未开启。
 
 | 维度 | 命令 | 预期 |
 |:-----|:-----|:-----|
@@ -163,13 +174,19 @@ tccli tke DescribeClusterInspectionResultsOverview --ClusterIds '["<CLUSTER_ID>"
 ```
 
 ```bash
-# 巡检结果明细 (按时间范围)
-tccli tke ListClusterInspectionResultsItems --ClusterId "<CLUSTER_ID>" --region <REGION> \
-  --StartTime "<START_TIME>" --EndTime "<END_TIME>"
-# expected: exit 0, 巡检项明细
+# 指定集群最新巡检结果 (ClusterIds[] + Name 过滤)
+tccli tke ListClusterInspectionResults --ClusterIds '["<CLUSTER_ID>"]' --region <REGION>
+# expected: exit 0, InspectionResults[] 含 ClusterId/StartTime/EndTime/Statistics
 ```
 
-> `HealthyLevel` 状态：`healthy`/`warn`/`serious`。`DescribeClusterInspectionResultsOverview` 按集群批量查（ClusterIds[]），`ListClusterInspectionResultsItems` 按时间范围查明细。
+```bash
+# 巡检结果明细 (按时间范围, ClusterId 必填)
+tccli tke ListClusterInspectionResultsItems --ClusterId "<CLUSTER_ID>" --region <REGION> \
+  --StartTime "<START_TIME>" --EndTime "<END_TIME>"
+# expected: exit 0, 巡检项明细 InspectionResultsItems[]
+```
+
+> `HealthyLevel` 状态：`healthy`/`warn`/`serious`/`risk`。三个巡检 Action 层级：`DescribeClusterInspectionResultsOverview` 按 Region/集群批量查概览，`ListClusterInspectionResults` 查指定集群最新一次巡检结果，`ListClusterInspectionResultsItems` 按时间范围查历史明细（`ClusterId` 必填）。集群巡检是集群级配置诊断，与 [节点级健康检查策略](../nodes/health-check.md)（2022-05-01 `HealthCheckPolicy`）层级与版本均不同，勿混。
 
 ### 控制面日志与日志配置
 
@@ -202,27 +219,3 @@ tccli tke ModifyLogConfig --ClusterId "<CLUSTER_ID>" --region <REGION> --Name "<
 ## 控制台替代方案
 
 [容器服务控制台 - 日志采集](https://console.cloud.tencent.com/tke2/cluster)
-
-## Action 清单
-
-| Action | 类型 | 版本 | 说明 |
-|:-------|:-----|:-----|:-----|
-| `InstallLogAgent` | 主操作 | 2018-05-25 | 安装 CLS Agent（DaemonSet） |
-| `CreateCLSLogConfig` | 主操作 | 2018-05-25 | 创建业务日志采集配置 |
-| `EnableControlPlaneLogs` | 主操作 | 2018-05-25 | 开启控制面日志（仅托管集群） |
-| `ModifyLogConfig` | 主操作 | 2018-05-25 | 修改采集配置 |
-| `EnableClusterAudit` | 主操作 | 2018-05-25 | 开启审计日志 |
-| `UninstallLogAgent` | 清理 | 2018-05-25 | 卸载 CLS Agent |
-| `DisableControlPlaneLogs` | 清理 | 2018-05-25 | 关闭控制面日志 |
-| `DeleteLogConfigs` | 清理 | 2018-05-25 | 删除采集配置 |
-| `DescribeControlPlaneLogs` | 验证 | 2018-05-25 | 控制面日志开关（必填 ClusterType） |
-| `DescribeLogConfigs` | 验证 | 2018-05-25 | 日志采集配置列表 |
-| `DescribeLogSwitches` | 验证 | 2018-05-25 | 日志开关状态 |
-| `DescribeClusterInspectionResultsOverview` | 验证 | 2018-05-25 | 巡检结果概览（HealthyLevel） |
-| `ListClusterInspectionResultsItems` | 验证 | 2018-05-25 | 巡检结果明细（按时间范围） |
-| `DescribeClusters` | 验证 | 2018-05-25 | 确认集群 ID |
-| `DescribeClusterStatus` | 验证 | 2018-05-25 | 确认集群 Running |
-| `cls:CreateLogset` | 跨产品 | cls | 创建 CLS 日志集 |
-| `cls:CreateTopic` | 跨产品 | cls | 创建 CLS 日志主题 |
-| `cls:DescribeLogsets` | 跨产品 | cls | 核对日志集/主题存在 |
-| `cls:SearchLog` | 跨产品 | cls | 检索日志确认投递 |

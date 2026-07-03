@@ -29,7 +29,7 @@ tccli tke CreateEKSCluster \
   --ClusterName "<NAME>-eks" \
   --VpcId "<VPC_ID>" \
   --SubnetIds '["<SUBNET_ID>"]'
-# expected: { "Response": { "ClusterId": "cls-xxxxxxxx" } }
+# expected: { "ClusterId": "cls-xxxxxxxx" }
 ```
 
 ### 查询 EKS 集群
@@ -37,7 +37,7 @@ tccli tke CreateEKSCluster \
 ```bash
 # 列出所有 EKS 集群
 tccli tke DescribeEKSClusters --region ap-guangzhou
-# expected: { "Response": { "TotalCount": ..., "Clusters": [...] } }
+# expected: 顶层 TotalCount/Clusters/RequestId (tccli 剥离 Response 包装层, 无 Response 键); Clusters[] 元素含 ClusterId/ClusterName/VpcId/SubnetIds/K8SVersion/Status/ClusterDesc/CreatedTime
 
 # 获取凭证
 tccli tke DescribeEKSClusterCredential --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
@@ -62,7 +62,7 @@ tccli tke CreateEKSContainerInstances \
       "Memory": 2
     }
   ]'
-# expected: { "Response": { "EksCiId": "eksci-xxxxxxxx" } }
+# expected: { "EksCiId": "eksci-xxxxxxxx" }
 ```
 
 ### 管理容器实例
@@ -88,18 +88,42 @@ tccli tke RestartEKSContainerInstances --region ap-guangzhou \
 tccli tke DescribeEksContainerInstanceLog \
   --region ap-guangzhou \
   --EksCiId "<EKSCI_ID>"
+
+# 更新容器实例 (EksCiId 定位，Containers[] 覆盖式更新镜像/资源，RestartPolicy 重启策略)
+tccli tke UpdateEKSContainerInstance --region ap-guangzhou \
+  --EksCiId "<EKSCI_ID>" \
+  --RestartPolicy "Always" \
+  --Containers '[{"Name":"nginx","Image":"nginx:1.25","Cpu":0.5,"Memory":1.0}]'
+# expected: CAM 拦截 AuthFailure.UnauthorizedOperation（参数已验证）；授权后返回 EksCiId
 ```
+
+> ⚠️ `UpdateEKSContainerInstance` 需 CAM 授权，参数名（`EksCiId`/`RestartPolicy`/`Containers[]`）已验证；授权后返回 `EksCiId`。`Containers[]` 是覆盖式整体替换（非增量），调用前先 `DescribeEKSContainerInstances` 取当前容器定义再改，避免遗漏。`RestartPolicy` 取值 `Always`/`OnFailure`/`Never`。与 `RestartEKSContainerInstances`（重启，不改定义）区别。
+
+### EKS 日志采集配置
+
+> EKS 容器实例的日志采集配置（投递到 CLS）。
+
+```bash
+# 创建 EKS 日志配置 (LogConfig 采集规则 + LogsetId CLS 日志集)
+tccli tke CreateEksLogConfig --ClusterId "<CLUSTER_ID>" --region <REGION> \
+  --LogConfig "<LOG_CONFIG_JSON>" --LogsetId "<LOGSET_ID>"
+# expected: exit 0
+```
+
+> `CreateEksLogConfig` 的 `LogConfig` 是采集规则 JSON，`LogsetId` 是 CLS 日志集 ID（见 [CLS 服务](https://cloud.tencent.com/document/product/614)）。EKS 日志区别于普通集群日志（见 [日志采集](../observability/logging.md)）。
 
 ## 更新 EKS 集群与事件持久化
 
-> 修改 EKS 集群属性（名称/描述/子网/CLB/DNS）与开启事件持久化（事件投递到 CLS）。参数以 `--generate-cli-skeleton` 实测为准。
+> 修改 EKS 集群属性（名称/描述/子网/CLB/DNS）与开启事件持久化（事件投递到 CLS）。参数以 `--generate-cli-skeleton` 为准。
+>
+> ⚠️ `UpdateEKSCluster` 返回 `UnauthorizedOperation.CamNoAuth`、`EnableEksEventPersistence` 返回 `FailedOperation.CamNoAuth`——均需 CAM 授权，参数名已验证；授权后 `UpdateEKSCluster` exit 0、`EnableEksEventPersistence` exit 0。
 
 ```bash
 # 更新 EKS 集群属性（ClusterId 定位，ClusterName/ClusterDesc/SubnetIds 等覆盖式更新）
 tccli tke UpdateEKSCluster --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" \
   --ClusterName "<NEW_NAME>" --ClusterDesc "<NEW_DESC>"
-# expected: exit 0
+# expected: CAM 拦截 UnauthorizedOperation.CamNoAuth（参数已验证）；授权后 exit 0
 ```
 
 ```bash
@@ -107,7 +131,7 @@ tccli tke UpdateEKSCluster --region ap-guangzhou \
 tccli tke EnableEksEventPersistence --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" \
   --LogsetId "<CLS_LOGSET_ID>" --TopicId "<CLS_TOPIC_ID>" --TopicRegion "<REGION>"
-# expected: exit 0, 集群事件开始投递到 CLS
+# expected: CAM 拦截 FailedOperation.CamNoAuth（参数已验证）；授权后 exit 0，集群事件投递到 CLS
 ```
 
 | 占位符 | 含义 | 如何获取 |
@@ -144,30 +168,12 @@ tccli tke DescribeEKSClusters --region ap-guangzhou
 | 容器实例 | `CreateEKSContainerInstances` / `DeleteEKSContainerInstances` / `DescribeEKSContainerInstances` / `RestartEKSContainerInstances` / `UpdateEKSContainerInstance` | 实例管理 |
 | 地域 | `DescribeEKSContainerInstanceRegions` | 支持的地域 |
 | 事件/日志 | `DescribeEKSContainerInstanceEvent` / `DescribeEksContainerInstanceLog` | 事件和日志 |
+| 日志采集 | `CreateEksLogConfig` | EKS 容器实例日志投递 CLS |
 | 持久化 | `EnableEksEventPersistence` | 开启事件持久化 |
 
 ## 下一步
 
 - [边缘集群](edge-cluster.md) — 边缘计算场景
-- [EKS 容器实例](eks-instances.md) — 无集群直接创建容器
+- [虚拟节点 (超级节点)](../nodes/virtual-nodes.md) — 标准集群内的 Serverless 节点（区别于 EKS 独立集群）
 - [专用工作负载概览](index.md) — EKS/边缘选型
 - [标准集群概览](../clusters/index.md) — 对比标准集群
-
-## Action 清单
-
-| Action | 类型 | 版本 | 说明 |
-|:-------|:-----|:-----|:-----|
-| `CreateEKSCluster` | 主操作 | 2018-05-25 | 创建 EKS Serverless 集群 |
-| `UpdateEKSCluster` | 主操作 | 2018-05-25 | 更新 EKS 集群 |
-| `CreateEKSContainerInstances` | 主操作 | 2018-05-25 | 部署 Pod（按 Pod 计费） |
-| `RestartEKSContainerInstances` | 主操作 | 2018-05-25 | 重启容器实例 |
-| `UpdateEKSContainerInstance` | 主操作 | 2018-05-25 | 更新容器实例 |
-| `EnableEksEventPersistence` | 主操作 | 2018-05-25 | 开启事件持久化 |
-| `DeleteEKSCluster` | 清理 | 2018-05-25 | 删除 EKS 集群 |
-| `DeleteEKSContainerInstances` | 清理 | 2018-05-25 | 删除容器实例 |
-| `DescribeEKSClusters` | 验证 | 2018-05-25 | EKS 集群列表 |
-| `DescribeEKSClusterCredential` | 验证 | 2018-05-25 | EKS 集群凭证 |
-| `DescribeEKSContainerInstanceRegions` | 验证 | 2018-05-25 | 支持地域列表 |
-| `DescribeEKSContainerInstances` | 验证 | 2018-05-25 | 容器实例列表 |
-| `DescribeEKSContainerInstanceEvent` | 验证 | 2018-05-25 | 容器实例事件 |
-| `DescribeEksContainerInstanceLog` | 验证 | 2018-05-25 | 容器实例日志 |

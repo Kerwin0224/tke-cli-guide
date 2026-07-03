@@ -5,7 +5,7 @@ doc_type: Overview
 
 > 集群的工作节点管理——节点池创建、扩缩容、单节点运维。节点是实际运行 Pod 的算力。
 
-## 这是什么
+## 是什么
 
 节点是集群里运行 Pod 的机器（CVM 或虚拟节点）。节点通过节点池管理：节点池是同配置节点的分组，是扩缩容的基本单位。
 
@@ -39,20 +39,20 @@ doc_type: Overview
 | updating | 更新中 | `ModifyClusterNodePool` | 等待 |
 | deleting | 删除中 | `DeleteClusterNodePool` | 等待 |
 
-> 修改与删除节点池的命令（生命周期控制面，参数以 `--generate-cli-skeleton` 实测为准）：
+> 修改与删除节点池的命令（生命周期控制面，参数以 `--generate-cli-skeleton` 为准）：
 
 ```bash
 # 修改节点池配置（Min/Max 区间、Labels、Taints 等，触发 updating → normal）
 tccli tke ModifyClusterNodePool --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" --NodePoolId "<NODE_POOL_ID>" \
   --MaxNodesNum 20 --MinNodesNum 2
-# expected: exit 0
+# expected: exit 0; 节点池不存在报 FailedOperation.RecordNotFound
 
 # 删除节点池（NodePoolIds[] 批量；KeepInstance=true 保留池内 CVM）
 tccli tke DeleteClusterNodePool --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" \
   --NodePoolIds '["<NODE_POOL_ID>"]' --KeepInstance false
-# expected: exit 0
+# expected: exit 0; 集群不存在报 ResourceNotFound
 ```
 
 > `ModifyClusterNodePool` 用单数 `NodePoolId`，`DeleteClusterNodePool` 用复数 `NodePoolIds[]`——同域字段名不一致，切换接口前用 `--generate-cli-skeleton` 核对。完整扩缩容/创建见 [创建节点池](nodepool-create.md) 与 [扩缩容](nodepool-scale.md)。

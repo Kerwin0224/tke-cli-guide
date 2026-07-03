@@ -52,8 +52,6 @@ fused: false
 | `TriggerName` | 触发器类 | 是 | 触发器名 |
 | `ClusterId`/`WorkloadName` | CreateApplicationTriggerPersonal | 是 | 关联 TKE 集群/工作负载 |
 
-> 参数名实测自各 Action `--generate-cli-skeleton`（P7）。
-
 ## 操作步骤
 
 ### 步骤 1：仓库查询与校验
@@ -218,28 +216,3 @@ tccli tcr BatchDeleteImagePersonal --RepoName "<NAMESPACE_NAME>/<REPO_NAME>" --T
 - [个人版全功能](manage.md) — 核心 CRUD（用户/命名空间/仓库/推送）
 - [推送拉取镜像](../images/push-pull.md) — 企业版推送对比
 - [故障排查](../troubleshooting.md) — 触发器/复制失败诊断
-
-## Action 清单
-
-| Action | 类型 | 说明 |
-|:-------|:-----|:-----|
-| `ValidateNamespaceExistPersonal` | 验证 | 校验命名空间存在 |
-| `ValidateRepositoryExistPersonal` | 验证 | 校验仓库存在 |
-| `DescribeRepositoryFilterPersonal` | 验证 | 过滤查询仓库 |
-| `DescribeFavorRepositoryPersonal` | 验证 | 查收藏仓库 |
-| `DescribeRepositoryOwnerPersonal` | 验证 | 查仓库所有者 |
-| `ModifyRepositoryAccessPersonal` | 主操作 | 改可见性（Public 1/0） |
-| `ModifyRepositoryInfoPersonal` | 主操作 | 改描述 |
-| `BatchDeleteRepositoryPersonal` | 清理 | 批量删仓库 |
-| `DuplicateImagePersonal` | 主操作 | 复制镜像（同账号） |
-| `DescribeImageFilterPersonal` | 验证 | 按标签过滤镜像 |
-| `BatchDeleteImagePersonal` | 清理 | 批量删镜像 |
-| `DescribeImageLifecycleGlobalPersonal` | 验证 | 查全局生命周期 |
-| `ManageImageLifecycleGlobalPersonal` | 主操作 | 设全局生命周期（Type/Val） |
-| `DeleteImageLifecycleGlobalPersonal` | 清理 | 删全局生命周期 |
-| `DescribeImageLifecyclePersonal` | 验证 | 查仓库级生命周期 |
-| `CreateApplicationTriggerPersonal` | 主操作 | 建触发器（关联 TKE） |
-| `DescribeApplicationTriggerPersonal` | 验证 | 查触发器 |
-| `ModifyApplicationTriggerPersonal` | 主操作 | 改触发器 |
-| `DescribeApplicationTriggerLogPersonal` | 验证 | 查触发器日志 |
-| `DeleteApplicationTriggerPersonal` | 清理 | 删触发器 |

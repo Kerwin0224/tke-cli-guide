@@ -9,26 +9,27 @@ fused: false
 
 ## 概述
 
-VPC-CNI 是 TKE 的 Pod 网络模型之一。开启后，新建 Pod 可从指定 VPC 子网获取 IP，与 CVM 同级，支持安全组直通与固定 IP。
+VPC-CNI 是 TKE 的三种 Pod 网络模型之一（另两种：Global Router / CiliumOverlay）。开启后，新建 Pod 可从指定 VPC 子网获取 IP，与 CVM 同级，支持安全组直通与固定 IP。
 
-| 模型 | Pod IP 来源 | 固定 IP | 安全组直通 | IP 消耗 |
-|:-----|:-----------|:------:|:----------|:--------|
-| Global Router（默认） | 容器网段 | ❌ | ❌ | 少 |
-| VPC-CNI | VPC 子网 | ✅ | ✅ | 多（每 Pod 一个 VPC IP） |
+| 模型 | Pod IP 来源 | 固定 IP | 安全组直通 | IP 消耗 | 后期扩网段 |
+|:-----|:-----------|:------:|:----------|:--------|:----------:|
+| Global Router（默认） | 容器网段 | ❌ | ❌ | 少 | ✅ `AddClusterCIDR` |
+| VPC-CNI | VPC 子网 | ✅ | ✅ | 多（每 Pod 一个 VPC IP） | ❌ |
+| CiliumOverlay | Overlay 隧道 | ❌ | ❌ | 少（不占 VPC IP） | ❌ |
 
-> VPC-CNI 可与 Global Router 共存：Global Router 为主，VPC-CNI 子网补充。开启 VPC-CNI 不影响已有 Global Router Pod。
+> VPC-CNI 可与 Global Router 共存：Global Router 为主，VPC-CNI 子网补充。开启 VPC-CNI 不影响已有 Global Router Pod。CiliumOverlay 与两者互斥（创建时定型，不可切换），见 [配置 CiliumOverlay](cilium-overlay.md)。
 
 ## 决策依据
 
 #### 为什么用 VPC-CNI
 
-- **VPC-CNI vs Global Router**: VPC-CNI 让 Pod 拿 VPC IP，支持固定 IP（StatefulSet 稳定地址）与安全组直通（Pod 级网络策略）；Global Router 的 Pod 用容器网段 IP，不暴露到 VPC
-- **默认推荐**: 不确定就用 Global Router（默认）。仅当需要固定 IP 或安全组直通时开启 VPC-CNI
-- **能关闭吗?**: 能，`DisableVpcCniNetworkType`。但已有 VPC-CNI Pod 需先迁移
+- **VPC-CNI vs Global Router vs CiliumOverlay**: VPC-CNI 让 Pod 拿 VPC IP，支持固定 IP（StatefulSet 稳定地址）与安全组直通（Pod 级网络策略）；Global Router 的 Pod 用容器网段 IP，不暴露到 VPC；CiliumOverlay 用 Overlay 隧道，不占 VPC IP 但无固定 IP/安全组直通，适合要 Cilium 数据面的场景（见 [配置 CiliumOverlay](cilium-overlay.md)）
+- **默认推荐**: 不确定就用 Global Router（默认）。仅当需要固定 IP 或安全组直通时开启 VPC-CNI；仅当需要 Cilium 数据面且接受创建时定型时选 CiliumOverlay
+- **能关闭吗?**: VPC-CNI 能，`DisableVpcCniNetworkType`（已有 VPC-CNI Pod 需先迁移）。CiliumOverlay 不能——创建时定型，无独立开关 Action
 
 ## 配置项
 
-> 来源：`tccli tke EnableVpcCniNetworkType --generate-cli-skeleton`（实测）。
+> 来源：`tccli tke EnableVpcCniNetworkType --generate-cli-skeleton`。
 
 | 字段 | 类型 | 必填 | 默认值 | 有效值 | 填错的影响 |
 |:------|------|:--------:|:------:|-------|-----------|
@@ -190,7 +191,7 @@ tccli tke DisableVpcCniNetworkType --region ap-guangzhou --ClusterId "<CLUSTER_I
 
 ### 子网 IP 不足时增加子网
 
-> VPC-CNI Pod 卡在 ContainerCreating 多因子网 IP 耗尽。`AddVpcCniSubnets` 给已开启的 VPC-CNI 追加子网，参数以 `--generate-cli-skeleton` 实测为准（`SubnetIds[]` 复数 + `VpcId`）。
+> VPC-CNI Pod 卡在 ContainerCreating 多因子网 IP 耗尽。`AddVpcCniSubnets` 给已开启的 VPC-CNI 追加子网，参数以 `--generate-cli-skeleton` 为准（`SubnetIds[]` 复数 + `VpcId`）。
 
 ```bash
 # 给 VPC-CNI 追加子网（ClusterId + VpcId + SubnetIds[]）
@@ -198,7 +199,7 @@ tccli tke AddVpcCniSubnets --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" \
   --VpcId "<VPC_ID>" \
   --SubnetIds '["<SUBNET_ID>"]'
-# expected: exit 0, 返回 RequestId
+# expected: exit 0 返回 RequestId; 子网无效报 InvalidParameter.Param: subnet <ID> is invalid
 ```
 
 | 占位符 | 含义 | 如何获取 |
@@ -211,29 +212,10 @@ tccli tke AddVpcCniSubnets --region ap-guangzhou \
 ## 下一步
 
 - [管理访问端点](endpoints.md) — API Server 访问入口
+- [配置 CiliumOverlay](cilium-overlay.md) — 第三种网络模型，Cilium 数据面
 - [创建集群](../clusters/create.md) — 建集群时选网络模型
 - [故障排查](../troubleshooting.md) — Pod IP 不足诊断
 
 ## 控制台替代方案
 
 [容器服务控制台 - 集群网络](https://console.cloud.tencent.com/tke2/cluster)
-
-## Action 清单
-
-| Action | 类型 | 版本 | 说明 |
-|:-------|:-----|:-----|:-----|
-| `EnableVpcCniNetworkType` | 主操作 | 2018-05-25 | 开启 VPC-CNI（含固定 IP/子网） |
-| `AddVpcCniSubnets` | 主操作 | 2018-05-25 | 增加子网（IP 不足时） |
-| `CreateClusterRoute` | 主操作 | 2018-05-25 | 添加路由 |
-| `CreateClusterRouteTable` | 主操作 | 2018-05-25 | 创建路由表（`IgnoreClusterCidrConflict` 为 Integer） |
-| `DisableVpcCniNetworkType` | 清理 | 2018-05-25 | 关闭 VPC-CNI（先迁移 Pod） |
-| `DeleteClusterRoute` | 清理 | 2018-05-25 | 删除路由（需三参数定位） |
-| `DeleteClusterRouteTable` | 清理 | 2018-05-25 | 删除路由表 |
-| `DescribeEnableVpcCniProgress` | 验证 | 2018-05-25 | 开启进度轮询 |
-| `DescribeVpcCniPodLimits` | 验证 | 2018-05-25 | 机型 Pod 上限（Zone+InstanceType） |
-| `DescribeIPAMD` | 验证 | 2018-05-25 | IPAMD 组件状态 |
-| `DescribeClusterRoutes` | 验证 | 2018-05-25 | 路由表下路由条目 |
-| `DescribeClusterRouteTables` | 验证 | 2018-05-25 | 所有集群路由表 |
-| `DescribeRouteTableConflicts` | 验证 | 2018-05-25 | 建表前 CIDR 冲突检查 |
-| `DescribeClusters` | 验证 | 2018-05-25 | 确认 NetworkType |
-| `vpc:DescribeSubnets` | 跨产品 | vpc | 子网 IP 数量确认 |

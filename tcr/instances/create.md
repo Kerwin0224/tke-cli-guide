@@ -31,7 +31,7 @@ tccli --version
 # expected: 版本号 (如 1.2.0+)
 
 tccli tcr DescribeInstances --region ap-guangzhou
-# expected: { "Response": { "TotalCount": ..., "Registries": [...] } }  → 凭证有效
+# expected: { "TotalCount": ..., "Registries": [...] }  → 凭证有效
 ```
 
 ### 资源检查
@@ -40,7 +40,7 @@ tccli tcr DescribeInstances --region ap-guangzhou
 # 确认实例名未被占用
 tccli tcr CheckInstanceName --region ap-guangzhou \
   --RegistryName "<INSTANCE_NAME>"
-# expected: { "Response": { "IsValid": true } }  → 名称可用
+# expected: { "IsValid": true }  → 名称可用
 
 # 确认地域支持 TCR
 tccli tcr DescribeRegions
@@ -80,7 +80,7 @@ tccli tcr CreateInstance \
   --region ap-guangzhou \
   --RegistryName "<INSTANCE_NAME>" \
   --RegistryType basic
-# expected: { "Response": { "RegistryId": "tcr-xxxxxxxx" }, "RequestId": "..." }
+# expected: { "RegistryId": "tcr-xxxxxxxx", "RequestId": "..." }
 ```
 
 | 占位符 | 含义 | 约束 | 如何获取 |
@@ -103,7 +103,7 @@ tccli tcr CreateInstance \
   }' \
   --DeletionProtection true \
   --EnableCosMAZ true
-# expected: { "Response": { "RegistryId": "tcr-xxxxxxxx" }, "RequestId": "..." }
+# expected: { "RegistryId": "tcr-xxxxxxxx", "RequestId": "..." }
 ```
 
 包年包月 1 个月 (`Period: 1`)，自动续费 (`RenewFlag: 1`)。COS 多 AZ 提升存储可靠性。
@@ -114,7 +114,7 @@ tccli tcr CreateInstance \
 tccli tcr DescribeInstances \
   --region ap-guangzhou \
   --RegistryIds '["<REGISTRY_ID>"]'
-# expected: { "Response": { "TotalCount": 1, "Registries": [{ "Status": "Running" }] } }
+# expected: { "TotalCount": 1, "Registries": [{ "Status": "Running" }] }
 ```
 
 | 维度 | 命令 | 预期 |
@@ -135,15 +135,23 @@ tccli tcr DescribeInstances \
 ### 1. 清理前检查
 
 ```bash
-# 确认实例内的数据
+# 确认实例内的子资源（命名空间/仓库/镜像）
 tccli tcr DescribeNamespaces --region ap-guangzhou --RegistryId "<REGISTRY_ID>"
 tccli tcr DescribeRepositories --region ap-guangzhou --RegistryId "<REGISTRY_ID>"
-# expected: 确认要删除的仓库和镜像
+# expected: 列出实例内命名空间与仓库（确认是否需保留镜像）
 ```
 
-### 2. 关闭删除保护 (if set)
+> 若需保留某些镜像，先 `tccli tcr DuplicateImage` 复制到其他实例（见 [推送拉取镜像](../images/push-pull.md)）。DeleteInstance 会**级联删除**实例内所有命名空间/仓库/镜像，不可恢复。
+
+### 2. 关闭删除保护（先查后改）
 
 ```bash
+# 先查 DeletionProtection 当前状态
+tccli tcr DescribeInstances --region ap-guangzhou --RegistryIds '["<REGISTRY_ID>"]' \
+  --filter "Registries[0].DeletionProtection"
+# expected: true 或 false（仅 true 时才需关）
+
+# 仅当上一步返回 true 时执行
 tccli tcr ModifyInstance --region ap-guangzhou \
   --RegistryId "<REGISTRY_ID>" \
   --DeletionProtection false
@@ -161,8 +169,10 @@ tccli tcr DeleteInstance --region ap-guangzhou --RegistryId "<REGISTRY_ID>"
 
 ```bash
 tccli tcr DescribeInstances --region ap-guangzhou --RegistryIds '["<REGISTRY_ID>"]'
-# expected: { "Response": { "TotalCount": 0, "Registries": [] } }
+# expected: { "TotalCount": 0, "Registries": [] }（tccli 默认剥离 Response 包装层）
 ```
+
+> 若 DescribeInstances 仍返回实例但状态为 `Deleting`，属删除中（异步），稍候再查。Deleting 状态诊断见 [实例状态](../reference/states.md)。
 
 > **Billing warning**: 按量计费实例删除即停止计费。包年包月实例提前删除**不退费**。
 
@@ -172,7 +182,7 @@ tccli tcr DescribeInstances --region ap-guangzhou --RegistryIds '["<REGISTRY_ID>
 
 | 现象 | 诊断 | 根因 | 修复 |
 |---------|----------|------------|-----|
-| `AuthFailure.SecretIdNotFound` | `tccli tcr DescribeRegions` | 凭证未配置 | `tccli configure` |
+| `AuthFailure.SecretIdNotFound` | `tccli tcr DescribeRegions` | 凭证未配置 | 见 [配置凭证](../../getting-started/credentials.md) |
 | `InvalidParameter.RegistryName` | 检查名称长度和字符 | 名称格式错误 | 使用 2-30 字符字母数字连字符下划线 |
 | `ResourceInUse.RegistryNameExists` | `tccli tcr CheckInstanceName --RegistryName "<NAME>"` | 名称已被占用 | 换一个名称 |
 | `LimitExceeded.InstanceQuota` | `tccli tcr DescribeInstances` | 实例数达上限 (默认 10) | 删除闲置实例或提工单 |
@@ -226,21 +236,3 @@ tccli tcr DescribeInstanceAllNamespaces --Limit 50 --region <REGION>
 ## 控制台替代方案
 
 [TCR 控制台 - 创建实例](https://console.cloud.tencent.com/tcr/instance/create)
-
-## Action 清单
-
-| Action | 类型 | 版本 | 说明 |
-|:-------|:-----|:-----|:-----|
-| `CreateInstance` | 主操作 | TCR | 创建企业版实例（basic/standard/premium） |
-| `ModifyInstance` | 主操作 | TCR | 修改实例属性（如关闭删除保护） |
-| `ModifyInstanceStorage` | 主操作 | TCR | 存储扩容（跨地域） |
-| `RenewInstance` | 主操作 | TCR | 续费包年包月实例 |
-| `ManageExternalEndpoint` | 主操作 | TCR | 开启公网访问端点 |
-| `CheckInstance` | 验证 | TCR | 校验实例（IsValidated） |
-| `CheckInstanceName` | 验证 | TCR | 校验实例名可用性 |
-| `DescribeInstances` | 验证 | TCR | 查询实例列表 |
-| `DescribeInstanceStatus` | 验证 | TCR | 查询实例状态 |
-| `DescribeInstanceAllNamespaces` | 验证 | TCR | 账号级查询所有命名空间 |
-| `DescribeNamespaces` | 验证 | TCR | 查询实例命名空间 |
-| `DescribeRepositories` | 验证 | TCR | 查询实例仓库 |
-| `DeleteInstance` | 清理 | TCR | 删除实例（数据永久丢失） |

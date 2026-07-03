@@ -7,7 +7,7 @@ fused: true
 
 > 修改已创建集群的属性（名称/描述/等级/标签/镜像）、组件额外参数、容器运行时、Master 组件。写操作，有副作用。
 
-> 本文档 Action 均属 **TKE 2018-05-25**。只读查询见 [查询集群](query.md)。
+> 本文档 Action 均属 **TKE 2018-05-25**（旧版独有，新版无对应 Action）。只读查询见 [查询集群](query.md)。注意 `DescribeClusterLevelAttribute`/`DescribeClusterLevelChangeRecords` 用 `--ClusterID`（大写 ID），与其他集群接口的 `--ClusterId`（小写 d）不同。
 
 ## 概述
 
@@ -24,19 +24,25 @@ fused: true
 | 改运行时 | `ModifyClusterRuntimeConfig` | 滚动重建节点 |
 | 改 Master 组件 | `ModifyMasterComponent` | 启停控制面组件 |
 
+## 触发条件
+
+- 集群节点/Pod/CRD 接近配额上限（`DescribeClusterLevelAttribute` 显示余量不足）— 用 `ModifyClusterAttribute` 升等级
+- 需切换容器运行时（docker→containerd）或调整 Master 组件参数（ExtraArgs/启停组件）— 用本文对应接口
+- GR 网络集群 Pod IP 将耗尽 — 用 `AddClusterCIDR` 扩容器网段（仅 GR 集群支持）
+
 ## 决策依据
 
 ### 改集群等级前先查价
 
-等级变更（L5→L20）会提高配额上限（节点/Pod/CRD）但也提高计费。决策前先查可用等级与价格。真实等级枚举（实测 `DescribeClusterLevelAttribute`）：`L5`/`L20`/`L50`/`L100`/`L200`/`L500`/`L1000`/`L3000`/`L5000`——**无 L10**，`Enable=false` 的 L1000 及以上需工单开通：
+等级变更（L5→L20）会提高配额上限（节点/Pod/CRD）但也提高计费。决策前先查可用等级与价格。真实等级枚举（`DescribeClusterLevelAttribute` 返回）：`L5`/`L20`/`L50`/`L100`/`L200`/`L500`/`L1000`/`L3000`/`L5000`——**无 L10**，`Enable=false` 的 L1000 及以上需工单开通：
 
 ```bash
 # 查可用等级 (含节点/Pod/CRD 上限)
 tccli tke DescribeClusterLevelAttribute --ClusterID "<CLUSTER_ID>" --region <REGION>
-# expected: exit 0, Items[] 含 Alias/NodeCount/PodCount/Enable
+# expected: exit 0, Items[] 含 Alias/NodeCount/PodCount/ConfigMapCount/RSCount/CRDCount/OtherCount/Enable
 ```
 ```json
-{"TotalCount": 9, "Items": [{"Alias": "L5", "NodeCount": 5, "PodCount": 150, "Enable": true}]}
+{"TotalCount": 9, "Items": [{"Name": "5节点", "Alias": "L5", "NodeCount": 5, "PodCount": 150, "ConfigMapCount": 128, "RSCount": 900, "CRDCount": 150, "OtherCount": 150, "Enable": true}]}
 ```
 
 > ⚠️ `DescribeClusterLevelAttribute`/`DescribeClusterLevelChangeRecords` 用 `--ClusterID`（大写 ID），与其他集群接口的 `--ClusterId`（小写 d）不同——大小写写错报 `Unknown options`。
@@ -44,13 +50,13 @@ tccli tke DescribeClusterLevelAttribute --ClusterID "<CLUSTER_ID>" --region <REG
 ```bash
 # 查等级价格 (不绑集群, 按 ClusterLevel; 用真实枚举 L5/L20/L50/L100/L200/L500)
 tccli tke GetClusterLevelPrice --ClusterLevel L20 --region <REGION>
-# expected: exit 0, 返回 Cost/TotalCost/Policy（实测 L5→13/L20→37/L50→47/L100→83）
+# expected: exit 0, 返回 Cost/TotalCost/Policy（L5→13/L20→37/L50→47/L100→83）
 ```
 
 #### 为什么选这个等级
 
 - **L5 (5 节点)**: 测试/小项目，配额够用，费用低
-- **L20+ (20 节点以上)**: 生产，需更多 Pod/CRD 配额（实测无 L10，最小生产档是 L20）
+- **L20+ (20 节点以上)**: 生产，需更多 Pod/CRD 配额（无 L10，最小生产档是 L20）
 - **自动升级**: `AutoUpgradeClusterLevel.IsAutoUpgrade=true` 让系统在配额将满时自动升级（谨慎，有计费风险）
 - **决策依据**: 当前节点数 + Pod 数接近上限才升级；不接近则保持，避免无谓计费
 
@@ -90,21 +96,23 @@ tccli tke DescribeClusterAvailableExtraArgs --ClusterVersion "<VERSION>" --Clust
 
 ## 关键字段
 
+> 下表"必填"列按业务必需标注（不传则操作无意义或失败）；API 层 `required` 可能不同（如 `ModifyClusterTags` 的 `Tags` 与 `ModifyClusterRuntimeConfig` 的 `ClusterRuntimeConfig` 在 API 层均为选填，但业务上必须传）。
+
 | 参数 | 所属 Action | 必填 | 说明 |
 |:-----|:-----------|:----:|:-----|
 | `ClusterId` | 多数 | 是 | 集群 ID（注意 Level 系列用 `ClusterID` 大写） |
 | `ClusterLevel` | ModifyClusterAttribute | 否 | 真实枚举 L5/L20/L50/L100/L200/L500（无 L10），影响计费 |
-| `Tags[]` | ModifyClusterTags | 是 | Key/Value 对 |
+| `Tags[]` | ModifyClusterTags | 是 | Key/Value 对（API 层选填，业务必需——覆盖式更新，不传会清空标签） |
 | `SyncSubresource` | ModifyClusterTags | 否 | true 同步标签到子资源 |
 | `ImageId` | ModifyClusterImage | 是 | 目标镜像 ID |
-| `ClusterExtraArgs` | ModifyClusterExtraArgs | 是 | 嵌套四组件参数（覆盖式） |
-| `Operation` | ModifyClusterExtraArgsTaskState | 是 | 任务状态操作 |
+| `ClusterExtraArgs` | ModifyClusterExtraArgs | 否 | 嵌套四组件参数（覆盖式；API 非必填，但传空会清空原参数，业务上必须传完整值） |
+| `Operation` | ModifyClusterExtraArgsTaskState | 否 | 任务状态操作，枚举 `abort`（取消并回退任务） |
 | `ClusterCIDRs[]` | AddClusterCIDR | 是 | 新增容器网段 CIDR |
 | `DstK8SVersion` | ModifyClusterRuntimeConfig | 否 | 目标 K8s 版本 |
-| `ClusterRuntimeConfig` | ModifyClusterRuntimeConfig | 是 | RuntimeType/RuntimeVersion |
-| `Component`/`Operation`/`DryRun` | ModifyMasterComponent | 是 | 组件名(kube-apiserver/kube-scheduler/kube-controller-manager)/停机或恢复(shutdown/restore)/试运行 |
-
-> 参数名实测自各 Action `--generate-cli-skeleton`。
+| `ClusterRuntimeConfig` | ModifyClusterRuntimeConfig | 是 | RuntimeType/RuntimeVersion（API 层选填，业务必需——不传无运行时可改） |
+| `Component`/`Operation` | ModifyMasterComponent | 是 | 组件名(kube-apiserver/kube-scheduler/kube-controller-manager)/停机或恢复(shutdown/restore) |
+| `DryRun` | ModifyMasterComponent | 否 | `true` 仅验证不实际变更，生产操作前先用 DryRun 试运行 |
+| `SubAccounts` | UpdateClusterKubeconfig | 否 | 子账户 Uin 列表，不传默认为调用者本人 |
 
 ## 操作步骤
 
@@ -116,7 +124,7 @@ tccli tke ModifyClusterAttribute --ClusterId "<CLUSTER_ID>" --region <REGION> \
 # expected: exit 0
 ```
 
-> `ClusterLevel` 变更触发计费调整（P8）。`AutoUpgradeClusterLevel.IsAutoUpgrade` 控制自动升级。
+> `ClusterLevel` 变更触发计费调整。`AutoUpgradeClusterLevel.IsAutoUpgrade` 控制自动升级。
 
 ### 步骤 2：修改集群标签
 
@@ -127,6 +135,12 @@ tccli tke ModifyClusterTags --ClusterId "<CLUSTER_ID>" --region <REGION> \
 ```
 
 > `SyncSubresource=true` 同步标签到集群下节点等子资源。
+>
+> ⚠️ **覆盖式更新——丢 billing 标签会锁死后续写操作**：`ModifyClusterTags` 是覆盖式，`--Tags` 只传新标签会**清空原有标签**（传 `env:prod` 后 `billing` 标签丢失）。若集群靠 `billing` 标签过 CAM 授权（见 [维护窗口](maintenance-window.md)/[Master 扩缩容](master-ops.md)），丢标签后所有写操作被 `UnauthorizedOperation.CamNoAuth` 拒。修改标签时**必须把要保留的标签（尤其 `billing`）一起传入**，改完用 `DescribeClusters` 复核。
+>
+> ⚠️ **标签策略约束**：账号的 CAM/标签策略可能限制允许的标签 Key/Value 对。传策略不允许的标签对报 `InvalidParameter.Param`（消息 `PARAM_ERROR(<key>:<value> is a pair of invalid tags)`）——策略可能允许某 Key 但限制其 Value（如同账号 `env:prod` 通过、`env:audit` 被拒）。修改前用 `DescribeClusters` 看集群现有合规标签，沿用策略允许的 Key/Value。
+>
+> ⚠️ **异步任务冲突**：`ModifyClusterTags` 是异步任务，连续调用（前一个任务仍在后台跑时）报 `FailedOperation.TradeCommon`（消息 `modify task ready running background, please wait until the task done`）。需等待前一次修改完成（约数十秒）后再调，或轮询 `DescribeClusters` 确认标签已稳定。
 
 ### 步骤 3：修改集群镜像
 
@@ -138,14 +152,14 @@ tccli tke ModifyClusterImage --ClusterId "<CLUSTER_ID>" --region <REGION> --Imag
 > 镜像变更会滚动重建节点。`ImageId` 用 `DescribeOSImages` 查（无入参，返回全部可用 OS 镜像）：
 
 ```bash
-# 查询可用 OS 镜像（无入参，返回 ImageId/OSName 列表）
+# 查询可用 OS 镜像（无入参）
 tccli tke DescribeOSImages --version 2018-05-25 --region <REGION>
-# expected: exit 0, ImageSet[] 含 ImageId/OSName/Status
+# expected: exit 0, 返回 OSImageSeriesSet[]（每项含 SeriesName/Alias/OsName/OsCustomizeType/Status/ImageId）+ TotalCount
 ```
 
 | 占位符 | 含义 | 如何获取 |
 |:-------|:-----|:---------|
-| `<IMAGE_ID>` | OS 镜像 ID | `DescribeOSImages` → `ImageSet[].ImageId` |
+| `<IMAGE_ID>` | OS 镜像 ID | `DescribeOSImages` → `OSImageSeriesSet[].ImageId` |
 
 ### 步骤 4：修改组件额外参数（覆盖式）
 
@@ -155,12 +169,17 @@ tccli tke ModifyClusterExtraArgs --ClusterId "<CLUSTER_ID>" --region <REGION> \
   --ClusterExtraArgs '{"KubeAPIServer":["--feature-gates=XXX=true"]}'
 # expected: exit 0
 
-# 控制额外参数任务状态
-tccli tke ModifyClusterExtraArgsTaskState --ClusterId "<CLUSTER_ID>" --region <REGION> --Operation "<OPERATION>"
+# 控制额外参数任务状态（Operation 枚举: abort 取消并回退任务）
+tccli tke ModifyClusterExtraArgsTaskState --ClusterId "<CLUSTER_ID>" --region <REGION> --Operation abort
 # expected: exit 0
 ```
 
 > ⚠️ 覆盖式更新——必须含原有要保留的参数，否则丢失。修改后用 `DescribeClusterExtraArgs` 复核。
+>
+> ⚠️ **多层前置约束**（按拦截顺序）：
+> 1. **CAM 标签授权**（首个拦截点）：与 [维护窗口](maintenance-window.md)/[Master 扩缩容](master-ops.md) 同款，要求目标集群带 `billing` 标签才放行。不带标签返回 `AuthFailure.UnauthorizedOperation`（消息含 `qcs:resource_tag` `billing` 条件），到不了业务校验层。
+> 2. **仅托管集群可用**（CAM 放行后）：`ModifyClusterExtraArgs` 只支持托管集群（MANAGED_CLUSTER），独立集群调用被拒。
+> 3. **参数校验**：`KubeAPIServer` 等组件参数必须是该 K8s 版本真实支持的 feature-gates，传不存在的参数报 `InvalidParameter.Param`（如 `Args not found: [1.34.1] is not in --feature-gates available args list`）。可用参数用 `DescribeClusterAvailableExtraArgs` 查。
 
 ### 步骤 5：扩容容器网段
 
@@ -171,6 +190,11 @@ tccli tke AddClusterCIDR --ClusterId "<CLUSTER_ID>" --region <REGION> \
 ```
 
 > `IgnoreClusterCIDRConflict=true` 强制添加即使与已有网段冲突。Pod IP 不足时扩容。
+>
+> ⚠️ **多层前置约束**（按拦截顺序）：
+> 1. **CAM 标签授权**（首个拦截点）：与 [维护窗口](maintenance-window.md)/[Master 扩缩容](master-ops.md) 同款，要求目标集群带 `billing` 标签才放行。不带标签返回 `UnauthorizedOperation.CamNoAuth`（消息含 `qcs:resource_tag` `billing` 条件），到不了业务校验层。错误样本：`code:UnauthorizedOperation.CamNoAuth ... you are not authorized to perform operation (tke:AddClusterCIDR) ... has no permission`。
+> 2. **GR 集群约束**（CAM 放行后）：`AddClusterCIDR` 仅给 **GR 集群**（GlobalRange，需开白）增加 ClusterCIDR。非 GR 集群（VPC-CNI/CiliumOverlay）调用**可能返回 RequestId 但 CIDR 不真正生效**——用 `DescribeClusters` 复核 `ClusterNetworkSettings.ClusterCIDR` 确认是否真的新增，勿仅凭 exit 0 判断成功。集群网络类型由创建时 `ClusterAdvancedSettings.NetworkType` 决定（见 [创建集群](create.md)）。
+> 3. **集群状态约束**：集群 Master 处于升级/变更中时调用报 `UnsupportedOperation.ClusterNotSuitAddClusterCIDR`（`master of cluster <ID> is updating, can't add clusterCIDR now`），须等集群稳定后重试。
 
 ### 步骤 6：获取集群 admin 角色（RBAC 授权前置）
 
@@ -205,6 +229,32 @@ tccli tke ModifyMasterComponent --ClusterId "<CLUSTER_ID>" --Component "kube-api
 ```
 
 > `Operation` 枚举为 `shutdown`（停机）/`restore`（恢复），非 enable/disable。`DryRun=true` 仅验证不实际变更，生产操作前先用 DryRun。
+>
+> ⚠️ **多层前置约束**（按拦截顺序，写操作 `ModifyMasterComponent`）：
+> 1. **CAM 标签授权**（首个拦截点）：与 [维护窗口](maintenance-window.md)/[Master 扩缩容](master-ops.md) 同款，要求目标集群带 `billing` 标签（CAM 匹配 `qcs:resource_tag`）。不带标签的集群调用返回 `AuthFailure.UnauthorizedOperation`（消息含 `has no permission` + 要求的标签 key/value），到不了业务校验层。错误样本：`code:AuthFailure.UnauthorizedOperation ... resource (qcs::tke:<REGION>::cluster/<ID>) has no permission with or without condition:[{"condition":{"key":"qcs:resource_tag","value":["billing&<标签值>"],...}}]`。
+> 2. **混沌演练标记**（CAM 放行后的业务约束）：`ModifyMasterComponent` 用于 Master 组件停机故障演练，**仅对标記为「混沌演练」（Chaos Experiment）的集群放行**，普通集群返回 `FailedOperation.OperationForbidden`（`this operation is only allowed for clusters marked with 'Chaos Experiment' or '混沌演练'`）。
+>
+> ⚠️ **`DescribeMasterComponent`（只读）约束不同**：它不要求混沌演练标记——普通托管集群（组件 workload 就绪）调用返回 `Status: Running`，exit 0 成功。仅在组件 workload 未就绪/不存在时返回 `FailedOperation.KubeCommon`（`get workload failed, please try again later`）——非 CAM 拒绝，是组件未就绪，稍后重试即可。注意写操作 `ModifyMasterComponent`（停机演练）仍受混沌演练标记约束，见上条。
+>
+> ⚠️ **`DescribeMasterComponent` 仅托管集群可用**：在独立集群（INDEPENDENT_CLUSTER）调用返回 `FailedOperation.OperationForbidden`（`this operation is only supported for managed clusters`）——独立集群的 Master 组件状态不由此接口暴露。独立集群 Master 运维见 [master-ops.md](master-ops.md)。
+
+### 步骤 9：更新子账户 kubeconfig
+
+为子账户更新/生成集群 kubeconfig（子账户首次访问集群或凭证失效时用）：
+
+```bash
+tccli tke UpdateClusterKubeconfig --ClusterId "<CLUSTER_ID>" --region <REGION>
+# expected: exit 0, 返回 UpdatedSubAccounts/RequestId（不传 SubAccounts 默认为调用者本人）
+```
+
+```bash
+# 为指定子账户更新（SubAccounts 为子账户 Uin 列表）
+tccli tke UpdateClusterKubeconfig --ClusterId "<CLUSTER_ID>" --region <REGION> \
+  --SubAccounts '["<SUB_UIN>"]'
+# expected: exit 0, UpdatedSubAccounts 含该子账户
+```
+
+> `SubAccounts` 为子账户 Uin 列表，不传默认为调用此接口的子账户本人。更新后子账户可用 `DescribeClusterSecurity` 取回 kubeconfig，见 [查询集群](query.md#集群访问凭证)。
 
 ## 验证
 
@@ -216,6 +266,7 @@ tccli tke ModifyMasterComponent --ClusterId "<CLUSTER_ID>" --Component "kube-api
 | 额外参数已变 | `DescribeClusterExtraArgs --ClusterId <CLUSTER_ID>` | 含新参数 |
 | 运行时已变 | `DescribeClusters` → `ClusterVersion`/运行时字段 | 目标版本 |
 | Master 组件状态 | `DescribeMasterComponent` | 目标 Operation 生效 |
+| kubeconfig 已更新 | `UpdateClusterKubeconfig` 返回 `UpdatedSubAccounts` | 含目标子账户 |
 | 集群仍 Running | `DescribeClusterStatus` | ClusterState=Running |
 
 > 修改后必须确认集群仍 `Running`——配置变更可能触发滚动重建，期间集群短暂异常。
@@ -230,10 +281,10 @@ tccli tke ModifyMasterComponent --ClusterId "<CLUSTER_ID>" --Component "kube-api
 
 ## 副作用
 
-- **ModifyClusterImage/ModifyClusterRuntimeConfig**: 滚动重建节点，业务 Pod 重调度，短暂中断（P8）
-- **ModifyClusterAttribute ClusterLevel**: 计费等级调整，影响月费（P8）
+- **ModifyClusterImage/ModifyClusterRuntimeConfig**: 滚动重建节点，业务 Pod 重调度，短暂中断
+- **ModifyClusterAttribute ClusterLevel**: 计费等级调整，影响月费
 - **ModifyClusterExtraArgs**: 覆盖式，误传空数组清空参数，可能导致控制面异常
-- **AcquireClusterAdminRole**: 授予集群 admin 权限，安全敏感（P8）
+- **AcquireClusterAdminRole**: 授予集群 admin 权限，安全敏感
 - **ModifyMasterComponent**: 启停控制面组件，影响集群管理能力
 
 ## 故障恢复
@@ -244,8 +295,15 @@ tccli tke ModifyMasterComponent --ClusterId "<CLUSTER_ID>" --Component "kube-api
 |:--------|:----------|:------------|:-----|
 | `Unknown options: --ClusterID` | 核对接口 | Level 系列用大写 `ClusterID`，其他用 `ClusterId` | 按接口要求用正确大小写 |
 | `InvalidParameterValue` (ClusterLevel) | `DescribeClusterLevelAttribute` | 等级不存在或不可用 | 用 `Enable=true` 的等级 |
-| `FailedOperation.TradeCommon` | GetClusterLevelPrice | `ClusterLevel` 值非真实枚举（实测传 `L10` 稳定触发，因 L10 不存在 → 计费中心 "all price code not match"） | 改用真实等级 `L5`/`L20`/`L50`/`L100`/`L200`/`L500`（`DescribeClusterLevelAttribute` 返回的 `Enable=true` 项）；非临时错误，重试无效 |
+| `FailedOperation.TradeCommon` | GetClusterLevelPrice | `ClusterLevel` 值非真实枚举（传 `L10` 稳定触发，因 L10 不存在 → 计费中心 "all price code not match"） | 改用真实等级 `L5`/`L20`/`L50`/`L100`/`L200`/`L500`（`DescribeClusterLevelAttribute` 返回的 `Enable=true` 项）；非临时错误，重试无效 |
 | `ResourceNotFound` (ImageId) | `DescribeOSImages` | 镜像 ID 不存在 | 用真实镜像 ID |
+| `AuthFailure.UnauthorizedOperation` (ModifyMasterComponent，消息含 `has no permission` + `qcs:resource_tag` `billing` 条件) | `tccli tke DescribeClusters --ClusterIds '["<ID>"]' --filter "Clusters[0].TagSpecification[*].Tags[*]"` | 目标集群未带 CAM 要求的 `billing` 标签（首个拦截点） | 给集群加 `billing` 标签，或申请 `tke:ModifyMasterComponent` 权限。环境限制，非命令错误 |
+| `FailedOperation.OperationForbidden` (ModifyMasterComponent，消息含 `Chaos Experiment`/`混沌演练`) | 确认集群是否标记为混沌演练目标 | CAM 已放行，但 Master 组件停机演练仅对混沌演练集群放行（第二层业务约束） | 在控制台/CAM 标记集群为混沌演练目标；非演练场景勿用此接口 |
+| `InvalidParameter.Param` (ModifyClusterExtraArgs，消息含 `Args not found ... not in --feature-gates available args list`) | `DescribeClusterAvailableExtraArgs` 查该版本支持的参数 | 传了目标 K8s 版本不支持的 feature-gates 参数 | 用 `DescribeClusterAvailableExtraArgs` 返回的真实参数名 |
+| `InvalidParameter.Param` (ModifyClusterTags，消息含 `PARAM_ERROR(<key>:<value> is a pair of invalid tags)`) | `DescribeClusters` 看集群现有合规标签 | 账号 CAM/标签策略不允许该标签 Key/Value 对（策略可能允许 Key 但限制 Value） | 换用策略允许的 Key/Value 对（如 `env:audit` 被拒时改 `env:prod`） |
+| `FailedOperation.TradeCommon` (ModifyClusterTags，消息含 `modify task ready running background`) | 等待数十秒后重试 | 前一次 `ModifyClusterTags` 异步任务仍在后台跑，连续调用冲突 | 轮询 `DescribeClusters` 确认标签稳定后再调 |
+| `UnauthorizedOperation.CamNoAuth` (AddClusterCIDR，消息含 `qcs:resource_tag` `billing` 条件) | `tccli tke DescribeClusters --ClusterIds '["<ID>"]' --filter "Clusters[0].TagSpecification[*].Tags[*]"` | 目标集群未带 CAM 要求的 `billing` 标签（首个拦截点，到不了业务校验） | 给集群加 `billing` 标签，或申请 `tke:AddClusterCIDR` 权限。环境限制 |
+| `UnsupportedOperation.ClusterNotSuitAddClusterCIDR` (AddClusterCIDR，消息含 `master of cluster ... is updating, can't add clusterCIDR now`) | `DescribeClusterStatus` 看集群是否升级/变更中 | CAM 已放行，但集群 Master 升级中，或集群非 GR 集群/未开白 | 等集群稳定后重试；确认集群是 GR 集群且已开白 AddClusterCIDR 能力 |
 | `UnsupportedOperation` | `DescribeClusterStatus` | 集群非 Running | 等集群 Running 后重试 |
 
 ### 命令成功但状态不对 (exit = 0)
@@ -256,6 +314,16 @@ tccli tke ModifyMasterComponent --ClusterId "<CLUSTER_ID>" --Component "kube-api
 | ExtraArgs 修改后参数丢失 | `DescribeClusterExtraArgs` 对比备份 | 覆盖式未保留原参数 | 用备份值重新覆盖 |
 | 运行时变更后节点 NotReady | `DescribeClusterInstances` | 滚动重建未完成 | 等待滚动完成 |
 | 集群长时间非 Running | `DescribeClusterStatus` → `ClusterInstanceState` | 配置变更触发异常 | 查节点状态，必要时回退 |
+| `AddClusterCIDR` 返回成功但 CIDR 未新增 | `DescribeClusters` 复核 `ClusterNetworkSettings.ClusterCIDR` | 集群非 GR 网络（VPC-CNI/CiliumOverlay），CIDR 不真正生效 | 确认集群 `NetworkType=GR`；非 GR 集群不支持扩容容器网段 |
+
+## 收尾确认
+
+```bash
+# 一次性核对：集群已 Running + 配置项已落到预期值（等级/标签/运行时等按所改项取值）
+tccli tke DescribeClusterStatus --region <REGION> --ClusterIds '["<CLUSTER_ID>"]' \
+  --filter "ClusterStatusSet[0].ClusterState"
+# expected: Running → 配置变更闭环完成；具体配置值用 DescribeClusters/DescribeClusterLevelAttribute 复核所改字段
+```
 
 ## 下一步
 
@@ -264,24 +332,3 @@ tccli tke ModifyMasterComponent --ClusterId "<CLUSTER_ID>" --Component "kube-api
 - [升级集群版本](upgrade.md) — K8s 版本升级
 - [认证配置](../security/auth.md) — AcquireClusterAdminRole 后的 RBAC 配置
 - [故障排查](../troubleshooting.md) — 配置变更后集群异常诊断
-
-## Action 清单
-
-| Action | 类型 | 说明 |
-|:-------|:-----|:-----|
-| `DescribeClusterLevelAttribute` | 验证 | 查可用等级（`ClusterID` 大写） |
-| `DescribeClusterLevelChangeRecords` | 验证 | 查等级变更记录（`ClusterID` 大写） |
-| `GetClusterLevelPrice` | 验证 | 查等级价格（不绑集群） |
-| `DescribeClusterExtraArgs` | 验证 | 查当前组件参数（备份用） |
-| `DescribeClusterAvailableExtraArgs` | 验证 | 查可用额外参数（不绑集群） |
-| `DescribeSupportedRuntime` | 验证 | 查支持运行时（不绑集群） |
-| `DescribeMasterComponent` | 验证 | 查 Master 组件状态 |
-| `ModifyClusterAttribute` | 主操作 | 改名称/描述/等级/自动升级 |
-| `ModifyClusterTags` | 主操作 | 改标签（SyncSubresource） |
-| `ModifyClusterImage` | 主操作 | 改镜像（滚动重建） |
-| `ModifyClusterExtraArgs` | 主操作 | 改组件参数（覆盖式） |
-| `ModifyClusterExtraArgsTaskState` | 主操作 | 控制参数任务状态 |
-| `AddClusterCIDR` | 主操作 | 扩容器网段 |
-| `AcquireClusterAdminRole` | 主操作 | 获取 admin RBAC 角色 |
-| `ModifyClusterRuntimeConfig` | 主操作 | 改运行时/K8s 版本（滚动重建） |
-| `ModifyMasterComponent` | 主操作 | 启停 Master 组件（DryRun 可试运行） |

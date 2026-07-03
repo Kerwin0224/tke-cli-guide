@@ -46,7 +46,7 @@ tccli vpc DescribeSubnets --region <REGION> --Filters '[{"Name":"vpc-id","Values
 
 ## 关键字段
 
-> 来源：`tccli tke CreateClusterEndpoint --generate-cli-skeleton`（实测）。
+> 来源：`tccli tke CreateClusterEndpoint --generate-cli-skeleton`。
 
 | 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
 |:------|------|:--------:|------------|---------------|
@@ -148,13 +148,13 @@ tccli tke DeleteClusterEndpointVip --ClusterId "<CLUSTER_ID>" --region <REGION>
 
 ### 切换公网/内网端点
 
-> 已开启的端点可在公网/内网间切换，避免先删再建。`SwitchClusterEndpoint` 的 `IsExtranet` 指定目标类型，`Rollback` 控制切换失败是否回滚。参数以 `--generate-cli-skeleton` 实测为准。
+> 已开启的端点可在公网/内网间切换，避免先删再建。`SwitchClusterEndpoint` 的 `IsExtranet` 指定目标类型，`Rollback` 控制切换失败是否回滚。参数以 `--generate-cli-skeleton` 为准。
 
 ```bash
 # 切换端点类型（IsExtranet=true 切公网，false 切内网；Rollback=true 失败自动回滚）
 tccli tke SwitchClusterEndpoint --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" --IsExtranet false --Rollback true
-# expected: exit 0, 返回 RequestId
+# expected: exit 0 返回 RequestId; 集群类型/端点类型不支持报 FailedOperation.SwitchClusterEndpoint: SWITCH_CLUSTER_ENDPOINT_ERROR
 ```
 
 | 占位符 | 含义 | 约束 |
@@ -209,21 +209,3 @@ tccli tke DescribeClusterEndpointStatus --region ap-guangzhou --ClusterId "<CLUS
 ## 控制台替代方案
 
 [容器服务控制台 - 集群访问地址](https://console.cloud.tencent.com/tke2/cluster)
-
-## Action 清单
-
-| Action | 类型 | 版本 | 说明 |
-|:-------|:-----|:-----|:-----|
-| `CreateClusterEndpoint` | 主操作 | 2018-05-25 | 开启公网/内网端点（异步） |
-| `CreateClusterEndpointVip` | 主操作 | 2018-05-25 | 创建独立 VIP 端点 |
-| `SwitchClusterEndpoint` | 主操作 | 2018-05-25 | 切换公网/内网端点 |
-| `ModifyClusterEndpointSP` | 主操作 | 2018-05-25 | 配置 ACL 安全策略白名单 |
-| `DeleteClusterEndpoint` | 清理 | 2018-05-25 | 关闭端点（断开访问） |
-| `DeleteClusterEndpointVip` | 清理 | 2018-05-25 | 删除 VIP 端点（仅需 ClusterId） |
-| `DescribeClusterEndpoints` | 验证 | 2018-05-25 | 端点地址与 ACL |
-| `DescribeClusterEndpointStatus` | 验证 | 2018-05-25 | 端点状态轮询到 Running |
-| `DescribeClusterEndpointVipStatus` | 验证 | 2018-05-25 | VIP 端点状态 |
-| `DescribeClusters` | 验证 | 2018-05-25 | 确认集群 ID |
-| `DescribeClusterStatus` | 验证 | 2018-05-25 | 确认集群 Running |
-| `vpc:DescribeSecurityGroups` | 跨产品 | vpc | 安全组诊断 |
-| `vpc:DescribeSubnets` | 跨产品 | vpc | 内网端点子网查询 |

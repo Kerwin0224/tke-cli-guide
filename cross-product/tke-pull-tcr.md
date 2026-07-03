@@ -44,7 +44,7 @@ tccli tcr DescribeInternalEndpoints --region ap-guangzhou --RegistryId "<REGISTR
 ## 步骤 1：创建 TCR 访问凭证
 
 ```bash
-# 取临时 Token（实测返回 Username + Token + ExpTime）
+# 取临时 Token（返回 Username + Token + ExpTime）
 tccli tcr CreateInstanceToken --region ap-guangzhou \
   --RegistryId "<REGISTRY_ID>" --TokenType temp --Desc "tke-pull"
 # expected: {"Username":"<USERNAME>","Token":"<TOKEN>","ExpTime":<TS>}

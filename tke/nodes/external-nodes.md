@@ -20,7 +20,7 @@ fused: true
 
 ### 网络模式（NetworkType）
 
-外部节点支持依赖集群网络模式（实测 `DescribeExternalNodeSupportConfig`）：
+外部节点支持依赖集群网络模式（`DescribeExternalNodeSupportConfig`）：
 
 | NetworkType | 含义 | 外部节点适用性 |
 |:------------|:-----|:-------------|
@@ -31,7 +31,7 @@ fused: true
 
 ### 是否开启公网接入
 
-`EnableExternalNodeSupport` 的 `ClusterExternalConfig.Enabled` 控制开启；若外部节点跨公网接入，需配合 `EnabledPublicConnect`/`PublicConnectUrl`/`PublicCustomDomain`（实测 SupportConfig 含这些字段）。跨公网有安全风险，优先用内网/VPN。
+`EnableExternalNodeSupport` 的 `ClusterExternalConfig.Enabled` 控制开启；若外部节点跨公网接入，需配合 `EnabledPublicConnect`/`PublicConnectUrl`/`PublicCustomDomain`（SupportConfig 含这些字段）。跨公网有安全风险，优先用内网/VPN。
 
 ## 关键字段
 
@@ -48,7 +48,7 @@ fused: true
 | `Interface` | DescribeExternalNodeScript | 否 | 节点网卡名 |
 | `Internal` | DescribeExternalNodeScript | 否 | 是否内网脚本 |
 
-> 参数名实测自各 Action `--generate-cli-skeleton`（P7）。`DeleteExternalNode` 用 `Names[]`（复数），`DrainExternalNode` 用单数 `Name`，`DeleteExternalNodePool` 用 `NodePoolIds[]`——三者字段名不同，勿混。
+> `DeleteExternalNode` 用 `Names[]`（复数），`DrainExternalNode` 用单数 `Name`，`DeleteExternalNodePool` 用 `NodePoolIds[]`——三者字段名不同，勿混。
 
 ## 操作步骤
 
@@ -131,7 +131,7 @@ tccli tke DescribeExternalNodePools --ClusterId <CLUSTER_ID> --region <REGION>
 # 查询外部节点（ClusterId + NodePoolId 定位池内节点）
 tccli tke DescribeExternalNode --ClusterId <CLUSTER_ID> \
   --NodePoolId <NODEPOOL_ID> --region <REGION>
-# expected: exit 0, 返回池内已注册的外部节点列表
+# expected: exit 0，返回 Nodes[]+TotalCount（NodePoolId 可选，传则限定单池）
 ```
 
 ```bash
@@ -139,10 +139,10 @@ tccli tke DescribeExternalNode --ClusterId <CLUSTER_ID> \
 tccli tke ModifyExternalNodePool --region <REGION> \
   --ClusterId <CLUSTER_ID> --NodePoolId <NODEPOOL_ID> \
   --Labels '[{"Name":"env","Value":"hybrid"}]'
-# expected: exit 0
+# expected: exit 0; 节点池不存在报 FailedOperation.RecordNotFound
 ```
 
-> `DescribeExternalNode` 用 `NodePoolId` 定位池后返回池内节点；`ModifyExternalNodePool` 改池级配置（Labels/Taints/DeletionProtection），单数 `NodePoolId`。两者参数以 `--generate-cli-skeleton` 实测为准。
+> `DescribeExternalNode` 用 `NodePoolId` 定位池后返回池内节点；`ModifyExternalNodePool` 改池级配置（Labels/Taints/DeletionProtection），单数 `NodePoolId`。两者参数以 `--generate-cli-skeleton` 为准。
 
 | 占位符 | 含义 | 约束 | 获取方式 |
 |--------|------|------|---------|
@@ -187,12 +187,12 @@ tccli tke DeleteExternalNodePool --ClusterId <CLUSTER_ID> --NodePoolIds '["<NODE
 | 现象 | 根因 | 修复 |
 |:-----|:-----|:-----|
 | `the following arguments are required: --NodePoolId`（exit 252） | `DescribeExternalNodeScript` 缺 NodePoolId | 先 `CreateExternalNodePool` 拿 NodePoolId |
-| `AuthFailure.UnauthorizedOperation` (tke:CreateExternalNodePool) | CAM 策略要求集群带特定标签（实测要求 `billing&kerwinwjyan`） | 给集群加授权标签或申请权限 |
+| `AuthFailure.UnauthorizedOperation` (tke:CreateExternalNodePool) | CAM 策略要求集群带特定标签（要求 `billing&kerwinwjyan`） | 给集群加授权标签或申请权限 |
 | `Status=Disabled` 始终不变 | `EnableExternalNodeSupport` 未成功 | 查 `FailedReason` 字段定位开启失败原因 |
 | 节点注册脚本执行后节点未上线 | 外部机器网络不可达集群 / 运行时版本不兼容 | 检查机器到集群网络、`ContainerRuntime`/`RuntimeVersion` 匹配 |
 | `DeleteExternalNode` 报节点不存在 | `Names[]` 用了节点池 ID 而非节点名 | 用节点名（`DescribeExternalNode` 返回的 `Names`） |
 
-> 实测 CAM 拒绝样本（ap-guangzhou）：
+> CAM 拒绝样本（ap-guangzhou）：
 > `code:AuthFailure.UnauthorizedOperation ... you are not authorized to perform operation (tke:CreateExternalNodePool)`
 
 ## 下一步
@@ -200,18 +200,3 @@ tccli tke DeleteExternalNodePool --ClusterId <CLUSTER_ID> --NodePoolIds '["<NODE
 - 腾讯云 CVM 节点池（区别于外部节点）：[创建节点池](nodepool-create.md)
 - 节点健康检查：[节点健康检查策略](health-check.md)
 - 节点实例操作（驱逐/移出/升级）：[节点实例操作](instance-ops.md)
-
-## Action 清单
-
-| Action | 类型 | 版本 | 说明 |
-|:-------|:-----|:-----|:-----|
-| `DescribeExternalNodeSupportConfig` | 验证 | 2018-05-25 | 查询支持状态（含 NetworkType/Status/FailedReason） |
-| `EnableExternalNodeSupport` | 主操作 | 2018-05-25 | 开启外部节点支持（ClusterExternalConfig） |
-| `CreateExternalNodePool` | 主操作 | 2018-05-25 | 创建外部节点池（含 Runtime/Labels/Taints） |
-| `DescribeExternalNodePools` | 验证 | 2018-05-25 | 查询节点池列表 |
-| `DescribeExternalNodeScript` | 验证 | 2018-05-25 | 获取注册脚本（NodePoolId 必填） |
-| `DescribeExternalNode` | 验证 | 2018-05-25 | 查询外部节点（NodePoolId + Names） |
-| `ModifyExternalNodePool` | 主操作 | 2018-05-25 | 修改节点池（Labels/Taints/DeletionProtection） |
-| `DrainExternalNode` | 主操作 | 2018-05-25 | 驱逐节点（单数 Name） |
-| `DeleteExternalNode` | 清理 | 2018-05-25 | 删除节点（Names[] + Force） |
-| `DeleteExternalNodePool` | 清理 | 2018-05-25 | 删除节点池（NodePoolIds[] + Force） |

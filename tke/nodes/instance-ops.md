@@ -27,7 +27,7 @@ tccli tke DescribeClusterMachines --version 2022-05-01 \
   --ClusterId "<CLUSTER_ID>" --region ap-guangzhou \
   --Filters '[{"Name":"InstanceIds","Values":["<INSTANCE_ID>"]}]' \
   --Offset 0 --Limit 20
-# expected: MachineSet[] 含 InstanceId/InstanceState/ExistedLabels
+# expected: exit 0，返回 Machines[]+TotalCount（每项含 InstanceId/InstanceState/ExistedLabels 等 Machine 语义字段）
 ```
 
 ## 启动 / 停止 / 重启 (原生节点)
@@ -64,6 +64,39 @@ tccli tke DeleteClusterMachines --version 2022-05-01 \
 ```
 
 > 旧版 (2018-05-25) 用 `DeleteClusterInstances --version 2018-05-25 --InstanceIds '["<INSTANCE_ID>"]'`（Instance 抽象）。两版抽象不同: 新版 Machine vs 旧版 Instance。
+
+## 节点隔离与驱逐（kubectl，非 tcli）
+
+> tke API 无 cordon/drain 普通节点 Action（仅 `DrainClusterVirtualNode` 超级节点 / `DrainExternalNode` 注册节点）。普通节点隔离用 **kubectl**（K8s 原生，非 tcli）。本段补全"故障→隔离→恢复"生命链——[健康检查](health-check.md) 检测到不可修复故障时，用此段隔离节点。
+
+### 隔离节点（停止调度新 Pod）
+
+```bash
+kubectl cordon <NODE_NAME>
+# expected: node <NODE_NAME> cordoned（节点标 SchedulingDisabled，已运行 Pod 不动）
+```
+
+### 驱逐节点上 Pod（维护前移走工作负载）
+
+```bash
+kubectl drain <NODE_NAME> --ignore-daemonsets --delete-emptydir-data
+# expected: 逐个 evict Pod，DaemonSet Pod 保留（--ignore-daemonsets），emptyDir 数据删（--delete-emptydir-data）
+```
+
+> `kubectl drain` = `cordon` + 逐个 evict Pod。维护后恢复调度：
+
+```bash
+kubectl uncordon <NODE_NAME>
+# expected: node <NODE_NAME> uncordoned（恢复可调度）
+```
+
+| 操作 | 命令 | 作用 |
+|:-----|:-----|:-----|
+| 停止调度 | `kubectl cordon <NODE>` | 新 Pod 不调度到该节点 |
+| 驱逐 Pod | `kubectl drain <NODE> --ignore-daemonsets --delete-emptydir-data` | 移走工作负载（维护/下线前） |
+| 恢复调度 | `kubectl uncordon <NODE>` | 维护后恢复 |
+
+> **生命链**：[健康检查](health-check.md) 检测故障 → 不可修则 `kubectl cordon` 隔离 → `kubectl drain` 驱逐 Pod → 删除/重建节点（见上文 [删除节点](#删除节点)）→ 新节点加入恢复容量。
 
 ## 扩缩容节点池 (2022-05-01)
 
@@ -157,7 +190,7 @@ tccli tke AddExistedInstances --version 2018-05-25 \
 tccli tke CreateClusterInstances --version 2018-05-25 \
   --ClusterId "<CLUSTER_ID>" --region ap-guangzhou \
   --RunInstancePara '<CVM_RUNINSTANCES_JSON>'
-# expected: { "Response": { "InstanceIdSet": ["ins-xxxxxxxx"] } }
+# expected: CAM 拦截 AuthFailure.UnauthorizedOperation（参数已验证）；授权后返回 InstanceIdSet[]
 ```
 
 | 占位符 | 含义 | 如何获取 |
@@ -171,28 +204,3 @@ tccli tke CreateClusterInstances --version 2018-05-25 \
 - [创建节点池](nodepool-create.md) — 节点池生命周期
 - [扩缩容节点池](nodepool-scale.md) — 调整节点数量
 - [API 版本选择](../index.md#api-版本选择) — 理解 TKE 双版本
-
-## Action 清单
-
-| Action | 类型 | 版本 | 说明 |
-|:-------|:-----|:-----|:-----|
-| `AddExistedInstances` | 主操作 | 2018-05-25 | 接入已有 CVM 作节点 |
-| `CreateClusterInstances` | 主操作 | 2018-05-25 | 新建 CVM 作节点（透传 RunInstances JSON） |
-| `UpgradeClusterInstances` | 主操作 | 2018-05-25 | 升级节点版本 |
-| `ModifyNodePoolDesiredCapacityAboutAsg` | 主操作 | 2018-05-25 | 改节点池期望数（旧版） |
-| `DeleteClusterInstances` | 清理 | 2018-05-25 | 删除节点（Instance 抽象） |
-| `RemoveNodeFromNodePool` | 清理 | 2018-05-25 | 移出节点池（不销毁 CVM） |
-| `DrainClusterVirtualNode` | 主操作 | 2018-05-25 | 排水节点（驱逐 Pod） |
-| `DescribeClusterInstances` | 验证 | 2018-05-25 | 节点列表（InstanceIds/InstanceRole） |
-| `DescribeExistedInstances` | 验证 | 2018-05-25 | 查可接入的已有实例 |
-| `StopMachines` | 主操作 | 2022-05-01 | 停止原生节点 |
-| `StartMachines` | 主操作 | 2022-05-01 | 启动原生节点 |
-| `RebootMachines` | 主操作 | 2022-05-01 | 重启原生节点（上限 100） |
-| `ScaleNodePool` | 主操作 | 2022-05-01 | 设置节点池期望副本数 |
-| `SetMachineLogin` | 主操作 | 2022-05-01 | 绑定 SSH 密钥（单数 MachineName） |
-| `ModifyClusterMachine` | 主操作 | 2022-05-01 | 修改 Machine 粒度配置（复数 MachineNames） |
-| `DeleteClusterMachines` | 清理 | 2022-05-01 | 删除节点（Machine 抽象） |
-| `DescribeClusterMachines` | 验证 | 2022-05-01 | Machine 语义查询 |
-| `DescribeNodePools` | 验证 | 2022-05-01 | 节点池列表 |
-| `DescribeGPUInfo` | 验证 | 2022-05-01 | GPU 驱动/CUDA/cuDNN 版本（不绑集群） |
-| `cvm:StopInstances` | 跨产品 | cvm | 旧版回退：停止节点 |

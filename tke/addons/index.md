@@ -5,7 +5,7 @@ doc_type: Overview
 
 > TKE 集群插件管理——扩展集群功能的组件，如 CBS CSI、Ingress Controller、eniipamd。
 
-## 这是什么
+## 是什么
 
 插件是封装好的 Kubernetes 组件，一键安装到集群。TKE 提供官方插件列表，每个插件有版本与配置。
 
@@ -40,7 +40,7 @@ doc_type: Overview
 ## 快速检查
 
 ```bash
-# 查看某插件状态（实测 eniipamd Phase=Succeeded）
+# 查看某插件状态（eniipamd Phase=Succeeded）
 tccli tke DescribeAddon --region <REGION> --ClusterId "<CLUSTER_ID>" --AddonName eniipamd \
   --filter "Addons[].{name:AddonName,ver:AddonVersion,phase:Phase}"
 # expected: 插件信息，Phase 含 Succeeded

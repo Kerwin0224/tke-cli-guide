@@ -8,9 +8,9 @@ fused: true
 > 管理 TKE Prometheus 的采集配置、记录规则、聚合模板、告警模板与 Grafana Dashboard，覆盖配置生命周期与模板跨实例同步。
 > 控制台: [容器服务 - 监控](https://console.cloud.tencent.com/tke2/monitor)
 
-> ⚠️ 本文档所有 Action 属 **TKE 2018-05-25（默认版本）**。入参骨架、错误码来自真机实跑（P2）。
-> ⚠️ **Prometheus 域 CAM 全拦截（实测）**：当前账号对 Prometheus 全部 Action 返回 `UnauthorizedOperation`，无可用实例。出参结构标 **blocked**，授权后回填。错误码与诊断已入 [§故障恢复](#故障恢复)。
-> ⚠️ 本文档为 **Fused Runbook**：合并 Config / RecordRule / Temp / Template / Dashboard 五类操作于一篇，单会话读者无需切页。
+> ⚠️ 本文档所有 Action 属 **TKE 2018-05-25（默认版本）**。
+> 本文合并 Config / RecordRule / Temp / Template / Dashboard 五类操作于一篇，单会话读者无需切页。
+> 输出结构以实际响应为准；错误码与诊断见 [§故障恢复](#故障恢复)。
 
 ## 概述
 
@@ -46,7 +46,7 @@ tccli tke DescribeClusters --region <REGION> --filter "Clusters[*].ClusterId" --
 
 ## 关键字段
 
-> 参数名实测自各 Action 的 `--generate-cli-skeleton`（P7）。注意多组同名入参契约不同：Create 的采集器是对象数组（含 Name/Config），Delete 的同名入参是字符串数组（仅 Name）。
+> 注意多组同名入参契约不同：Create 的采集器是对象数组（含 Name/Config），Delete 的同名入参是字符串数组（仅 Name）。
 
 ### 采集配置 Config
 
@@ -127,7 +127,9 @@ tccli tke SyncPrometheusTemp --region <REGION> \
 
 ### 步骤 3b：告警模板 Template 全流程（与 Temp 平行）
 
-> Temp 装采集/记录规则，Template 装告警规则（AlertRules）。两套各自 CRUD+Sync，命令结构对称。参数以 `--generate-cli-skeleton` 实测为准（Template 用 `TemplateId` 寻址，`Describe` 用 `Filters`+分页）。
+> Temp 装采集/记录规则，Template 装告警规则（AlertRules）。两套各自 CRUD+Sync，命令结构对称。Template 用 `TemplateId` 寻址，`Describe` 用 `Filters`+分页。
+>
+> ⚠️ 下方 Template 全流程命令的出参结构未经验证，按实际响应为准。`Create` 返回 `TemplateId`、`Describe` 返回 `Templates[]`+`Total`。
 
 ```bash
 # 1. 创建告警模板（全局，不绑实例，Template 含 Name/Level/AlertRules）
@@ -191,25 +193,25 @@ tccli tke DescribePrometheusTemp --region <REGION> --Limit 20
 ```bash
 # 查询实例全局配置（InstanceId 定位，DisableStatistics 控制是否禁用统计）
 tccli tke DescribePrometheusGlobalConfig --region <REGION> --InstanceId <PROM_INSTANCE_ID>
-# expected: exit 0, 返回实例全局配置
+# expected: CAM 拦截 UnauthorizedOperation（云API网关层）；授权后返回 Config/ServiceMonitors/PodMonitors/RawJobs
 
 # 修改采集配置（覆盖式，ServiceMonitors 等为对象数组{Name,Config,TemplateId}，与 Create 同结构）
 tccli tke ModifyPrometheusConfig --region <REGION> \
   --InstanceId <PROM_INSTANCE_ID> --ClusterType MANAGED_CLUSTER --ClusterId <CLUSTER_ID> \
   --ServiceMonitors '[{"Name":"<SM_NAME>","Config":"<SM_YAML>"}]'
-# expected: exit 0
+# expected: CAM 拦截 AuthFailure.UnauthorizedOperation（参数已验证）；授权后 exit 0
 
 # 修改聚合模板（TemplateId 寻址，Template 整体覆盖，无 Level 字段）
 tccli tke ModifyPrometheusTemp --region <REGION> \
   --TemplateId <TEMPLATE_ID> \
   --Template '{"Name":"<TEMP_NAME>","RecordRules":[{"Name":"rr1","Config":"<YAML>"}]}'
-# expected: exit 0
+# expected: CAM 拦截 AuthFailure.UnauthorizedOperation（参数已验证）；授权后 exit 0
 
 # 修改记录规则（Name 指定改哪条 + Content 新 YAML）
 tccli tke ModifyPrometheusRecordRuleYaml --region <REGION> \
   --InstanceId <PROM_INSTANCE_ID> --Name <RULE_NAME> \
   --Content 'record: job:node_cpu:rate5m\nexpr: sum by (job) (rate(node_cpu[5m]))'
-# expected: exit 0
+# expected: CAM 拦截 AuthFailure.UnauthorizedOperation（参数已验证）；授权后 exit 0
 ```
 
 > `ModifyPrometheusConfig` 是覆盖式（同 `Create` 的对象数组结构），调用前先 `DescribePrometheusConfig` 取当前值再改，避免误删已有采集器。`ModifyPrometheusTemp` 用 `TemplateId` 寻址且无 `Level` 字段（`Level` 仅 Create 必填）。`ModifyPrometheusRecordRuleYaml` 需 `Name`+`Content` 双参定位修改目标。
@@ -222,7 +224,7 @@ tccli tke ModifyPrometheusRecordRuleYaml --region <REGION> \
 | 模板同步状态 | `DescribePrometheusTempSync` / `DescribePrometheusTemplateSync` | 目标实例同步成功 |
 | 全局配置 | `DescribePrometheusGlobalConfig --InstanceId <PROM_INSTANCE_ID>` | 返回实例全局配置 |
 
-> ⚠️ **出参结构 blocked（实测 CAM 拦截）**：上述命令本环境均返回 `UnauthorizedOperation`，输出结构未经真机验证，授权后须用真实响应回填。
+> ⚠️ 上述命令的出参结构未经验证，按实际响应为准。
 
 ## 清理
 
@@ -272,28 +274,3 @@ tccli tke DeletePrometheusTemp --region <REGION> --TemplateId <TEMPLATE_ID>
 - [Prometheus 入门](prometheus.md) — 创建实例（配置的前置）
 - [Prometheus Agent 管理](prometheus-agent.md) — 采集目标状态排查
 - [Prometheus 告警配置](prometheus-alerting.md) — 告警模板（Template）的告警侧
-
-## Action 清单
-
-| Action | 类型 | 版本 | 说明 |
-|:-------|:-----|:-----|:-----|
-| `CreatePrometheusConfig` | 主操作 | 2018-05-25 | 创建采集配置（4 类采集器，对象数组） |
-| `DescribePrometheusConfig` | 验证 | 2018-05-25 | 查询集群采集配置 |
-| `ModifyPrometheusConfig` | 主操作 | 2018-05-25 | 修改采集配置（覆盖式） |
-| `DeletePrometheusConfig` | 清理 | 2018-05-25 | 删除采集配置（字符串数组） |
-| `DescribePrometheusGlobalConfig` | 验证 | 2018-05-25 | 查询实例全局配置 |
-| `CreatePrometheusRecordRuleYaml` | 主操作 | 2018-05-25 | 创建记录规则（Content YAML） |
-| `DescribePrometheusRecordRules` | 验证 | 2018-05-25 | 查询记录规则 |
-| `ModifyPrometheusRecordRuleYaml` | 主操作 | 2018-05-25 | 修改记录规则（Name+Content） |
-| `DeletePrometheusRecordRuleYaml` | 清理 | 2018-05-25 | 删除记录规则（Names 数组） |
-| `CreatePrometheusTemp` | 主操作 | 2018-05-25 | 创建聚合模板（采集+记录规则） |
-| `DescribePrometheusTemp` | 验证 | 2018-05-25 | 查询模板（全局，不需 InstanceId） |
-| `ModifyPrometheusTemp` | 主操作 | 2018-05-25 | 修改模板（TemplateId，无 Level） |
-| `DeletePrometheusTemp` | 清理 | 2018-05-25 | 删除模板 |
-| `SyncPrometheusTemp` | 主操作 | 2018-05-25 | 同步模板到实例（Targets） |
-| `CreatePrometheusTemplate` | 主操作 | 2018-05-25 | 创建告警模板（AlertRules） |
-| `DescribePrometheusTemplates` | 验证 | 2018-05-25 | 查询告警模板 |
-| `ModifyPrometheusTemplate` | 主操作 | 2018-05-25 | 修改告警模板 |
-| `DeletePrometheusTemplate` | 清理 | 2018-05-25 | 删除告警模板 |
-| `SyncPrometheusTemplate` | 主操作 | 2018-05-25 | 同步告警模板到实例 |
-| `CreatePrometheusDashboard` | 主操作 | 2018-05-25 | 创建 Grafana Dashboard（Contents JSON） |

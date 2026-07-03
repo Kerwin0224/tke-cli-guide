@@ -38,7 +38,7 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_I
 ### 资源检查
 
 ```bash
-# 查看已有 Release（实测返回 Name/Namespace/Revision/Status/ChartName/ChartVersion）
+# 查看已有 Release（返回 Name/Namespace/Revision/Status/ChartName/ChartVersion）
 tccli tke DescribeClusterReleases --region ap-guangzhou --ClusterId "<CLUSTER_ID>" --Limit 5 \
   --filter "ReleaseSet[].{name:Name,ns:Namespace,rev:Revision,status:Status,chart:ChartName,ver:ChartVersion}"
 # expected: Release 列表，Status 含 deployed
@@ -54,12 +54,12 @@ gatekeeper	kube-system	4	deployed	gatekeeper	1.3.0
 # 查询 TKE 内置可用 Chart（Kind/Arch/ClusterType 过滤；用于选 Chart 名与版本）
 tccli tke GetTkeAppChartList --region ap-guangzhou \
   --Kind "<CHART_KIND>" --ClusterType MANAGED_CLUSTER
-# expected: exit 0, ChartList[] 含 ChartName/ChartVersion/架构
+# expected: exit 0, 返回 AppCharts[]（含内置 Chart 名/版本/架构；匹配为空时 AppCharts=[]）
 ```
 
 ## 关键字段
 
-> 来源：`tccli tke CreateClusterRelease --generate-cli-skeleton`（实测）。
+> 来源：`tccli tke CreateClusterRelease --generate-cli-skeleton`。
 
 | 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
 |:------|------|:--------:|------------|---------------|
@@ -251,16 +251,16 @@ tccli tke DeleteRollOutSequence --region <REGION> --ID <SEQUENCE_ID>
 # 查询集群灰度序列标签（Filters + Offset/Limit 分页）
 tccli tke DescribeClusterRollOutSequenceTags --region ap-guangzhou \
   --Offset 0 --Limit 20
-# expected: exit 0, 返回集群的灰度序列标签列表
+# expected: exit 0，返回 ClusterTags[]+TotalCount
 
 # 修改集群灰度序列标签（ClusterID 大写 + Tags[] 覆盖）
 tccli tke ModifyClusterRollOutSequenceTags --region ap-guangzhou \
   --ClusterID "<CLUSTER_ID>" \
   --Tags '[{"Key":"env","Value":"canary"}]'
-# expected: exit 0
+# expected: CAM 拦截 UnauthorizedOperation.CamNoAuth（参数已验证）；授权后 exit 0
 ```
 
-> ⚠️ `ModifyClusterRollOutSequenceTags` 用大写 `ClusterID`（区别于多数 TKE 接口的小写 `ClusterId`），`Tags[]` 是覆盖式整体更新。`DescribeClusterRollOutSequenceTags` 不需 ClusterId，按 Offset/Limit 翻页。两者参数以 `--generate-cli-skeleton` 实测为准。灰度序列用这些标签按节点 `Tags` 分批发布。
+> ⚠️ `ModifyClusterRollOutSequenceTags` 用大写 `ClusterID`（区别于多数 TKE 接口的小写 `ClusterId`），`Tags[]` 是覆盖式整体更新。`DescribeClusterRollOutSequenceTags` 不需 ClusterId，按 Offset/Limit 翻页。两者参数以 `--generate-cli-skeleton` 为准。灰度序列用这些标签按节点 `Tags` 分批发布。
 
 ## 下一步
 
@@ -271,26 +271,3 @@ tccli tke ModifyClusterRollOutSequenceTags --region ap-guangzhou \
 ## 控制台替代方案
 
 [容器服务控制台 - 应用管理](https://console.cloud.tencent.com/tke2/helm)
-
-## Action 清单
-
-| Action | 类型 | 版本 | 说明 |
-|:-------|:-----|:-----|:-----|
-| `CreateClusterRelease` | 主操作 | 2018-05-25 | 部署 Chart 到集群 |
-| `UpgradeClusterRelease` | 主操作 | 2018-05-25 | 升级版本或改 Values |
-| `RollbackClusterRelease` | 主操作 | 2018-05-25 | 回滚到历史版本 |
-| `CreateRollOutSequence` | 主操作 | 2018-05-25 | 创建灰度发布序列 |
-| `ModifyRollOutSequence` | 主操作 | 2018-05-25 | 修改灰度序列（按 ID） |
-| `ModifyClusterRollOutSequenceTags` | 主操作 | 2018-05-25 | 管理序列标签 |
-| `UninstallClusterRelease` | 清理 | 2018-05-25 | 卸载 Release（删资源） |
-| `CancelClusterRelease` | 清理 | 2018-05-25 | 取消待处理 Release |
-| `DeleteRollOutSequence` | 清理 | 2018-05-25 | 删除灰度序列 |
-| `DescribeClusterReleases` | 验证 | 2018-05-25 | Release 列表与状态 |
-| `DescribeClusterReleaseDetails` | 验证 | 2018-05-25 | Release 详情 |
-| `DescribeClusterReleaseHistory` | 验证 | 2018-05-25 | Release 修订历史 |
-| `DescribeClusterPendingReleases` | 验证 | 2018-05-25 | 待处理 Release |
-| `DescribeRollOutSequences` | 验证 | 2018-05-25 | 灰度序列列表 |
-| `DescribeClusterRollOutSequenceTags` | 验证 | 2018-05-25 | 序列标签 |
-| `GetTkeAppChartList` | 验证 | 2018-05-25 | TKE 内置 Chart 列表 |
-| `DescribeClusters` | 验证 | 2018-05-25 | 确认集群 ID |
-| `DescribeClusterStatus` | 验证 | 2018-05-25 | 确认集群 Running |

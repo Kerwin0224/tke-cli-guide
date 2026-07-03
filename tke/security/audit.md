@@ -28,7 +28,7 @@ fused: false
 
 ## 配置项
 
-> 来源：`tccli tke EnableClusterAudit --generate-cli-skeleton`（实测）。需先在 CLS 创建日志集与主题。
+> 来源：`tccli tke EnableClusterAudit --generate-cli-skeleton`。需先在 CLS 创建日志集与主题。
 
 | 字段 | 类型 | 必填 | 默认值 | 有效值 | 填错的影响 |
 |:------|------|:--------:|:------:|-------|-----------|
@@ -71,7 +71,7 @@ tccli tke EnableClusterAudit --region ap-guangzhou \
 ## 验证
 
 ```bash
-# 查看审计开关状态（实测 ClusterAuditEnabled=true）
+# 查看审计开关状态（ClusterAuditEnabled=true）
 tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]' \
   --filter "ClusterStatusSet[0].ClusterAuditEnabled"
 # expected: true
@@ -143,7 +143,7 @@ tccli tke DisableEncryptionProtection --ClusterId "<CLUSTER_ID>" --region <REGIO
 tccli tke EnableEncryptionProtection --region <REGION> \
   --ClusterId "<CLUSTER_ID>" \
   --KMSConfiguration '{"KmsRegion":"<KMS_REGION>","KmsKeyId":"<KMS_KEY_ID>"}'
-# expected: exit 0, Status 进入 enabling → Enabled
+# expected: exit 0, Status 进入 enabling → Enabled; 集群不存在报 ResourceNotFound
 ```
 
 | 占位符 | 含义 | 如何获取 |
@@ -153,35 +153,9 @@ tccli tke EnableEncryptionProtection --region <REGION> \
 
 > `EnableEncryptionProtection` 的 `KmsConfiguration` 是嵌套对象（含 `KmsRegion`/`KmsKeyId`），开启后 etcd 数据用 KMS 密钥加密。开启是异步操作，用 `DescribeEncryptionStatus` 轮询 `Status` 到 `Enabled`。开启前需先在 KMS 创建密钥并授权 TKE 使用。
 
-## 调度策略
-
-> 集群调度器插件配置（`SchedulerPolicy`），控制 Pod 调度行为。D34 归入 Security（策略管控域）。
-
-```bash
-# 查询调度策略 (含调度器插件配置)
-tccli tke DescribeClusterSchedulerPolicy --ClusterId "<CLUSTER_ID>" --region <REGION>
-# expected: exit 0, SchedulerPolicyConfig[] 含 SchedulerName/PluginConfigs
-```
-```json
-{
-    "Policy": "",
-    "SchedulerPolicyConfig": [
-        {"SchedulerName": "default-scheduler", "PluginConfigs": [{"Name": "NodeResourcesFit"}]}
-    ]
-}
-```
-
-```bash
-# 修改调度策略
-tccli tke ModifyClusterSchedulerPolicy --ClusterId "<CLUSTER_ID>" --region <REGION> --Policy "<POLICY_JSON>"
-# expected: exit 0
-```
-
-> `SchedulerPolicyConfig` 含调度器名（如 `default-scheduler`）与插件配置（如 `NodeResourcesFit` 资源适配）。修改 `Policy` 是调度器配置 JSON。
-
 ## 开放策略（OPA/Gatekeeper）
 
-> 开放策略（OpenPolicy）基于 OPA/Gatekeeper 强制集群安全/合规规则（如禁止删带节点的集群）。D34 归入 Security（策略管控域）。
+> 开放策略（OpenPolicy）基于 OPA/Gatekeeper 强制集群安全/合规规则（如禁止删带节点的集群）。属准入控制，是集群加固的一环。
 
 ```bash
 # 查询开放策略列表 (按 Category 分类)
@@ -205,6 +179,38 @@ tccli tke ModifyOpenPolicyList --ClusterId "<CLUSTER_ID>" --region <REGION> \
 ```
 
 > `EnforcementAction` 状态：`deny`（强制拒绝违规操作）/ `dryrun`（仅告警不拒绝）。`EnabledStatus`：`open`/`close`。`Category` 如 `cluster`（集群级）/ `namespace`（命名空间级）。开放策略与 [巡检](../observability/logging.md#集群巡检与日志配置) 互补——策略强制合规，巡检发现隐患。
+
+`PolicyCategory` 枚举：
+
+| Category | 分类 |
+|:---------|:-----|
+| `cluster` | 集群策略 |
+| `node` | 节点策略 |
+| `namespace` | 命名空间策略 |
+| `configuration` | 配置相关策略 |
+| `compute` | 计算资源策略 |
+| `storage` | 存储资源策略 |
+| `network` | 网络资源策略 |
+
+`Kind` 策略模板枚举。用户按需搜对应 Kind 启用：
+
+| Kind | 作用 | 典型场景 |
+|:-----|:-----|:---------|
+| `blocknamespacedeletion` | 存在 pod 的命名空间不允许删除 | 防误删带工作负载的命名空间 |
+| `blockcrddeletion` | 存在 CR 的 CRD 不允许删除 | 防误删有自定义资源的 CRD |
+| `blockmountablevolumetype` | 禁止挂载指定的 volume 类型 | 限制存储类型合规 |
+| `disallowalwayspullimage` | 禁止镜像拉取策略用 Always | 强制 imagePullPolicy 非 Always |
+| `tkeallowedrepos` | 容器镜像来源限制 | 限制镜像仓库白名单 |
+| `blockunknowndaemonset` | 禁止未知的 DaemonSet 部署 | 防 DaemonSet 蔓延 |
+| `blockpvdeletion` | PV 绑定状态不允许删除 | 防 PV 误删丢数据 |
+| `corednsprotect` | CoreDNS 组件删除保护 | 防 CoreDNS 被误删致 DNS 瘫痪 |
+| `blockschedulablenodedelete` | 非封锁状态 Node 不允许删除 | 防删运行中节点 |
+| `resourcesdeletionprotection` | 资源删除保护 | 通用删除保护 |
+| `tkeenirequest` | 弹性网卡资源配置限制 | ENI 资源合规 |
+| `blockworkloadcrossversionupgrade` | 工作负载镜像版本升级策略管控 | 管控跨版本升级 |
+| `blockserviceaccountgranthighprivilegepermission` | ServiceAccount 高权限制约 | 防 SA 过权 |
+
+> 完整 Kind 列表以 `tccli tke DescribeOpenPolicyList --ClusterId "<ID>" --Category "<CATEGORY>"` 返回为准（。启用时 `ModifyOpenPolicyList --OpenPolicyInfoList '[{"Name":"<KIND>","EnforcementAction":"deny","EnabledStatus":"open"}]'`。
 
 ## 故障恢复
 
@@ -234,25 +240,3 @@ tccli tke ModifyOpenPolicyList --ClusterId "<CLUSTER_ID>" --region <REGION> \
 ## 控制台替代方案
 
 [容器服务控制台 - 集群审计](https://console.cloud.tencent.com/tke2/cluster)
-
-## Action 清单
-
-| Action | 类型 | 版本 | 说明 |
-|:-------|:-----|:-----|:-----|
-| `EnableClusterAudit` | 主操作 | 2018-05-25 | 开启审计日志（需 CLS 日志集/主题） |
-| `EnableEventPersistence` | 主操作 | 2018-05-25 | 开启 K8s Event 落 CLS |
-| `EnableEncryptionProtection` | 主操作 | 2018-05-25 | 开启加密保护 |
-| `ModifyOpenPolicyList` | 主操作 | 2018-05-25 | 修改 OPA/Gatekeeper 策略 |
-| `ModifyClusterSchedulerPolicy` | 主操作 | 2018-05-25 | 修改调度器插件配置 |
-| `DisableClusterAudit` | 清理 | 2018-05-25 | 关闭审计（CLS 历史保留） |
-| `DisableEventPersistence` | 清理 | 2018-05-25 | 关闭事件持久化（可同步删 CLS） |
-| `DisableEncryptionProtection` | 清理 | 2018-05-25 | 关闭加密保护 |
-| `DescribeOpenPolicyList` | 验证 | 2018-05-25 | 开放策略列表（按 Category） |
-| `DescribeClusterSchedulerPolicy` | 验证 | 2018-05-25 | 调度策略与插件配置 |
-| `DescribeEncryptionStatus` | 验证 | 2018-05-25 | 加密状态（Closed/enabling/Enabled） |
-| `DescribeClusters` | 验证 | 2018-05-25 | 确认集群 ID |
-| `DescribeClusterStatus` | 验证 | 2018-05-25 | 审计开关与集群状态 |
-| `cls:CreateLogset` | 跨产品 | cls | 创建 CLS 日志集（前置） |
-| `cls:CreateTopic` | 跨产品 | cls | 创建 CLS 日志主题（前置） |
-| `cls:DescribeLogsets` | 跨产品 | cls | 核对日志集/主题 |
-| `cls:SearchLog` | 跨产品 | cls | 检索审计日志 |
