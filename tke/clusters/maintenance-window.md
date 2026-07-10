@@ -12,19 +12,28 @@ fused: false
 
 ## 概述
 
-维护窗口（MaintenanceWindow）限定 TKE 在集群上执行自动升级、组件热升级等托管运维操作的时间段。两层模型：
+维护窗口（MaintenanceWindow）限定 TKE **计划升级**（控制面与集群内系统组件等）可执行的时间段。两层模型：
 
 - **集群级维护窗口**（`CreateClusterMaintenanceWindowAndExclusions`）：绑定单个 `ClusterID`，仅对该集群生效。
-- **全局维护窗口**（`CreateGlobalMaintenanceWindowAndExclusions`）：用 `TargetRegions` 指定一批地域（`"*"` 表示全部地域），统一约束这些地域内**未单独配置集群级窗口**的集群。
+- **全局维护窗口**（`CreateGlobalMaintenanceWindowAndExclusions`）：用 `TargetRegions` 指定一批地域（`"*"` 表示全部地域），对指定地域内集群生效。
 
-排除项（Exclusions）在窗口内进一步挖洞：命中的集群在排除时段不受维护窗口约束。典型用途是业务高峰期临时屏蔽某次自动升级。
+**排除项（Exclusions）** = **禁止计划升级**的时间段（业务高峰封网等），不是「放开维护窗口」。
 
-两层窗口互不覆盖：集群级窗口优先于全局窗口。查询时各自的 Describe 接口独立返回，不混合。
+| 半常量 | 约束 |
+|:-------|:-----|
+| 维护时长 | ≥ **2** 小时；本篇 API 字段 `Duration` 取值 **2~12**（小时）；控制台文案另写上限 24，以 api/本篇字段表为准 |
+| 排除项数量 | 单地域全局 / 单集群各最多 **3** 个；单条排除起止跨度 ≤ **7** 天 |
+| 可用窗口下限 | 每 **30** 天周期内至少保留 **4** 小时维护窗口 |
+| 时区 | 维护起始时间按 **东八区** |
+| 优先级 | **维护窗口**：集群级 > 全局（含「指定地域」>「全部地域」）；**排除项**：集群排除 ∪ 全局排除（合集） |
+| 紧急例外 | 安全漏洞等紧急变更**可能不遵循**维护窗口，直接收敛风险 |
+
+> 启用计划升级前须已配地域级或集群级维护窗口，否则无法启用。计划升级覆盖托管控制面与集群内系统组件（如 coredns），**暂不包括用户节点组件**。
 
 ## 触发条件
 
-- 业务有明确低峰期，想把 TKE 托管组件自动升级限制在此时段（避免自动升级撞业务高峰）— 用本文配集群级或全局维护窗口
-- 某次已知自动升级需临时跳过（如大促封网）— 用排除项（Exclusions）在窗口内挖洞屏蔽
+- 业务有明确低峰期，要把计划升级限制在此时段 — 用本文配集群级或全局维护窗口
+- 大促等需**禁止**计划升级 — 用排除项划出禁止升级时段（非「跳过窗口约束」）
 - 多地域一批集群要统一运维时段 — 用全局窗口 + `TargetRegions`
 
 ## 决策依据
@@ -60,7 +69,7 @@ fused: false
 
 ## 应用
 
-### 步骤 1：创建集群级维护窗口 — 最小化
+### 步骤 1：创建集群级维护窗口
 
 ```bash
 tccli tke CreateClusterMaintenanceWindowAndExclusions --region <REGION> \
@@ -75,7 +84,7 @@ tccli tke CreateClusterMaintenanceWindowAndExclusions --region <REGION> \
 
 > ⚠️ **写操作 CAM 授权**：`CreateClusterMaintenanceWindowAndExclusions` 要求目标集群带特定标签（要求 `billing` 标签）才放行——CAM 策略匹配 `qcs:resource_tag` 含 `billing`。带标签的集群调用返回 RequestId（成功）。不带标签的集群被拒，错误码与修复见 [§故障恢复](#故障恢复)。
 
-### 步骤 2：创建全局维护窗口 — 增强
+### 步骤 2：创建全局维护窗口
 
 ```bash
 tccli tke CreateGlobalMaintenanceWindowAndExclusions --region <REGION> \
@@ -159,7 +168,7 @@ tccli tke DescribeGlobalMaintenanceWindowAndExclusions --region <REGION> --Limit
 | 全局窗口存在 | `DescribeGlobalMaintenanceWindowAndExclusions` | `TotalCount >= 1`，含目标 `ID` |
 | 排除项生效 | 同上，查 `Exclusions` | 含配置的排除时段 |
 
-> ⚠️ **Filter 不可用**：`DescribeClusterMaintenanceWindowAndExclusions` 的 `Filters` 参数合法 name 不明，`cluster-id`/`clusterId`/`clusterID` 均报 `InvalidParameter: invalid filter name`。单集群过滤改用全量查询 + 客户端按 `ClusterID` 过滤。
+> ⚠️ **Filter 名受限**：`DescribeClusterMaintenanceWindowAndExclusions` 的 `Filters[].Name` 真机接受 **`ClusterID`**（大写 ID；无窗口时 `TotalCount=0`）。`cluster-id` / `clusterId` / `ClusterId` 报 `InvalidParameter`（`invalid filter name`）。无窗口时仍可全量 `--Limit` + 客户端按 `ClusterID` 过滤。
 
 ## 回滚
 
@@ -208,11 +217,17 @@ tccli tke DescribeClusterMaintenanceWindowAndExclusions --region <REGION> --Limi
 ## 收尾确认
 
 ```bash
-# 一次性核对：集群级窗口已生效且时段与配置一致
+# 跨步骤汇总：集群级窗口 + 全局窗口 + 排除项一次性核对（三层协同效果）
 tccli tke DescribeClusterMaintenanceWindowAndExclusions --region <REGION> --Limit 20 \
-  --filter "MaintenanceWindowAndExclusions[?ClusterID=='<CLUSTER_ID>'].{time:MaintenanceTime,dur:Duration,days:DayOfWeek}"
-# expected: 返回创建的时段（如 time=22:00:00, dur=2, days=["TU","TH","FR"]）→ 维护窗口配置闭环完成
+  --filter "MaintenanceWindowAndExclusions[?ClusterID=='<CLUSTER_ID>'].{time:MaintenanceTime,dur:Duration,days:DayOfWeek,excl:Exclusions}"
+# expected: 集群级时段（如 time=22:00:00, dur=2, days=["TU","TH","FR"]）+ Exclusions 含配置的排除项
+
+tccli tke DescribeGlobalMaintenanceWindowAndExclusions --region <REGION> --Limit 20 \
+  --filter "MaintenanceWindowAndExclusions[0].{time:MaintenanceTime,dur:Duration,days:DayOfWeek,regions:TargetRegions,excl:Exclusions}"
+# expected: 全局窗口时段 + TargetRegions 含目标地域 → 集群级与全局窗口协同生效
 ```
+
+> 集群级窗口优先于全局窗口——同集群有两层时以集群级为准。汇总核对须确认目标集群的窗口来自预期层级（集群级未配时才回落到全局），且排除项 `StartAt`/`EndAt` 落在窗口时段内才会真正跳过本次自动升级（衔接下一步前置：排除项能否真跳过取决于时段交集，排除项与窗口无交集则不生效，见 [§故障恢复](#故障恢复)）。
 
 ## 下一步
 

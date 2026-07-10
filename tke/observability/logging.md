@@ -5,7 +5,15 @@ fused: false
 ---
 # 日志采集
 
+> 控制台: [容器服务控制台 - 日志采集](https://console.cloud.tencent.com/tke2/cluster)
 > 安装日志 Agent、采集业务日志与控制面日志到 CLS。配置型操作（开启采集行为，不创建资源）。
+
+## 触发条件
+
+- `DescribeLogSwitches` → `Log.Enable=false`（业务日志未采）或 `MasterLog.Enable=false`（控制面日志未采），需开启采集
+- Pod 应用日志无法在 CLS 检索，`kubectl get ds -n kube-system | grep logagent` 无 CLS Agent DaemonSet
+- 控制面问题排查需 apiserver/etcd 日志，但 `DescribeLogSwitches` → `MasterLog.Enable=false` — 看 [故障恢复]段
+
 
 ## 概述
 
@@ -32,7 +40,7 @@ TKE 日志分两类，采集方式不同：
 
 ### InstallLogAgent
 
-> 来源：`tccli tke InstallLogAgent --generate-cli-skeleton`。
+> 完整入参以 `tccli tke InstallLogAgent help --detail` 为准。
 
 | 字段 | 类型 | 必填 | 作用 | 填错的影响 |
 |:------|------|:--------:|:-----|:-----------|
@@ -42,7 +50,7 @@ TKE 日志分两类，采集方式不同：
 
 ### EnableControlPlaneLogs
 
-> 来源：`tccli tke EnableControlPlaneLogs --generate-cli-skeleton`。
+> 完整入参以 `tccli tke EnableControlPlaneLogs help --detail` 为准。
 
 | 字段 | 类型 | 必填 | 作用 |
 |:------|------|:--------:|:-----|
@@ -96,19 +104,25 @@ tccli tke EnableControlPlaneLogs --region ap-guangzhou \
 ```bash
 # 查看日志开关状态
 tccli tke DescribeLogSwitches --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]'
-# expected: exit 0, 返回 SwitchSet[] (每集群一项, 含 Audit/Event/Log/MasterLog 开关 + ClusterId)
+# expected: exit 0, 返回 SwitchSet[]（每集群一项；Audit/Event/Log/MasterLog 均为嵌套对象，非顶层布尔）
 ```
 
 ```json
 {
     "SwitchSet": [
-        {"ClusterId": "cls-example", "Audit": false, "Event": false, "Log": true, "MasterLog": false}
+        {
+            "ClusterId": "cls-example",
+            "Audit": {"Enable": true, "Status": "opened", "TopicRegion": "ap-guangzhou", "ErrorMsg": "", "LogsetId": "", "TopicId": "", "UpgradeAble": false, "Version": ""},
+            "Event": {"Enable": false, "Status": "closed", "ErrorMsg": "", "LogsetId": "", "TopicId": "", "TopicRegion": "", "UpgradeAble": false, "Version": ""},
+            "Log": {"Enable": false, "Status": "closed", "ErrorMsg": "", "LogsetId": "", "TopicId": "", "TopicRegion": "", "UpgradeAble": false, "Version": ""},
+            "MasterLog": {"Enable": false, "Status": "closed", "ErrorMsg": "", "LogsetId": "", "TopicId": "", "TopicRegion": "", "UpgradeAble": false, "Version": ""}
+        }
     ],
     "RequestId": "xxx"
 }
 ```
 
-> 字段含义：`Audit`=审计日志开关，`Event`=K8s 事件日志开关，`Log`=业务日志（CLS Agent）开关，`MasterLog`=控制面日志开关。任一为 `true` 表示该类日志已开启，`false` 表示未开启。
+> 字段含义：`Audit`/`Event`/`Log`/`MasterLog` 各为对象；看 **`Enable`**（是否开启）与 **`Status`**（如 `opened`/`closed`）。`Log`=业务日志（CLS Agent），`MasterLog`=控制面日志，`Audit`=审计，`Event`=K8s 事件。勿写成顶层 `Log=false` 布尔。
 
 | 维度 | 命令 | 预期 |
 |:-----|:-----|:-----|
@@ -143,7 +157,7 @@ tccli tke DeleteLogConfigs --region ap-guangzhou --ClusterId "<CLUSTER_ID>" --Co
 | 现象 | 诊断 | 根因 | 修复 |
 |:--------|:----------|:------------|:-----|
 | `ResourceNotFound` (LogSetId/TopicId) | `tccli cls DescribeLogsets` | CLS 日志集/主题不存在 | 先在 CLS 创建 |
-| `FailedOperation` | `DescribeClusterStatus` 看状态 | 集群非 Running | 等集群 Running |
+| `FailedOperation` | `DescribeClusterStatus` 查看状态 | 集群非 Running | 等集群 Running |
 | `UnsupportedOperation` | 查集群类型 | 控制面日志仅托管集群支持 | 用托管集群 |
 | `ResourceInUse` | `DescribeLogSwitches` | Agent 已安装或日志已开启 | 先卸载/关闭再重装 |
 
@@ -208,14 +222,31 @@ tccli tke ModifyLogConfig --ClusterId "<CLUSTER_ID>" --region <REGION> --Name "<
 # expected: exit 0
 ```
 
-> 控制面日志仅独立集群（INDEPENDENT_CLUSTER）可查（托管集群 Master 不可见）。`DescribeLogConfigs`/`ModifyLogConfig` 管理业务日志采集配置。
+> `DescribeControlPlaneLogs`：托管集群（`MANAGED_CLUSTER`）实测报 `InvalidParameter.Param`（`cluster type not supported:MANAGED_CLUSTER`）；须 `--ClusterType INDEPENDENT_CLUSTER`（独立集群）。`DescribeLogConfigs` 在未装 CLS CRD 时可能报 `FailedOperation.KubernetesListOperationError`（`logconfigs.cls.cloud.tencent.com` 不存在）——先 `InstallLogAgent` / 装采集组件后再查。
+
+## 收尾确认
+
+```bash
+# 跨步骤汇总三项合一：Agent 运行 + 业务日志可查 + 控制面日志可查
+# 1. CLS Agent DaemonSet Running（业务日志采集器就绪）
+kubectl get ds -n kube-system | grep logagent
+# expected: DESIRED=CURRENT=READY 节点数
+
+# 2. 业务日志端到端可查（Verify 查开关，此处查 CLS 真有 Pod 日志）
+tccli cls SearchLog --region <REGION> --TopicId "<TOPIC_ID>" --Content '"nginx"'
+# expected: 命中含应用输出的日志记录
+
+# 3. 控制面日志可查（跨产品 cls）
+tccli cls SearchLog --region <REGION> --TopicId "<API_TOPIC_ID>" --Content '"kube-apiserver"'
+# expected: 命中 apiserver 日志 → 日志采集闭环完成
+```
+
+> Agent Running + 业务日志可查 + 控制面日志可查 = 端到端闭环。Verify 段查开关状态与维度，此处跨步骤汇总 Agent 部署 + 业务日志投递 + 控制面日志投递三项，确认采集链路完整可用。
+
+---
 
 ## 下一步
 
 - [审计日志](../security/audit.md) — 审计日志（区别于业务/控制面日志）
 - [Prometheus 监控入门](prometheus.md) — 指标监控
 - [故障排查](../troubleshooting.md) — 日志缺失诊断
-
-## 控制台替代方案
-
-[容器服务控制台 - 日志采集](https://console.cloud.tencent.com/tke2/cluster)

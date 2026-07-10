@@ -1,20 +1,17 @@
 # Summary
 
 ## 总览
-* [tccli: TKE + TCR 命令行指南](README.md)
+* [TCCLI: TKE + TCR 命令行指南](README.md)
 
 ## 准备工作
-* [安装 tccli](getting-started/install.md)
-* [配置 tccli 凭证](getting-started/credentials.md)
+* [安装 TCCLI](getting-started/install.md)
+* [配置 TCCLI 凭证](getting-started/credentials.md)
 * [准备 VPC 与子网](getting-started/prepare-vpc.md)
 * [术语表](getting-started/glossary.md)
 
 ## 快速入门
 * [TKE: 5 分钟创建第一个集群](quickstart/tke-first-cluster.md)
 * [TCR: 5 分钟推送第一份镜像](quickstart/tcr-first-registry.md)
-
-## 跨产品集成
-* [TKE 集群拉取 TCR 镜像](cross-product/tke-pull-tcr.md)
 
 ## TKE — 容器服务
 * [TKE 概览](tke/index.md)
@@ -23,18 +20,18 @@
     * [查询和过滤集群](tke/clusters/query.md)
     * [删除集群](tke/clusters/delete.md)
     * [升级集群版本](tke/clusters/upgrade.md)
-    * [维护窗口](tke/clusters/maintenance-window.md)
     * [配置集群属性与运行时](tke/clusters/configure.md)
+    * [维护窗口](tke/clusters/maintenance-window.md)
     * [独立集群 Master 运维](tke/clusters/master-ops.md)
-    * [备份存储位置](tke/clusters/backup.md)
     * [调度策略](tke/clusters/scheduling.md)
+    * [备份存储位置](tke/clusters/backup.md)
 * [节点](tke/nodes/index.md)
     * [创建节点池](tke/nodes/nodepool-create.md)
     * [扩缩容节点池](tke/nodes/nodepool-scale.md)
     * [节点实例操作](tke/nodes/instance-ops.md)
+    * [虚拟节点 (超级节点)](tke/nodes/virtual-nodes.md)
     * [扩展节点接入](tke/nodes/external-nodes.md)
     * [节点健康检查](tke/nodes/health-check.md)
-    * [虚拟节点 (超级节点)](tke/nodes/virtual-nodes.md)
 * [网络](tke/networking/index.md)
     * [管理端点](tke/networking/endpoints.md)
     * [配置 VPC-CNI](tke/networking/vpc-cni.md)
@@ -42,6 +39,7 @@
 * [安全](tke/security/index.md)
     * [认证配置](tke/security/auth.md)
     * [审计日志](tke/security/audit.md)
+    * [集群保护策略](tke/security/protection.md)
 * [可观测](tke/observability/index.md)
     * [Prometheus 监控入门](tke/observability/prometheus.md)
     * [Prometheus 告警配置](tke/observability/prometheus-alerting.md)
@@ -55,9 +53,11 @@
 * [专用工作负载](tke/specialized/index.md)
     * [边缘集群](tke/specialized/edge-cluster.md)
     * [EKS 集群](tke/specialized/eks-cluster.md)
+* [跨产品集成](cross-product/tke-pull-tcr.md)
 * [状态机](tke/reference/states.md)
 * [配额和限制](tke/reference/quotas.md)
 * [错误码速查](tke/reference/error-codes.md)
+* [共享字段参考](tke/reference/shared-fields.md)
 * [故障排查](tke/troubleshooting.md)
 
 ## TCR — 容器镜像服务
@@ -75,11 +75,14 @@
     * [不可变标签](tcr/lifecycle/immutable-tags.md)
 * [实例同步](tcr/replication/manage.md)
 * [镜像安全](tcr/security/signing.md)
+    * [漏洞扫描与阻断白名单](tcr/security/cve-whitelist.md)
 * [个人版](tcr/personal/index.md)
     * [个人版全功能](tcr/personal/manage.md)
     * [个人版高级管理](tcr/personal/advanced.md)
 * [实例状态](tcr/reference/states.md)
+* [配额和限制](tcr/reference/quotas.md)
 * [错误码速查](tcr/reference/error-codes.md)
+* [共享字段参考](tcr/reference/shared-fields.md)
 * [故障排查](tcr/troubleshooting.md)
 
 ## 附录

@@ -5,7 +5,15 @@ fused: false
 ---
 # 镜像不可变规则
 
+> 控制台: [容器镜像服务控制台 - 不可变规则](https://console.cloud.tencent.com/tcr/immutable)
 > 配置不可变规则，禁止覆盖已存在的镜像 Tag。防止 `latest` 等标签被意外覆盖。配置型操作。
+
+## 触发条件
+
+- `docker push <DOMAIN>/<NS>/<REPO>:latest` 覆盖已存在 Tag 未被拒绝，`latest` 被意外改写（生产环境需防覆盖）
+- `tccli tcr DescribeImmutableTagRules --RegistryId "<ID>"` 返回 `Rules: []`，命名空间下无不可变规则
+- `docker push` 报 `denied` 但 `DescribeSecurityPolicies` 白名单含当前 IP（非权限原因，需确认是否不可变规则拦截）
+
 
 ## 概述
 
@@ -18,6 +26,8 @@ fused: false
 | 装饰 | 匹配或排除 | `matches`（匹配）/ `excludes`（排除） |
 
 > 规则作用于命名空间级别。规则创建后立即生效，匹配的 Tag 被 push 覆盖时报 `denied`。
+>
+> **半常量**：单个命名空间内**仅支持一条**不可变规则；创建后**不可修改**生效的命名空间（只能改规则内容或删重建）。控制台「latest」预设语义：除 `latest` 外其余版本不可覆盖（以控制台/API 实际枚举为准）。
 
 ## 决策依据
 
@@ -25,12 +35,12 @@ fused: false
 
 - **不可变规则**: 禁止覆盖已存在 Tag（防止 `latest` 被改）。Push 时拒绝
 - **版本保留**: 自动删旧留新（清理堆积）。定时执行删除
-- **默认推荐**: 生产命名空间对 `latest`/`v*` 设不可变；同时配版本保留清理旧版本
+- **默认推荐**: 生产命名空间对 `latest`/`v*` 设不可变；同时配版本保留清理旧版本（两套规则互补，勿混为一谈）
 - **能关闭吗?**: 能，`DeleteImmutableTagRules` 或 `ModifyImmutableTagRules --Disabled true`
 
 ## 配置项
 
-> 来源：`tccli tcr CreateImmutableTagRules --generate-cli-skeleton`。
+> 完整入参以 `tccli tcr CreateImmutableTagRules help --detail` 为准。
 
 | 字段 | 类型 | 必填 | 作用 | 填错的影响 |
 |:------|------|:--------:|:-----|:-----------|
@@ -75,10 +85,10 @@ tccli tcr CreateImmutableTagRules --region <REGION> \
 ## 验证
 
 ```bash
-# 查看规则（响应含 Rules/EmptyNs/Total）
+# 查看规则（响应含 Rules/EmptyNs/Total；计数键为 Total，非 TotalCount）
 tccli tcr DescribeImmutableTagRules --region <REGION> --RegistryId "<REGISTRY_ID>" \
-  --filter "Rules[].{repo:RepositoryPattern,tag:TagPattern,disabled:Disabled}"
-# expected: 规则列表
+  --filter "{total:Total,emptyNs:EmptyNs,rules:Rules[].{repo:RepositoryPattern,tag:TagPattern,disabled:Disabled}}"
+# expected: Total 为规则数；EmptyNs 为尚无规则的命名空间；Rules 为已有规则
 
 # 验证不可变生效：尝试覆盖 latest 应被拒绝
 docker push <REGISTRY_DOMAIN>/<NAMESPACE_NAME>/<REPO>:latest
@@ -89,6 +99,7 @@ docker push <REGISTRY_DOMAIN>/<NAMESPACE_NAME>/<REPO>:latest
 |:-----|:-----|:-----|
 | 规则存在 | `DescribeImmutableTagRules` → `Rules` | 含目标规则 |
 | 规则启用 | `DescribeImmutableTagRules` → `Disabled` | `false` |
+| 无规则命名空间 | `DescribeImmutableTagRules` → `EmptyNs` | 含尚未配置规则的命名空间名 |
 | 覆盖被拒 | `docker push <existing-tag>` | `denied` |
 | 新 Tag 允许 | `docker push <new-tag>` | 成功 |
 
@@ -116,7 +127,7 @@ tccli tcr DeleteImmutableTagRules --region <REGION> \
 | `ResourceNotFound` | `DescribeNamespaces` 核对 | 命名空间不存在 | 先 `CreateNamespace` |
 | `InvalidParameterValue` | 检查 Rule JSON | Pattern/Decoration 拼错 | Decoration 用 `matches`/`excludes` |
 | `LimitExceeded` | `DescribeImmutableTagRules` 看数量 | 规则达上限 | 删除闲置规则 |
-| `FailedOperation` | `DescribeInstanceStatus` 看状态 | 实例非 Running | 等实例 Running |
+| `FailedOperation` | `DescribeInstanceStatus` 查看状态 | 实例非 Running | 等实例 Running |
 
 ### 命令成功但状态不对 (exit = 0)
 
@@ -126,13 +137,26 @@ tccli tcr DeleteImmutableTagRules --region <REGION> \
 | docker push 报 `denied` 但非不可变原因 | `DescribeSecurityPolicies` 查白名单 | 权限不足非不可变 | 区分 `denied` 原因：不可变 vs 权限 |
 | 规则误拦截正常推送 | `DescribeImmutableTagRules` 看 Pattern | Pattern 范围太宽 | 收窄 Pattern 或用 `excludes` |
 
+## 收尾确认
+
+```bash
+# ② 业务可用性端到端：规则真正拦截覆盖行为（Verify 查规则字段存在，这里查实际 push 行为符合预期）
+# 覆盖已存在 latest 应被拒（证明规则生效）
+docker push <REGISTRY_DOMAIN>/<NAMESPACE_NAME>/<REPO>:latest
+# expected: denied（不可变规则拦截）
+
+# 推新 Tag 应成功（证明规则不误伤正常推送，只拦覆盖）
+docker push <REGISTRY_DOMAIN>/<NAMESPACE_NAME>/<REPO>:new-<TIMESTAMP>
+# expected: Push complete（新 Tag 不触发不可变规则）
+```
+
+> 覆盖已存在 Tag 被拒 + 新 Tag 推送成功 = 不可变规则闭环完成，规则精准拦截覆盖不误伤新推。
+
+---
+
 ## 下一步
 
 - [版本保留策略](tag-retention.md) — 与不可变互补的自动清理
 - [管理命名空间和仓库](../repositories/manage.md) — 命名空间管理
 - [推送拉取镜像](../images/push-pull.md) — `denied` 错误诊断
 - [故障排查](../troubleshooting.md) — 推送被拒诊断
-
-## 控制台替代方案
-
-[容器镜像服务控制台 - 不可变规则](https://console.cloud.tencent.com/tcr/immutable)

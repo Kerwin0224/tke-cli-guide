@@ -8,6 +8,19 @@ fused: false
 > 为 TCR 企业版实例绑定自定义域名，用公司自有域名访问镜像仓库。
 > 控制台: [容器镜像服务 - 实例 - 自定义域名](https://console.cloud.tencent.com/tcr/repository)
 
+## 触发条件
+
+- `tccli tcr DescribeInstanceCustomizedDomain --RegistryId "<ID>"` 返回 `DomainInfoList: []`（无自定义域名），需用公司自有域名访问镜像仓库
+- `docker login <DOMAIN_NAME>` 报证书错误（`registry.company.com` 未绑定或证书过期），`DescribeInstanceCustomizedDomain` 返回的域名证书已失效
+- 企业内网 DNS 统一管控要求，`*.tencentcloudcr.com` 默认域名不符合公司域名规范，需 CNAME 自有域名到 TCR
+
+## 准备工作
+
+- 已创建 TKE 集群 (见 [创建集群](../../tke/clusters/create.md))
+- 已配置 tccli 凭证 (见 [配置凭证](../../getting-started/credentials.md))
+
+
+
 ## 概述
 
 默认情况下 TCR 实例通过 `*.tencentcloudcr.com` 域名访问。绑定自定义域名后，可用 `registry.company.com` 等自有域名推拉镜像，便于企业内网 DNS 统一管理与证书管控。
@@ -122,6 +135,23 @@ tccli tcr DeleteInstanceCustomizedDomain --region <REGION> \
 | 域名无法备案 | 域名未在工信部备案（大陆实例） | 完成备案，或用境外地域实例 |
 
 > 错误样本：传不存在的 `CertificateId` → `code:FailedOperation.DependenceError ... CertificateNotFound, Message:证书不存在`（校验先于 CAM 权限）。
+
+## 收尾确认
+
+```bash
+# 域名绑定记录已生效
+tccli tcr DescribeInstanceCustomizedDomain --region ap-guangzhou --RegistryId "<REGISTRY_ID>" \
+  --filter "DomainInfoList[0].{domain:DomainName,cert:CertId,status:Status}"
+# expected: domain 与配置一致, cert 与绑定参数一致, status 正常
+
+# ② 业务可用性端到端：用自定义域名 docker login 真正成功（Verify 查绑定记录存在，这里查端到端通过自有域名可达仓库）
+docker login <DOMAIN_NAME> --username <USERNAME> --password <TOKEN>
+# expected: Login Succeeded（CNAME 已生效 + 证书校验通过 + TCR 侧路由命中）
+```
+
+> 域名绑定记录正常 + docker login <DOMAIN_NAME> Login Succeeded = 自定义域名闭环完成。docker login 失败说明 DNS 未生效、证书不匹配或端点未开。
+
+---
 
 ## 下一步
 

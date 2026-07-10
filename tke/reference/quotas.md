@@ -4,20 +4,37 @@ subtype: 8C
 ---
 # TKE 配额与限制
 
-> 资源配额与 API 限频。配额默认值来自腾讯云官方文档，API 限频来自 TKE API 概览页。超限信号列给出触发限制时看到的错误码。
+> 资源配额与 API 限频。**TKE 资源配额默认值**以官方「购买集群配额限制」为准（可提工单调高）；API 限频以 TKE API 概览为准。超限信号列给出触发限制时看到的错误码。数值为半常量，官方调额后以官网最新表为准。
 
 ## 资源配额
 
 | 限制项 | 默认值 | 作用域 | 可调整 | 超限信号 |
 |:-------|:------:|:-------|:------:|:---------|
-| 集群数 | 50 | 每地域每账号 | 是（提工单） | `InternalError.QuotaMaxClsLimit` |
-| 集群节点数 | 5000 | 每集群 | 是（提工单） | `InternalError.QuotaMaxNodLimit` |
+| 单地域集群数 | **20** | 每地域每账号 | 是（提工单） | `InternalError.QuotaMaxClsLimit` |
+| 单集群节点数 | **5000** | 每集群 | 是（提工单） | `InternalError.QuotaMaxNodLimit` |
 | 节点池数 | 20 | 每集群 | 是（提工单） | `LimitExceeded` |
 | 每节点池节点数 | 受 ASG MaxSize 限制 | 每节点池 | 是（改 ASG） | 扩容时 ASG 达上限 |
 | 重启节点上限 | 100 | 每次请求 | 否 | `InvalidParameterValue` |
-| 集群等级 | L5 ~ L100 | 每集群 | 是（`ModifyClusterLevel`） | `InvalidParameterValue.ClusterLevel` |
+| 集群规格（等级） | L5 ~ L5000 | 每集群 | 是（`ModifyClusterLevel` / 自动升配） | `InvalidParameterValue.ClusterLevel` |
 
-> 集群等级（L5/L20/L50/L100）决定集群管理费与可管理节点规模，等级越高费用越高但支持节点越多。详见 [集群等级说明](https://cloud.tencent.com/document/product/457)。
+> **容器网段 CIDR**：创建时自定义；决定节点上限 / Service 上限 / 每节点 Pod 上限；**暂不支持变更**（变更须重建集群，或走受限路径如 GR 的 `AddClusterCIDR`）。
+
+### 集群规格与 K8s 资源配额（按规格）
+
+> 下列配额自 2022-04-30 起生效，无法移除；不足时升高集群规格。超级节点 Pod 与非超级节点 Pod **分列**限制。
+
+| 集群规格 | Pod 上限（非超级节点） | Pod 上限（超级节点） | ConfigMap 上限 | CRD / 其他 K8s 资源上限 |
+|:--------:|:---------------------:|:-------------------:|:--------------:|:----------------------:|
+| L5 | 600 | 400 | 256 | 1250 |
+| L20 | 1500 | 800 | 512 | 2500 |
+| L50 | 3000 | 1200 | 1024 | 5000 |
+| L100 | 6000 | 1600 | 2048 | 10000 |
+| L200 | 15000 | 2000 | 4096 | 20000 |
+| L500 | 30000 | 4000 | 6144 | 50000 |
+| L3000 | 150000 | 24000 | 10240 | 150000 |
+| L5000 | 200000 | 40000 | 20480 | 200000 |
+
+> 集群规格决定管理费与可管理规模；选型见创建集群 Decide。计费项拆分见官方计费概述（半常量）。
 
 ## API 限频
 
@@ -46,8 +63,7 @@ tccli tke DescribeClusterNodePools --region <REGION> --ClusterId "<CLUSTER_ID>" 
 # expected: 数字 ≤ 20
 
 # 集群节点数 (核对 ClusterRunningNodeNum)
-tccli tke DescribeClusterStatus --region <REGION> --ClusterIds '["<CLUSTER_ID>"]' \
-  --filter "ClusterStatusSet[0].{state:ClusterState,running:ClusterRunningNodeNum,init:ClusterInitNodeNum}"
+tccli tke DescribeClusterStatus --region <REGION> --filter "ClusterStatusSet[?ClusterId=='<CLUSTER_ID>'] | [0].{state:ClusterState,running:ClusterRunningNodeNum,init:ClusterInitNodeNum}"
 # expected: running 节点数 ≤ 5000
 ```
 

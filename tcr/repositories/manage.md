@@ -5,7 +5,15 @@ fused: false
 ---
 # 管理命名空间和仓库
 
+> 控制台: [容器镜像服务控制台 - 仓库管理](https://console.cloud.tencent.com/tcr/repository)
 > 在 TCR 企业版实例下创建/查询/删除命名空间与仓库。命名空间是仓库的分组，仓库是镜像的存放单元。
+
+## 触发条件
+
+- `tccli tcr DescribeNamespaces --RegistryId "<ID>"` 返回 `TotalCount: 0`（实例下无命名空间，docker push 报 `project not found`）
+- `docker push <DOMAIN>/<NS>/<REPO>:<TAG>` 报 `repository not found`，`DescribeRepositories --NamespaceName "<NS>"` 返回 `RepositoryList: []`（命名空间下无仓库）
+- `LimitExceeded.Namespace`（命名空间数达 basic=50 上限）或 `LimitExceeded.Repository`（仓库数达 basic=1000 上限），需清理或提额
+
 
 ## 概述
 
@@ -45,12 +53,12 @@ tccli tcr DescribeNamespaces --region <REGION> --RegistryId "<REGISTRY_ID>" \
 
 ### CreateNamespace
 
-> 来源：`tccli tcr CreateNamespace --generate-cli-skeleton`。
+> 完整入参以 `tccli tcr CreateNamespace help --detail` 为准。
 
 | 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
 |:------|------|:--------:|------------|---------------|
 | RegistryId | string | 是 | `tcr-xxxxxxxx` | `ResourceNotFound` |
-| NamespaceName | string | 是 | 2-30 字符，小写字母/数字/`-`/`_`，实例内唯一 | `InvalidParameter.InstanceName` / `LimitExceeded.Namespace` |
+| NamespaceName | string | 是 | 控制台：2–120 字符，小写字母/数字及 `.`/`_`/`-`（不能以分隔符开头、结尾或连续），实例内唯一 | `InvalidParameter.InstanceName` / `LimitExceeded.Namespace` |
 | IsPublic | boolean | 是 | `true`（公开，任何人可拉）/ `false`（私有，需凭证） | `InvalidParameterValue` |
 | TagSpecification | object | 否 | 标签 | — |
 | IsAutoScan | boolean | 否 | 自动安全扫描，默认 false | — |
@@ -59,7 +67,7 @@ tccli tcr DescribeNamespaces --region <REGION> --RegistryId "<REGISTRY_ID>" \
 
 ### CreateRepository
 
-> 来源：`tccli tcr CreateRepository --generate-cli-skeleton`。
+> 完整入参以 `tccli tcr CreateRepository help --detail` 为准。
 
 | 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
 |:------|------|:--------:|------------|---------------|
@@ -80,7 +88,7 @@ tccli tcr DescribeNamespaces --region <REGION> --RegistryId "<REGISTRY_ID>" \
 - **默认推荐**: Private——除非确需公开分发，否则保持私有
 - **能改吗?**: 命名空间可见性可后续 `ModifyNamespace`（如存在）修改，但镜像若已被公开拉取无法撤回
 
-### 步骤 2：创建命名空间 — 最小化
+### 步骤 2：创建命名空间
 
 ```bash
 tccli tcr CreateNamespace --region <REGION> \
@@ -91,9 +99,9 @@ tccli tcr CreateNamespace --region <REGION> \
 | 占位符 | 含义 | 约束 | 如何获取 |
 |:------------|:-----|:-----|:---------|
 | `<REGISTRY_ID>` | 实例 ID | `tcr-xxxxxxxx` | `tccli tcr DescribeInstances` → `Registries[].RegistryId` |
-| `<NAMESPACE_NAME>` | 命名空间名 | 2-30 字符，小写字母数字`-`_，实例内唯一 | 自定义，如 `prod`、`team-backend` |
+| `<NAMESPACE_NAME>` | 命名空间名 | 2–120 字符，小写字母/数字及 `.`/`_`/`-`，实例内唯一 | 自定义，如 `prod`、`team-backend` |
 
-### 步骤 3：创建仓库 — 最小化
+### 步骤 3：创建仓库
 
 ```bash
 tccli tcr CreateRepository --region <REGION> \
@@ -107,16 +115,16 @@ tccli tcr CreateRepository --region <REGION> \
 ### 步骤 4：查询
 
 ```bash
-# 命名空间列表
+# 命名空间列表（顶层 NamespaceList[]；字段 Name/Public/NamespaceId 等）
 tccli tcr DescribeNamespaces --region <REGION> --RegistryId "<REGISTRY_ID>" \
-  --filter "NamespaceList[].{name:Name,public:Public}"
-# expected: 命名空间名 + 可见性
+  --filter "NamespaceList[].{name:Name,public:Public}" --output text
+# expected: 命名空间名 + 可见性；条数可用 --filter TotalCount
 
-# 仓库列表
+# 仓库列表（顶层 RepositoryList[]；Name 常为 ns/repo，另有 Namespace 字段）
 tccli tcr DescribeRepositories --region <REGION> --RegistryId "<REGISTRY_ID>" \
   --NamespaceName "<NAMESPACE_NAME>" --Limit 20 \
-  --filter "RepositoryList[].{name:Name,ns:Namespace}"
-# expected: 仓库列表
+  --filter "RepositoryList[].{name:Name,ns:Namespace}" --output text
+# expected: 仓库列表；全实例条数 --filter TotalCount（可不传 NamespaceName）
 ```
 
 ## 验证
@@ -129,7 +137,7 @@ tccli tcr DescribeRepositories --region <REGION> --RegistryId "<REGISTRY_ID>" \
 
 ### 修改命名空间属性
 
-> 命名空间可见性、自动扫描、漏洞阻断可后续修改。`ModifyNamespace` 覆盖式更新，参数以 `--generate-cli-skeleton` 为准（`IsPublic`/`IsAutoScan`/`IsPreventVUL` 等）。
+> 命名空间可见性、自动扫描、漏洞阻断可后续修改。`ModifyNamespace` 覆盖式更新，参数以 `tccli tcr ModifyNamespace help --detail` 为准（`IsPublic`/`IsAutoScan`/`IsPreventVUL` 等）。
 
 ```bash
 # 修改命名空间可见性（RegistryId + NamespaceName 定位）
@@ -172,11 +180,12 @@ tccli tcr DescribeNamespaces --region <REGION> --RegistryId "<REGISTRY_ID>" \
 
 | 现象 | 诊断 | 根因 | 修复 |
 |:--------|:----------|:------------|:-----|
-| `InvalidParameter.InstanceName` | 检查命名空间格式 | 含非法字符或超长 | 用小写字母/数字/`-`/`_`，2-30 字符 |
+| `InvalidParameter.InstanceName` | 检查命名空间格式 | 含非法字符或超长 | 用小写字母/数字及 `.`/`_`/`-`，2–120 字符 |
 | `LimitExceeded.Namespace` | `DescribeNamespaces` 看存量 | 命名空间达上限（basic=50） | 删除闲置命名空间或提工单提额 |
 | `LimitExceeded.Repository` | `DescribeRepositories` 看存量 | 仓库达上限（basic=1000） | 删除闲置仓库 |
 | `ResourceNotFound` | `DescribeInstances` 核对 ID | RegistryId 错或实例非 Running | 确认实例 ID 与状态 |
-| `FailedOperation` | `DescribeInstanceStatus` 看状态 | 实例非 Running | 等实例 Running 后重试 |
+| `FailedOperation.ErrorTcrResourceConflict`（消息含 `project named ... already exists`） | `DescribeNamespaces` 看重名 | 命名空间名已存在 | 换名或先删旧命名空间 |
+| `FailedOperation` | `DescribeInstanceStatus` 查看状态 | 实例非 Running | 等实例 Running 后重试 |
 
 ### 命令成功但状态不对 (exit = 0)
 
@@ -220,13 +229,31 @@ tccli tcr DownloadHelmChart --RegistryId "<REGISTRY_ID>" --region <REGION> \
 
 > Helm Chart 用 `ChartName`+`ChartVersion`（非 RepositoryName），存放在命名空间下。
 
+## 收尾确认
+
+```bash
+# ③ 跨步骤汇总：命名空间 + 仓库 一次性核对（Verify 逐项查，这里汇总两步产物）
+tccli tcr DescribeNamespaces --region ap-guangzhou --RegistryId "<REGISTRY_ID>" \
+  --filter "NamespaceList[?Name=='<NAMESPACE_NAME>'].{name:Name,public:Public}"
+# expected: 含目标命名空间, public 与创建参数一致
+
+tccli tcr DescribeRepositories --region ap-guangzhou --RegistryId "<REGISTRY_ID>" \
+  --NamespaceName "<NAMESPACE_NAME>" --Limit 20 \
+  --filter "RepositoryList[?Name=='<REPOSITORY_NAME>'].{name:Name,ns:Namespace}"
+# expected: 含目标仓库, ns=<NAMESPACE_NAME>
+
+# ④ 衔接下一步前置：命名空间/仓库已建，docker login 可达（进推送镜像前须确认凭证+仓库可达）
+docker login <REGISTRY_DOMAIN> --username <USERNAME> --password <TOKEN>
+# expected: Login Succeeded（命名空间/仓库建好后即可 docker push）
+```
+
+> 命名空间存在 + 仓库存在 + docker Login Succeeded = 仓库管理闭环完成，可进入推送镜像。
+
+---
+
 ## 下一步
 
 - [推送拉取镜像](../images/push-pull.md) — 命名空间/仓库创建后 push/pull
 - [访问控制](../access/manage.md) — 配置谁能 push/pull
 - [创建实例](../instances/create.md) — 实例生命周期
 - [故障排查](../troubleshooting.md) — `denied` / `not found` 诊断
-
-## 控制台替代方案
-
-[容器镜像服务控制台 - 仓库管理](https://console.cloud.tencent.com/tcr/repository)

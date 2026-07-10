@@ -41,7 +41,7 @@ tccli tcr DescribeInstanceStatus --region <REGION> --RegistryIds '["<REGISTRY_ID
 
 | 状态 | 含义 | 触发条件 | 用户可执行操作 | 终态 |
 |:-----|:-----|:---------|:--------------|:----:|
-| `Creating` | 实例创建中 | `CreateInstance` | 等待（通常 3-5 分钟） | 否 |
+| `Creating` | 实例创建中 | `CreateInstance` | 等待（约 3-5 分钟） | 否 |
 | `Running` | 实例正常运行 | 创建完成 | 全部操作（推送 / 拉取 / 配置访问 / 生命周期） | 否 |
 | `Deleting` | 实例删除中 | `DeleteInstance` | 等待 | 是 |
 | `Isolated` | 实例已隔离 | 欠费隔离 | 续费恢复 | 否 |

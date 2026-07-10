@@ -3,11 +3,11 @@ doc_type: Concept
 ---
 # Agent 优化模式
 
-> 如何用 tccli 的 Agent 优化 flag 组合来省 token、等异步、模板化调用、标记身份。这些模式让 agent 高效驱动 tccli 完成长任务。
+> 如何用 TCCLI 的 Agent 优化 flag 组合来省 token、等异步、模板化调用、标记身份。这些模式让 agent 高效驱动 TCCLI 完成长任务。
 
 ## 概述
 
-tccli 提供 5 个正交 flag，agent 可按场景组合。本质是把数据变换从推理层下沉到执行层——用 CLI 本地算力换 agent 的 token 预算，用长任务原语换轮询轮次。
+TCCLI 提供 5 个正交 flag，agent 可按场景组合。本质是把数据变换从推理层下沉到执行层——用 CLI 本地算力换 agent 的 token 预算，用长任务原语换轮询轮次。
 
 ```mermaid
 graph LR
@@ -31,7 +31,7 @@ graph LR
 **何时用**：查询资源列表，无需完整 JSON。每次查询默认启用。
 
 ```bash
-# 最省 token 的查询模式
+# token 开销最低的查询模式
 tccli cvm DescribeInstances --region ap-guangzhou \
   --filter "InstanceSet[?InstanceState=='RUNNING'].{id:InstanceId,name:InstanceName,zone:Placement.Zone}" \
   --output text

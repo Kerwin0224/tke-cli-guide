@@ -4,11 +4,11 @@ subtype: 8D
 ---
 # TCR 错误码
 
-> TCR 涉及 tccli 与 docker 两个工具，错误码分三层：docker CLI 错误（推送/拉取高频）→ TCR 特有错误码 → 通用错误码。错误码按 API/docker 返回原样写出。
+> TCR 涉及 TCCLI 与 docker 两个工具，错误码分三层：docker CLI 错误（推送/拉取高频）→ TCR 特有错误码 → 通用错误码。错误码按 API/docker 返回原样写出。
 
 ## docker CLI 错误（推送 / 拉取高频）
 
-> docker login / push / pull 的失败信号。这些不是 tccli 错误码，是 docker 侧的文本消息，按原样识别。
+> docker login / push / pull 的失败信号。这些不是 TCCLI 错误码，是 docker 侧的文本消息，按原样识别。
 
 | 消息 | 含义 | 诊断 | 修复 |
 |:-----|:-----|:-----|:-----|
@@ -27,7 +27,7 @@ subtype: 8D
 | `LimitExceeded.Namespace` | 命名空间超配额 | 否 | `tccli tcr DescribeNamespaces` 看存量 | 删除闲置命名空间（basic=50/standard=100/premium=500） |
 | `LimitExceeded.Repository` | 仓库数超配额 | 否 | `tccli tcr DescribeRepositories` 看存量 | 删除闲置仓库（basic=1000/standard=3000/premium=5000） |
 | `ResourceNotFound` | 实例 / 命名空间 / 仓库不存在 | 否 | `tccli tcr DescribeInstances` 核对 ID/Region | 确认 ID 与地域一致 |
-| `FailedOperation` | 操作失败（实例非 Running 等） | 否 | `tccli tcr DescribeInstanceStatus` 看状态 | 等实例 `Running` 后重试 |
+| `FailedOperation` | 操作失败（实例非 Running 等） | 否 | `tccli tcr DescribeInstanceStatus` 查看状态 | 等实例 `Running` 后重试 |
 | `UnauthorizedOperation` | CAM 权限不足 | 否 | 查 CAM 策略 | 授予 `tcr:<Action>` 权限 |
 
 ## 通用错误码
@@ -55,7 +55,7 @@ tccli tcr DescribeExternalEndpointStatus --region <REGION> --RegistryId "<REGIST
 # expected: Status = "Opened"
 ```
 
-> 错误响应结构：`{"Response":{"Error":{"Code":"...","Message":"..."},"RequestId":"..."}}`。docker 侧错误不是 JSON，是 stderr 文本——用 `--language en-US` 锁定 tccli 错误语言，docker 错误天然英文。如遇未列出的错误码，查 [腾讯云 TCR 错误码文档](https://cloud.tencent.com/document/product/1141)。
+> 错误响应结构：`{"Response":{"Error":{"Code":"...","Message":"..."},"RequestId":"..."}}`。docker 侧错误不是 JSON，是 stderr 文本——用 `--language en-US` 锁定 TCCLI 错误语言，docker 错误天然英文。如遇未列出的错误码，查 [腾讯云 TCR 错误码文档](https://cloud.tencent.com/document/product/1141)。
 
 ## 相关文档
 

@@ -8,6 +8,13 @@ fused: true
 > 节点的查询、启停、删除。本节命令跨 TKE 两个 API 版本——按操作类型选择版本，所有命令显式带 `--version`。
 > 完整版本选择见 [API 版本选择](../index.md#api-版本选择)。
 
+## 触发条件
+
+- DescribeClusterInstances/DescribeClusterMachines 返回节点列表，需对具体节点执行启停/删除/驱逐/扩缩/修改/GPU/接入操作 — 从 [查询节点](#查询节点) 开始定位节点
+- 节点出现 NotReady 或需维护（驱逐 Pod 后重建）— 看 [节点隔离与驱逐](#节点隔离与驱逐kubectl非-tccli) 段
+- 你遇到节点运维问题想查诊断路径 — 看 [故障恢复] 或对应操作段
+
+
 ## 查询节点
 
 ```bash
@@ -65,9 +72,9 @@ tccli tke DeleteClusterMachines --version 2022-05-01 \
 
 > 旧版 (2018-05-25) 用 `DeleteClusterInstances --version 2018-05-25 --InstanceIds '["<INSTANCE_ID>"]'`（Instance 抽象）。两版抽象不同: 新版 Machine vs 旧版 Instance。
 
-## 节点隔离与驱逐（kubectl，非 tcli）
+## 节点隔离与驱逐（kubectl，非 tccli）
 
-> tke API 无 cordon/drain 普通节点 Action（仅 `DrainClusterVirtualNode` 超级节点 / `DrainExternalNode` 注册节点）。普通节点隔离用 **kubectl**（K8s 原生，非 tcli）。本段补全"故障→隔离→恢复"生命链——[健康检查](health-check.md) 检测到不可修复故障时，用此段隔离节点。
+> tke API 无 cordon/drain 普通节点 Action（仅 `DrainClusterVirtualNode` 超级节点 / `DrainExternalNode` 注册节点）。普通节点隔离用 **kubectl**（K8s 原生，非 tccli）。本段补全"故障→隔离→恢复"生命链——[健康检查](health-check.md) 检测到不可修复故障时，用此段隔离节点。
 
 ### 隔离节点（停止调度新 Pod）
 
@@ -110,8 +117,8 @@ tccli tke ScaleNodePool --version 2022-05-01 \
 ```bash
 # 查询节点池 ID
 tccli tke DescribeNodePools --version 2022-05-01 --ClusterId "<CLUSTER_ID>" \
-  --filter "NodePoolSet[].{id:NodePoolId,name:Name,replicas:Replicas}" --output text
-# expected: 节点池列表 id/name/replicas
+  --filter "NodePools[].{id:NodePoolId,name:Name,replicas:Native.Replicas}" --output text
+# expected: 节点池列表 id/name/replicas（新版 2022 集合名是 NodePools 非 NodePoolSet；Replicas 嵌套在 Native 对象内）
 ```
 
 ## 修改原生节点配置 (2022-05-01)
@@ -198,6 +205,51 @@ tccli tke CreateClusterInstances --version 2018-05-25 \
 | `<CVM_RUNINSTANCES_JSON>` | CVM RunInstances 入参 JSON | 含 InstanceType/ImageId/Placement/InstanceCount 等，可先用 `tccli cvm RunInstances --generate-cli-skeleton` 生成模板 |
 
 > `CreateClusterInstances`（新建 CVM）vs `AddExistedInstances`（接入已有 CVM）：前者透传 CVM `RunInstances` JSON 让 TKE 代为创建，后者把已存在实例加入集群。参数 `RunInstancePara` 是 JSON 字符串，`SkipValidateOptions[]` 可跳过指定校验项。
+
+### 多块数据盘节点
+
+新建节点且需 ≥2 块数据盘时：`RunInstancePara` 内的 CVM `DataDisks` 负责开盘；`InstanceAdvancedSettings.DataDisks` 负责格式化与挂载。两侧块数一致。仅传 CVM `DataDisks` 时，盘可能未格式化、未挂到目标目录。
+
+```bash
+# 多块数据盘：CVM DataDisks 开盘 + InstanceAdvancedSettings.DataDisks 挂载
+tccli tke CreateClusterInstances --version 2018-05-25 \
+  --ClusterId "<CLUSTER_ID>" --region ap-guangzhou \
+  --RunInstancePara '<CVM_RUNINSTANCES_JSON_WITH_DATADISKS>' \
+  --InstanceAdvancedSettings '<IAS_WITH_DATADISKS>'
+# expected: exit 0（或 CAM 拦截后授权）；返回 InstanceIdSet[]
+```
+
+| 占位符 | 含义 | 约束 |
+|:-------|:-----|:-----|
+| `<CVM_RUNINSTANCES_JSON_WITH_DATADISKS>` | CVM `RunInstances` JSON | 含 `DataDisks:[{DiskType,DiskSize},…]`（≥2 块）及 Placement/InstanceType/VPC 等 |
+| `<IAS_WITH_DATADISKS>` | TKE 节点高级设置 | `DataDisks[]` 每项含 `DiskType`/`DiskSize`/`FileSystem`/`MountTarget`/`AutoFormatAndMount`；块数与 CVM 侧一致 |
+
+`InstanceAdvancedSettings.DataDisks` 结构：
+
+```json
+{
+  "DataDisks": [
+    {"AutoFormatAndMount": true, "DiskSize": 50, "DiskType": "CLOUD_BSSD", "FileSystem": "ext4", "MountTarget": "<MOUNT_1>"},
+    {"AutoFormatAndMount": true, "DiskSize": 50, "DiskType": "CLOUD_BSSD", "FileSystem": "ext4", "MountTarget": "<MOUNT_2>"}
+  ]
+}
+```
+
+> `FileSystem` 取值以该字段契约为准（常见 `ext4`/`xfs`）。`MountTarget` 用本环境挂载点，勿复用他人环境路径。
+
+## 收尾确认
+
+> 本篇是多操作合集（查询/启停/删除/驱逐/扩缩/修改/GPU/接入），无统一收尾命令。每类操作执行后用下表对应命令确认该操作产物：
+
+| 操作类型 | 确认命令 | 预期（②业务可用性端到端） |
+|:---------|:---------|:--------------------------|
+| 启停/重启 | `tccli tke DescribeClusterMachines --version 2022-05-01 --ClusterId "<CLUSTER_ID>" --Filters '[{"Name":"InstanceIds","Values":["<ID>"]}]'` | ②业务可用性: InstanceState=Stopped(停止后)/Running(启动后)；启动后 `kubectl get nodes` 节点须 Ready |
+| 删除节点 | `tccli tke DescribeClusterInstances --version 2018-05-25 --ClusterId "<CLUSTER_ID>" --InstanceIds '["<ID>"]'` | ②业务可用性: 目标节点不在列表（已删）；剩余 `kubectl get nodes` 无 NotReady |
+| 驱逐 (kubectl) | `kubectl get nodes <NODE_NAME>` | ②业务可用性: 节点 SchedulingDisabled + Pod 已迁移无 Pending |
+| 扩缩容 | 见 [扩缩容节点池](nodepool-scale.md) 收尾确认 | ③跨步骤汇总: 新版 LifeState=Running + Replicas==ReadyReplicas；旧版 LifeState=normal + DesiredNodesNum==NodeCountSummary |
+| 接入已有 CVM | `tccli tke DescribeClusterInstances --version 2018-05-25 --ClusterId "<CLUSTER_ID>" --InstanceIds '["<ID>"]'` | ②业务可用性: 接入节点 InstanceState=running 且 `kubectl get nodes` 含该节点 Ready |
+
+---
 
 ## 下一步
 

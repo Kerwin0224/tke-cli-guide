@@ -5,20 +5,27 @@ fused: true
 
 # TCR: 5 分钟推送第一份镜像
 
+> 控制台: [TCR 控制台](https://console.cloud.tencent.com/tcr)
 > **Traceability**: [TCR 产品文档](https://cloud.tencent.com/document/product/1141)
 >
 > ⚠️ **计费警告**: 创建企业版实例即开始计费。`basic` 为按量计费最低规格，
-> 在 [Step 3: 删除实例](#step-3-删除实例清理) 中销毁可停止计费。用完即删。
+> 在 [Step 4: 删除实例](#step-4-删除实例清理) 中销毁可停止计费。用完即删。
 >
-> **目标读者**: DevOps / SRE — 用 tccli + docker 管理 TCR 镜像仓库。
+> **目标读者**: DevOps / SRE — 用 TCCLI + docker 管理 TCR 镜像仓库。
 >
 > **阅读路径**: 本文 → [TCR 概览](../tcr/index.md) → [创建实例详解](../tcr/instances/create.md)
 >
 > **时间估计**: ~5 分钟（实例创建约 1 分钟，公网端点生效 1-2 分钟，docker push 取决于网络）
 >
-> **本文同时使用 tccli 和 docker 两个 CLI 工具。**
+> **本文同时使用 TCCLI 和 docker 两个 CLI 工具。**
 
 ---
+
+## 触发条件
+
+- 需用 TCCLI 验证创建镜像仓库并推送一份镜像（建实例→开公网→推送→删除闭环）— 本篇是最短路径
+- 终端执行 `tccli tcr DescribeInstances` 返回空或需验证 TCR+docker 混合工作流 — 从 [Step 0 环境检查](#step-0-环境检查) 开始
+- 要使用 TCCLI 管理镜像仓库 + docker 推送的混合工作流实操 TCR 生命周期 — 本 Quickstart 含完整 docker login/tag/push + TCR 验证
 
 ## 准备工作
 
@@ -26,21 +33,21 @@ fused: true
 
 | # | 条件 | 验证命令 | 预期结果 |
 |:--|:-----|:--------|:---------|
-| 1 | tccli 已安装 (>= 3.0) | `tccli --version` | `3.1.117.1` 或更高 |
+| 1 | TCCLI 已安装 (>= 3.0) | `tccli --version` | `3.1.124.1` 或更高 |
 | 2 | 凭证已配置 | `tccli tcr DescribeRegions` | 返回 `"RequestId"`，无 Error |
 | 3 | 目标地域可用 | `tccli tcr DescribeRegions` | `ap-guangzhou` 的 `Status` 为 `alluser` |
 | 4 | Docker 已安装 (>= v24) | `docker --version` | `Docker version 24.x.x` 或更高（29.6.0） |
 | 5 | Docker daemon 运行中 | `docker info 2>&1` | `Server Version: 29.x.x` 或更高 |
 
-> 未安装 tccli → [安装 tccli](../getting-started/install.md)。凭证未配置 → [配置凭证](../getting-started/credentials.md)（`tccli configure` 或 `tccli auth login`）。
+> 未安装 TCCLI → [安装 TCCLI](../getting-started/install.md)。凭证未配置 → [配置凭证](../getting-started/credentials.md)（`tccli configure` 或 `tccli auth login`）。
 > Docker 安装参考 [Docker 官方指南](https://docs.docker.com/get-docker/)。
 
 ```bash
 tccli --version
-# expected: 3.1.117.1
+# expected: 3.1.124.1
 ```
 ```text
-3.1.117.1
+3.1.124.1
 ```
 
 ```bash
@@ -60,7 +67,7 @@ Docker version 29.6.0
 
 ```bash
 tccli tcr DescribeRegions --output json
-# expected: TotalCount=11, Regions[] 含 ap-guangzhou 且 Status=alluser
+# expected: TotalCount=27, Regions[] 含 ap-guangzhou 且 Status=alluser
 ```
 ```json
 {
@@ -109,7 +116,7 @@ ap-nanjing    nj
 | 安全扫描 | 基础 | 增强 | 全面 |
 | 适用 | 个人/小团队试用 | 企业日常开发 | 核心生产 |
 
-> **推荐**: `basic` — 入门场景首选，按量计费、用完即删。
+> **推荐**: `basic` — 入门场景用 basic，按量计费、用完即删。
 
 ### 创建前: 验证实例名可用
 
@@ -248,11 +255,11 @@ Address: 81.71.x.x
 ```
 
 > 记下 `PublicDomain` 的值（如 `my-qs-registry.tencentcloudcr.com`），
-> Step 1.5 和 Step 2 都会用到，下文以 `<PUBLIC_DOMAIN>` 代指。
+> Step 2 和 Step 3 都会用到，下文以 `<PUBLIC_DOMAIN>` 代指。
 
 ---
 
-## Step 1.5: 开启公网访问端点
+## Step 2: 开启公网访问端点
 
 > ⚠️ **docker login 的隐藏前提**: docker login/push 前必须先开启公网访问端点，
 > 否则 `docker login` 会超时或 TLS 握手失败。
@@ -306,9 +313,9 @@ tccli tcr DescribeExternalEndpointStatus --region ap-guangzhou \
 
 ---
 
-## Step 2: 登录并推送镜像
+## Step 3: 登录并推送镜像
 
-### 2.1 创建访问 Token
+### 3.1 创建访问 Token
 
 ```bash
 tccli tcr CreateInstanceToken \
@@ -337,7 +344,7 @@ tccli tcr CreateInstanceToken \
 > ⚠️ **Token 是敏感凭证**。立即保存到环境变量，禁止硬编码、打印日志、提交 git。
 > 丢失后用 `tccli tcr DescribeInstanceToken --RegistryId tcr-xxxxxxxx` 查询现有 Token。
 
-### 2.2 Docker 登录
+### 3.2 Docker 登录
 
 将上一步的 `Username` 和 `Token` 存入环境变量，再用 `--password-stdin` 登录：
 
@@ -360,15 +367,9 @@ echo "$TCR_TOKEN" | docker login "$TCR_ENDPOINT" -u "$TCR_USERNAME" --password-s
 
 > ⚠️ 切勿 `docker login -p <TOKEN>` — 明文暴露在 shell 历史。始终用 `--password-stdin`。
 
-> ⚠️ **边界**: 本环境 docker daemon 运行在 colima 虚拟机（Ubuntu 24.04, OpenSSL 3.5.7）
-> 内，因 colima VM 网络栈对 TLS 握手包的处理限制，docker login 报
-> `TLS handshake timeout`（TCP 443 可达但 TLS ClientHello 后连接 reset）。
-> 经分层诊断确认：host 侧 `curl`能连通 TCR 端点（exit 0），
-> 端点/Token 均有效，**根因是 colima VM 网络栈限制，非 TLS 库版本、非 TCR 端点、非 Token 问题**。
-> 命令格式、endpoint 结构、Token 结构均已正确。下方 docker push 命令同理。
-> docker push 成功后，用 `tccli tcr DescribeImages` 验证（tccli 侧可）。
+> ⚠️ **边界**: 若 `docker login` 报 `TLS handshake timeout`（公网端点已 Open、DNS 已解析、host 侧 `curl` 可连通），多为本机 docker daemon 所在 VM（如 colima）网络栈对 TLS 握手的限制。此为环境边界，命令格式与端点均正确。可换用 Linux 裸机 docker、通过 TKE 节点内网推送，或继续用 TCCLI 侧 `DescribeImages` 验证镜像入库。
 
-### 2.3 创建命名空间
+### 3.3 创建命名空间
 
 ```bash
 tccli tcr CreateNamespace \
@@ -391,7 +392,7 @@ tccli tcr CreateNamespace \
 > ⚠️ **`--IsPublic` 是必填参数**。缺省会报参数错误（exit 252）。
 > `false` = 私有（仅认证用户可拉取），`true` = 公开（匿名可拉取）。
 
-### 2.4 推送镜像
+### 3.4 推送镜像
 
 ```bash
 # 拉取轻量测试镜像
@@ -412,11 +413,11 @@ docker push "$TCR_ENDPOINT/<NAMESPACE_NAME>/<REPO_NAME>:<TAG>"
 
 | 占位符 | 含义 | 获取方式 |
 |--------|------|---------|
-| `<NAMESPACE_NAME>` | 命名空间名 | Step 2.3 创建的命名空间 |
+| `<NAMESPACE_NAME>` | 命名空间名 | Step 3.3 创建的命名空间 |
 | `<REPO_NAME>` | 仓库名 | 自定义（如 `alpine`） |
 | `<TAG>` | 镜像标签 | 自定义（如 `v1`） |
 
-### 2.5 验证推送
+### 3.5 验证推送
 
 ```bash
 # TCR API 确认镜像已入库
@@ -441,18 +442,18 @@ tccli tcr DescribeImages --region ap-guangzhou \
 
 | 占位符 | 含义 | 获取方式 |
 |--------|------|---------|
-| `<NAMESPACE_NAME>` | 命名空间名 | Step 2.3 创建的命名空间 |
-| `<REPO_NAME>` | 仓库名 | Step 2.4 使用的仓库名 |
+| `<NAMESPACE_NAME>` | 命名空间名 | Step 3.3 创建的命名空间 |
+| `<REPO_NAME>` | 仓库名 | Step 3.4 使用的仓库名 |
 
 > 镜像索引有约 5 秒缓存延迟。push 成功后若 `DescribeImages` 暂未返回，
-> 等几秒再查。详见 [故障恢复: exit 0 陷阱](#exit-0-陷阱)。
+> 等待约 5 秒后重查。详见 [故障恢复: exit 0 误判](#exit-0-误判)。
 
 ---
 
-## Step 3: 删除实例（清理）
+## Step 4: 删除实例（清理）
 
 > ⚠️ **不可逆操作**: 实例删除后，所有命名空间、仓库、镜像 tag、
-> 访问凭证**永久丢失**，无法恢复。关联 COS 桶加 `--DeleteBucket true` 一并清理，
+> 访问凭证**永久丢失**，无法恢复。关联 COS 桶加 `--DeleteBucket true` 同时清理，
 > 否则残留存储桶持续产生存储费。
 
 ### 前置检查: 删除保护
@@ -526,21 +527,42 @@ tccli tcr DescribeInstances --region ap-guangzhou \
 | 症状 / 错误码 | 根因 | 修复 |
 |:-------------|:-----|:-----|
 | `CreateNamespace` 报参数错误（exit 252） | 缺必填参数 `--IsPublic` | 补 `--IsPublic false` 或 `--IsPublic true` |
-| `docker login` 报 `TLS handshake timeout` | 公网端点未开启或 DNS 未生效 | Step 1.5 开启端点，等 `Status=Opened` 且 DNS 解析后再登录 |
+| `docker login` 报 `TLS handshake timeout` | 公网端点未开启或 DNS 未生效 | Step 2 开启端点，等 `Status=Opened` 且 DNS 解析后再登录 |
 | `docker login` 报 `TLS handshake timeout`（公网端点已 Open、DNS 已解析） | 本机 docker daemon 所在 VM 网络栈限制（如 colima） | 此为环境限制，非命令错误。可换用 Linux 裸机 docker 或通过 TKE 节点内网推送 |
 | `docker push` 报 `denied: requested access ... denied` | Token 无权限或命名空间不存在 | `DescribeInstanceToken` 查 Token 状态；`DescribeNamespaces` 确认命名空间存在 |
 | `docker push` 报 `name unknown: repository` | 仓库/命名空间不存在 | 先 `CreateNamespace`，再 push |
 | `CheckInstanceName` 返回 `IsValidated: false` | `RegistryName` 已被占用 | 换名后重新 `CheckInstanceName` 预检 |
 | `RegionNotSupport` | 地域不支持 TCR 企业版 | 换 `Status: alluser` 的地域 |
 
-### exit 0 陷阱
+### exit 0 误判
 
 | 症状 | 诊断 | 说明 |
 |:-----|:-----|:-----|
 | `docker push` 成功但 `DescribeImages` 不显示 | 等 ~5 秒再查 | 镜像索引缓存延迟约 5 秒，非推送失败 |
 | 实例创建成功（`Status: Running`）但域名不解析 | `nslookup <PUBLIC_DOMAIN>` | DNS 生效约 1-2 分钟，等待后重试 |
 | 公网端点 `Status: Opening` 迟迟不变 `Opened` | `DescribeExternalEndpointStatus` 轮询 | 异步操作，1-2 分钟内完成 |
-| `DeleteInstance` 返回 `RequestId` 但 `DescribeInstances` 仍有记录 | 等几秒后重查 | 删除异步，`TotalCount: 0` 即确认 |
+| `DeleteInstance` 返回 `RequestId` 但 `DescribeInstances` 仍有记录 | 等待约 5 秒后重查 | 删除异步，`TotalCount: 0` 即确认 |
+
+---
+
+## 收尾确认
+
+```bash
+# 残留资源核查：DeleteInstance --DeleteBucket true 已声明同删关联 COS 桶。
+# TCR 关联桶命名固定为 tcr-<RegistryId>-<AppId>（AppId 见账号信息）；
+# 桶清理由 --DeleteBucket true 负责，tccli cos 是对象操作 CLI（无 DescribeBuckets 枚举接口）。
+# 已知桶名时可用 tccli cos ls 直接确认桶已不存在：
+tccli cos ls -b tcr-<REGISTRY_ID>-<APP_ID>
+# expected: 报错 "NoSuchBucket"（桶已随实例删除）；若返回对象列表则需手动清理
+# 说明：tccli cos 的子命令为 ls/list/download 等对象操作，不提供桶枚举，
+# 残量桶确认须基于已知桶名；否则到 COS 控制台核对 "tcr-" 前缀桶。
+
+# 实例列表最终确认
+tccli tcr DescribeInstances --region ap-guangzhou --filter "TotalCount" --output text
+# expected: 0
+```
+
+> 实例已删（TotalCount=0）+ COS 桶无残留 = 本 Quickstart 的建实例→推送→删除闭环完成，无残留计费。
 
 ---
 
@@ -551,12 +573,5 @@ tccli tcr DescribeInstances --region ap-guangzhou \
 - [推送和拉取详解](../tcr/images/push-pull.md) — CI/CD 集成、VPC 内网推送
 - [访问控制](../tcr/access/manage.md) — Token 管理、VPC 端点、白名单、服务账号
 - [TKE 拉取 TCR 镜像](../cross-product/tke-pull-tcr.md) — 跨产品集成
-
----
-
-## 控制台替代方案
-
-以上所有操作均可在 [TCR 控制台](https://console.cloud.tencent.com/tcr) 完成：创建实例、
-开启公网端点、创建命名空间、管理 Token、查看镜像、删除实例。
 
 ---

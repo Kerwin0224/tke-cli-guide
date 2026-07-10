@@ -5,7 +5,15 @@ fused: true
 ---
 # Prometheus 监控入门
 
+> 控制台: [容器服务控制台 - Prometheus 监控](https://console.cloud.tencent.com/tke2/prometheus)
 > 创建 Prometheus 实例、关联集群 Agent、查询采集目标。Prometheus 是 TKE 监控的核心。异步操作。
+
+## 触发条件
+
+- `DescribePrometheusInstancesOverview` 返回空，需创建独立 Prometheus 实例采集集群指标
+- `DescribePrometheusClusterAgents` 不含目标集群，Prometheus 实例已建但集群未装 Agent
+- `DescribePrometheusTargets` → 目标全 down 或无数据，Agent 已关联但采集未生效 — 看 [故障恢复]段
+
 
 ## 概述
 
@@ -28,17 +36,16 @@ Prometheus 监控三步：创建实例 → 关联集群 Agent（采集） → �
 tccli --version
 # expected: tccli 版本号
 
-tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]' \
-  --filter "ClusterStatusSet[0].ClusterState"
+tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet[?ClusterId=='<CLUSTER_ID>'] | [0].ClusterState"
 # expected: "Running"
 ```
 
 ### 资源检查
 
 ```bash
-# 确认无现存 Prometheus 实例（避免重复）
+# Prometheus 权限探测（本账号未授权时返回 UnauthorizedOperation，须先 CAM 开通）
 tccli tke DescribePrometheusInstancesOverview --region ap-guangzhou --Limit 3
-# expected: 实例列表（空则无实例）
+# expected: 实例列表（空则无实例）；若 Error.Code=UnauthorizedOperation → 在 CAM 授予 Prometheus/TMP 相关策略后再继续本篇
 
 # 子网（创建实例需指定）
 tccli vpc DescribeSubnets --region <REGION> --Filters '[{"Name":"vpc-id","Values":["<VPC_ID>"]}]' \
@@ -46,9 +53,11 @@ tccli vpc DescribeSubnets --region <REGION> --Filters '[{"Name":"vpc-id","Values
 # expected: 子网 ID 列表
 ```
 
+> ⚠️ **CAM 前置（真机）**：`DescribePrometheusInstancesOverview` / `DescribePrometheusOverviews` / `DescribePrometheusTemp` 等在未授权账号返回 `UnauthorizedOperation`（消息含 Operation denied by Cloud API）。仅有 TKE 集群权限不够；须单独开通 Prometheus/TMP 相关 CAM 策略。未授权时本篇后续 Create/Run 命令同样会被拒，勿把 CAM 拒绝当成参数错误。
+
 ## 关键字段
 
-> 来源：`tccli tke RunPrometheusInstance` / `CreatePrometheusClusterAgent` / `DescribePrometheusTargets` 的 `--generate-cli-skeleton`。
+> 完整入参以 `tccli tke RunPrometheusInstance` / `CreatePrometheusClusterAgent` / `DescribePrometheusTargets` 的 `help --detail` 为准。
 
 ### RunPrometheusInstance
 
@@ -86,7 +95,7 @@ tccli vpc DescribeSubnets --region <REGION> --Filters '[{"Name":"vpc-id","Values
 - **默认推荐**: 生产用独立实例；测试可用集群内置
 - **能换吗?**: 独立实例创建后可改规格，但不能转为集群内置
 
-### 步骤 2：创建实例 — 最小化
+### 步骤 2：创建实例
 
 ```bash
 tccli tke RunPrometheusInstance --version 2018-05-25 --region ap-guangzhou \
@@ -141,15 +150,16 @@ tccli tke DescribePrometheusInstancesOverview --region ap-guangzhou \
 ```bash
 # 1. 卸载 Agent
 tccli tke DeletePrometheusClusterAgent --version 2018-05-25 --region ap-guangzhou \
-  --InstanceId "<INSTANCE_ID>" --ClusterId "<CLUSTER_ID>"
+  --InstanceId "<INSTANCE_ID>" --Agents '[{"ClusterId":"<CLUSTER_ID>"}]'
 # expected: exit 0
 
-# 2. 删除实例（实例删除 Action 需核实归属服务，见 gap）
-# 实例删除可能在监控类服务，先用 help 确认
-tccli tke help --version 2018-05-25 2>&1 | /usr/bin/grep -oE '<[A-Za-z]*DeletePrometheus[A-Za-z]*>' | tr -d '<>'
+# 2. 删除实例（实例删除属于 monitor 服务，Actions 为 DestroyPrometheusInstance；tke 的 DeletePrometheus* 仅覆盖 Agent/Config/Rule/Template）
+tccli monitor DestroyPrometheusInstance --version 2018-07-24 --region ap-guangzhou \
+  --InstanceId "<INSTANCE_ID>"
+# expected: exit 0
 ```
 
-> ⚠️ `DeletePrometheusInstance` 在 tke 服务可能不存在（实例删除需核实归属）。确认无对应 Action 后，到控制台删除。
+> 实例删除 Action 为 `monitor DestroyPrometheusInstance`（tke 无实例级删除 Action）。按量计费实例销毁后停止计费；包年包月实例销毁按退费规则处理。
 
 ## 故障恢复
 
@@ -160,7 +170,7 @@ tccli tke help --version 2018-05-25 2>&1 | /usr/bin/grep -oE '<[A-Za-z]*DeletePr
 | `InvalidParameterValue.InstanceId` | 查实例名格式 | 实例名含非法字符或已存在 | 换全局唯一名称 |
 | `ResourceNotFound.SubnetId` | `tccli vpc DescribeSubnets` | 子网不存在 | 用存在子网 |
 | `ResourceNotFound` (InstanceId) | `DescribePrometheusInstancesOverview` | Prometheus 实例不存在 | 先 `RunPrometheusInstance` |
-| `FailedOperation` | `DescribeClusterStatus` 看集群状态 | 集群非 Running | 等集群 Running |
+| `FailedOperation` | `DescribeClusterStatus` 查看集群状态 | 集群非 Running | 等集群 Running |
 | `UnknownAction` | 检查 `--version` | 未带 `--version 2018-05-25` 误走新版 | 显式带 `--version 2018-05-25` |
 
 ### 命令成功但状态不对 (exit = 0)
@@ -211,6 +221,16 @@ tccli tke DeletePrometheusTemplateSync --TemplateId "<TEMPLATE_ID>" --region <RE
 
 > `DescribePrometheusTempSync`/`TemplateSync` 用 `TemplateId` 查同步状态；`DeletePrometheusTempSync`/`TemplateSync` 用 `TemplateId`+`Targets[]`（Region+InstanceId）定位删除目标。模板同步配置见 [配置与模板](prometheus-config.md)。
 
+## 收尾确认
+
+```bash
+# 一次性核对：Prometheus 实例已就绪
+tccli tke DescribePrometheusInstance --region <REGION> --InstanceId <INSTANCE_ID>   --filter "{name:InstanceName,charge:ChargeStatus}"
+# expected: charge=Running → Prometheus 监控闭环完成
+```
+
+---
+
 ## 下一步
 
 - [Prometheus 告警配置](prometheus-alerting.md) — 告警策略与规则
@@ -218,7 +238,3 @@ tccli tke DeletePrometheusTemplateSync --TemplateId "<TEMPLATE_ID>" --region <RE
 - [Prometheus Agent 管理](prometheus-agent.md) — Agent 安装与采集目标
 - [可观测性概览](index.md) — 监控全景
 - [故障排查](../troubleshooting.md) — 监控无数据诊断
-
-## 控制台替代方案
-
-[容器服务控制台 - Prometheus 监控](https://console.cloud.tencent.com/tke2/prometheus)

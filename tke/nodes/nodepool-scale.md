@@ -5,7 +5,15 @@ fused: true
 ---
 # 扩缩容节点池
 
+> 控制台: [容器服务控制台 - 节点池](https://console.cloud.tencent.com/tke2/nodepool)
 > 调整节点池的期望节点数（DesiredCapacity），触发 ASG 扩容（加节点）或缩容（驱逐并移除节点）。异步操作。
+
+## 触发条件
+
+- DescribeClusterNodePools 返回 LifeState=normal 但 DesiredNodesNum 不满足业务容量（需扩容或缩容）
+- 集群节点数已达 MaxNodesNum 上限，或扩容报 `LimitExceeded`/`ResourceInsufficient.SpecifiedInstanceType`（机型售罄）需调区间或换机型
+- 你遇到扩缩容节点池问题想查诊断路径 — 看 [故障恢复]段
+
 
 ## 概述
 
@@ -18,7 +26,7 @@ fused: true
 
 > 缩容会驱逐节点上的 Pod。若有 PDB（PodDisruptionBudget）保护，驱逐可能阻塞。详见 [节点实例运维](instance-ops.md)。
 
-操作是**异步**的：`ModifyNodePoolDesiredCapacityAboutAsg` 返回即提交，实际加减节点需轮询 `DescribeClusterNodePools` 的 `NodeCountSummary`。
+操作是**异步**的。旧版 ASG 池：`ModifyNodePoolDesiredCapacityAboutAsg` → 轮询 `DescribeClusterNodePools` 的 `NodeCountSummary`。新版 Native 池：`ModifyNodePool --version 2022-05-01 --Native '{"Replicas":N}'` → 轮询 `DescribeNodePools` 的 `Native.Replicas` / `ReadyReplicas`（无 `NodeCountSummary`）。
 
 ## 准备工作
 
@@ -28,8 +36,7 @@ fused: true
 tccli --version
 # expected: tccli 版本号
 
-tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]' \
-  --filter "ClusterStatusSet[0].ClusterState"
+tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet[?ClusterId=='<CLUSTER_ID>'] | [0].ClusterState"
 # expected: "Running"
 ```
 
@@ -42,14 +49,13 @@ tccli tke DescribeClusterNodePools --region ap-guangzhou --ClusterId "<CLUSTER_I
 # expected: 目标节点池 LifeState="normal"
 
 # 2. 确认配额未满（扩容时）
-tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]' \
-  --filter "ClusterStatusSet[0].ClusterRunningNodeNum"
+tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet[?ClusterId=='<CLUSTER_ID>'] | [0].ClusterRunningNodeNum"
 # expected: 节点数 < 集群配额（见 [配额](../reference/quotas.md)）
 ```
 
 ## 关键字段
 
-> 来源：`tccli tke ModifyNodePoolDesiredCapacityAboutAsg --generate-cli-skeleton`。此 Action 仅 3 个参数——只改期望数，不改节点池配置。
+> 完整入参以 `tccli tke ModifyNodePoolDesiredCapacityAboutAsg help --detail` 为准。此 Action 仅 3 个参数——只改期望数，不改节点池配置。
 
 | 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
 |:------|------|:--------:|------------|---------------|
@@ -70,7 +76,7 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_I
 - **默认推荐**: 缩容前先 drain 目标节点，避免 Pod 被强制终止
 - **弹性伸缩**: 若节点池开了 `EnableAutoscale`，不建议手动改 `DesiredCapacity`——让 ASG 按负载自动调整
 
-### 步骤 2：扩缩容 — 最小化
+### 步骤 2：扩容
 
 ```bash
 # 扩容到 5 个节点
@@ -84,7 +90,7 @@ tccli tke ModifyNodePoolDesiredCapacityAboutAsg --region ap-guangzhou \
 | `<CLUSTER_ID>` | 集群 ID | `cls-xxxxxxxx` | `tccli tke DescribeClusters` → `Clusters[].ClusterId` |
 | `<NODE_POOL_ID>` | 节点池 ID | `np-xxxxxxxx` | `tccli tke DescribeClusterNodePools` → `NodePoolSet[].NodePoolId` |
 
-### 步骤 3：扩缩容 — 增强：缩容（安全）
+### 步骤 3：缩容（安全）
 
 ```bash
 # 1. 先 drain 目标节点（避免 Pod 被强杀）
@@ -102,21 +108,34 @@ tccli tke ModifyNodePoolDesiredCapacityAboutAsg --region ap-guangzhou \
 
 ### 步骤 4：验证
 
-异步操作，检查 ≥4 个维度：
+异步操作。**按节点池创建版本选查询 Action**（同名≠同契约）：
+
+| 路径 | 查询 Action | 列表键 | 就绪 LifeState | 期望数 | 实际数 |
+|:-----|:------------|:-------|:---------------|:-------|:-------|
+| 旧版 ASG（上文 `ModifyNodePoolDesiredCapacityAboutAsg`） | `DescribeClusterNodePools`（默认 2018） | `NodePoolSet` | `normal` | `DesiredNodesNum` | `NodeCountSummary.Total` |
+| 新版 Native（`CreateNodePool` 2022） | `DescribeNodePools --version 2022-05-01` | `NodePools` | `Running` | `Native.Replicas` | `Native.ReadyReplicas` |
 
 ```bash
-# 节点池状态与期望数
+# 旧版 ASG 节点池：状态与期望数
 tccli tke DescribeClusterNodePools --region ap-guangzhou --ClusterId "<CLUSTER_ID>" \
   --filter "NodePoolSet[?NodePoolId=='<NODE_POOL_ID>'].{state:LifeState,desired:DesiredNodesNum,summary:NodeCountSummary}"
 # expected: LifeState="normal", desired=目标值
+
+# 新版 Native 节点池（Filter Name 仅 NodePoolsName / NodePoolsId / tags / tag:tag-key）
+tccli tke DescribeNodePools --version 2022-05-01 --region ap-guangzhou \
+  --ClusterId "<CLUSTER_ID>" --Filters '[{"Name":"NodePoolsId","Values":["<NODE_POOL_ID>"]}]' \
+  --filter "NodePools[0].{state:LifeState,desired:Native.Replicas,ready:Native.ReadyReplicas}"
+# expected: LifeState="Running", desired=目标值；无 NodeCountSummary / DesiredNodesNum
 ```
 
 | 维度 | 命令 | 预期 |
 |:-----|:-----|:-----|
-| 节点池状态 | `DescribeClusterNodePools` → `LifeState` | `normal`（扩缩容完成） |
-| 期望数 | `DescribeClusterNodePools` → `DesiredNodesNum` | 等于设定的 `DesiredCapacity` |
-| 实际节点数 | `DescribeClusterNodePools` → `NodeCountSummary.Total` | 逐渐趋近 DesiredNodesNum |
-| ASG 实例数 | `DescribeClusterAsGroups`（如需）| 与 Desired 一致 |
+| 节点池状态（旧） | `DescribeClusterNodePools` → `LifeState` | `normal` |
+| 节点池状态（新） | `DescribeNodePools` → `LifeState` | `Running` |
+| 期望数（旧） | `DesiredNodesNum` | 等于设定的 `DesiredCapacity` |
+| 期望数（新） | `Native.Replicas` | 等于 `ModifyNodePool --Native.Replicas` |
+| 实际节点数（旧） | `NodeCountSummary.Total` | 逐渐趋近 DesiredNodesNum |
+| 实际节点数（新） | `Native.ReadyReplicas` | 逐渐趋近 Replicas |
 | 节点 Ready | `DescribeClusterInstances` → `InstanceState` | 扩容节点 `running` |
 
 ## Master 扩缩容与 ASG 选项
@@ -150,7 +169,7 @@ tccli tke ScaleInClusterMaster --ClusterId "<CLUSTER_ID>" --region <REGION> \
 
 #### Expander 扩容策略选择
 
-- **random（默认）**: 随机选节点池扩容，简单但可能不最优
+- **random（默认）**: 随机选节点池扩容，不按资源利用率或可调度 Pod 数择优
 - **most-pods**: 选能调度最多 Pod 的节点池，优先填满大机型
 - **least-waste**: 选扩容后剩余资源最少的，最小化浪费（推荐生产）
 - **IsScaleDownEnabled**: true 开启自动缩容（空闲节点回收）；false 仅扩不缩
@@ -193,7 +212,7 @@ tccli tke DeleteClusterAsGroups --ClusterId "<CLUSTER_ID>" --region <REGION> \
 
 ### 查询 ASG 活动与调整节点池区间
 
-> 扩容不增长时查 ASG 活动历史定位根因（机型售罄/子网 IP 不足）；`DesiredCapacity` 超区间时先 `ModifyClusterNodePool` 调 Min/Max。两者参数以 `--generate-cli-skeleton` 为准。
+> 扩容不增长时查 ASG 活动历史定位根因（机型售罄/子网 IP 不足）；`DesiredCapacity` 超区间时先 `ModifyClusterNodePool` 调 Min/Max。两者参数见各 Action 的 `help --detail`。
 
 ```bash
 # 查询集群 ASG 活动与实例数（ClusterId + AutoScalingGroupIds[] + 分页）
@@ -246,6 +265,26 @@ tccli tke ModifyClusterNodePool --region ap-guangzhou \
 
 > 扩容失败常是机型/子网问题（环境限制，非命令错误）；缩容失败常是 PDB 阻塞驱逐。两者诊断路径不同。
 
+## 收尾确认
+
+```bash
+# ②业务可用性端到端: 扩容新节点不仅 InstanceState=running 须 K8s Ready（缩容后无 Pod Pending）
+# 扩容后 kubectl get nodes 看新节点真 Ready（InstanceState=running 不等于 K8s Ready，kubelet 注册需时间）
+kubectl get nodes --show-labels | grep -v NotReady | wc -l
+# expected: Ready 节点数 == 扩容后 DesiredCapacity（缩容后无 Pod Pending: kubectl get pods -A 看无 Pending）
+
+# ③跨步骤多资源汇总（新版 Native）: LifeState=Running + Replicas == ReadyReplicas == Ready 节点数
+tccli tke DescribeNodePools --version 2022-05-01 --region ap-guangzhou \
+  --ClusterId "<CLUSTER_ID>" --Filters '[{"Name":"NodePoolsId","Values":["<NODE_POOL_ID>"]}]' \
+  --filter "NodePools[0].{state:LifeState,desired:Native.Replicas,ready:Native.ReadyReplicas}"
+# expected: state="Running"; desired=扩缩后目标值；ReadyReplicas 逐渐趋近 desired
+# 旧版 ASG 对照: DescribeClusterNodePools → LifeState=normal + DesiredNodesNum + NodeCountSummary.Total
+```
+
+> 新版：`LifeState=Running` + `Native.Replicas`==`ReadyReplicas`==Ready 节点数；旧版：`LifeState=normal` + `DesiredNodesNum`==`NodeCountSummary.Total`==Ready。缩容前若用 `DrainClusterVirtualNode`/`kubectl drain` 驱逐节点，三者一致即链路终态。
+
+---
+
 ## 下一步
 
 - [创建节点池](nodepool-create.md) — 节点池生命周期
@@ -253,7 +292,3 @@ tccli tke ModifyClusterNodePool --region ap-guangzhou \
 - [集群状态机](../reference/states.md) — 节点池 `LifeState` 含义
 - [配额和限制](../reference/quotas.md) — 节点数上限
 - [故障排查](../troubleshooting.md) — 节点 NotReady 的诊断
-
-## 控制台替代方案
-
-[容器服务控制台 - 节点池](https://console.cloud.tencent.com/tke2/nodepool)

@@ -10,6 +10,13 @@ fused: false
 
 > ⚠️ 本文档所有 Action 属 **TKE 2022-05-01（官方当前版本）**，调用必须显式 `--version 2022-05-01`。2018-05-25 无此功能域。不带 `--version` 会静默走 2018-05-25 报「未知 Action」。
 
+## 触发条件
+
+- 需自动发现节点故障（kubelet 不健康/文件系统只读/内核 oops）并在允许时自动修复 — 创建健康检查策略
+- DescribeHealthCheckPolicies 返回空或不含目标规则，需新增策略覆盖 `KubeletUnhealthy`/`RuntimeUnhealthy` 等规则
+- `DescribeHealthCheckTemplate` 报 `UnsupportedRegion` 或 CAM 拒绝 `tke:CreateHealthCheckPolicy` — 看 [故障恢复]段
+
+
 ## 概述
 
 节点健康检查策略（HealthCheckPolicy）按一组规则定期检测节点故障（如 kubelet 不健康、文件系统只读、内核 oops），发现故障后可按规则配置自动修复（重启 runtime / 重启 kubelet）。
@@ -42,7 +49,7 @@ fused: false
 
 **只有 `KubeletUnhealthy` 和 `RuntimeUnhealthy` 支持自动修复**（`RepairAction` 非 None）。High 严重度规则只能告警（`ShouldEnable=true, ShouldRepair=false`），不能自动修复——因为这类故障（内核 oops、只读文件系统）重启进程无法解决，需人工介入或重建节点。
 
-> **故障→隔离→恢复生命链**：High 规则告警后，人工处理路径是 `kubectl cordon` 隔离节点 → `kubectl drain` 驱逐 Pod → 删除/重建节点。完整隔离与驱逐命令见 [节点实例操作 — 节点隔离与驱逐](instance-ops.md#节点隔离与驱逐kubectl非-tcli)（kubectl，非 tcli）。
+> **故障→隔离→恢复生命链**：High 规则告警后，人工处理路径是 `kubectl cordon` 隔离节点 → `kubectl drain` 驱逐 Pod → 删除/重建节点。完整隔离与驱逐命令见 [节点实例操作 — 节点隔离与驱逐](instance-ops.md#节点隔离与驱逐kubectl非-tccli)（kubectl，非 tccli）。
 
 ### 是否开启自动修复
 
@@ -125,6 +132,16 @@ tccli tke DescribeHealthCheckPolicies --version 2022-05-01 --region <REGION> --C
 | 策略存在 | `DescribeHealthCheckPolicies --ClusterId <CLUSTER_ID>` | `TotalCount >= 1`，含 `<POLICY_NAME>` |
 | 规则已启用 | 同上，查策略 `Rules` | 目标规则 `Enabled=true` |
 | 绑定生效 | `DescribeHealthCheckPolicyBindings --version 2022-05-01 --ClusterId <CLUSTER_ID>` | 返回绑定关系 |
+| 自动修复配置 | `DescribeHealthCheckPolicies` → `Rules[].AutoRepairEnabled` | 可修复规则 `AutoRepairEnabled=true`（High 规则须为 false） |
+
+```bash
+# 查询策略绑定关系（Filter 无 s，单数；按策略名过滤）
+tccli tke DescribeHealthCheckPolicyBindings --version 2022-05-01 --region <REGION> \
+  --ClusterId <CLUSTER_ID> \
+  --Filter '[{"Name":"HealthCheckPolicyName","Values":["<POLICY_NAME>"]}]' \
+  --Offset 0 --Limit 20
+# expected: exit 0，返回 HealthCheckPolicyBindings[]+TotalCount
+```
 
 ```bash
 # 查询策略绑定关系（Filter 无 s，单数；按策略名过滤）
@@ -166,6 +183,27 @@ tccli tke ModifyHealthCheckPolicy --version 2022-05-01 --region <REGION> \
 
 > CAM 拒绝样本（ap-guangzhou，标签不匹配）：
 > `code:AuthFailure.UnauthorizedOperation message:操作未授权，请检查CAM策略 ... you are not authorized to perform operation (tke:CreateHealthCheckPolicy)`
+
+## 收尾确认
+
+```bash
+# ②业务可用性端到端: 策略绑定生效（Verify 只查策略存在，未核对绑定关系是否真命中节点）
+tccli tke DescribeHealthCheckPolicyBindings --version 2022-05-01 --region <REGION> \
+  --ClusterId "<CLUSTER_ID>" \
+  --Filter '[{"Name":"HealthCheckPolicyName","Values":["<POLICY_NAME>"]}]' \
+  --filter "HealthCheckPolicyBindings[].{name:HealthCheckPolicyName,nodes:NodeNames}"
+# expected: 含 <POLICY_NAME> 的绑定记录，NodeNames 非空（策略已绑定到节点，规则将对该批节点生效）
+
+# 策略规则配置核对（Rules[].Enabled/AutoRepairEnabled 是可核实字段，非顶层 Enable）
+tccli tke DescribeHealthCheckPolicies --version 2022-05-01 --region <REGION> \
+  --ClusterId "<CLUSTER_ID>" \
+  --filter "HealthCheckPolicySet[0].{name:Name,rules:Rules}"
+# expected: name=<POLICY_NAME>; Rules 含目标规则，Enabled=true 且可修复规则 AutoRepairEnabled 符合预期
+```
+
+> 策略绑定生效（DescribeHealthCheckPolicyBindings 返回绑定且节点匹配规则）+ 规则配置正确（Rules[].Enabled/AutoRepairEnabled）= 节点健康检查闭环完成。入参契约无顶层 `Enable` 字段（只有 `Rules[].Enabled`/`AutoRepairEnabled`），故确认改为查绑定生效而非顶层 Enable。
+
+---
 
 ## 下一步
 

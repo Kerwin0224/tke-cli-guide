@@ -5,7 +5,15 @@ fused: false
 ---
 # 配置 CiliumOverlay 网络
 
+> 控制台: [容器服务控制台 - 集群网络](https://console.cloud.tencent.com/tke2/cluster)
 > 创建集群时选定 CiliumOverlay 网络模型。CiliumOverlay 用 Cilium 的 Overlay 隧道承载 Pod 网络，独立于 VPC 网段。**只能在创建集群时指定，无独立开关 Action，创建后不可切换。**
+
+## 触发条件
+
+- `DescribeClusters` → `ClusterStatus=Running` 但 `Property` 解析出 `NetworkType` 非 `CiliumOverlay`，要新建集群选此模型（创建后不可切换）
+- 新建集群时评估三种 Pod 网络模型（Global Router / VPC-CNI / CiliumOverlay），需要 Cilium 数据面且不占 VPC IP
+- CiliumOverlay 集群创建后 `AddClusterCIDR` 扩 Pod 网段报错（此模型不支持），看 [限制与故障恢复]段
+
 
 ## 概述
 
@@ -32,14 +40,14 @@ CiliumOverlay 是 TKE 的三种容器网络类型之一（另两种：Global Rou
 
 ## 配置项
 
-> 来源：`。
-
 | 字段 | 所属对象 | 类型 | 必填 | 作用 |
 |:------|:---------|------|:--------:|------|
 | NetworkType | ClusterAdvancedSettings | string | 否（默认 `GR`） | 容器网络类型枚举：`GR` / `VPC-CNI` / `CiliumOverlay`。选 CiliumOverlay 传 `CiliumOverlay` |
 | SubnetId | ClusterBasicSettings | string | **CiliumOverlay 时必填** | 控制面子网。CiliumOverlay 时 TKE 从该子网取 **2 个 IP** 创建内网负载均衡 |
-| CiliumMode | ClusterAdvancedSettings | string | 否 | Cilium 支持 ClusterIP 的模式：空=不启用，`clusterIP`=启用 |
-| DataPlaneV2 | ClusterAdvancedSettings | boolean | 否 | 是否启用 DataPlaneV2（cilium 替代 kube-proxy） |
+| ClusterOs | ClusterBasicSettings | string | **CiliumOverlay 时受限** | 真机：`ubuntu20.04x86_64` 等报 `FailedOperation.Param`（`cluster os … is not supported to use cilium overlay mode`）；可用 **`tlinux3.1x86_64`** |
+| CiliumMode | ClusterAdvancedSettings | string | **CiliumOverlay 时禁止传** | 真机：与 `NetworkType=CiliumOverlay` 同传报 `FailedOperation.Param`（`CiliumMode … must not set when use CiliumOverlay`） |
+| DataPlaneV2 | ClusterAdvancedSettings | boolean | **CiliumOverlay 时禁止 `true`** | 真机：`NetworkType CiliumOverlay is not supported to use dataplaneV2 mode` |
+| IPVS / kube-proxy | ClusterAdvancedSettings | — | **CiliumOverlay 仅 iptables** | 真机：`IPVS=true` 报 `cluster of CiliumOverlay only support kubeproxy with mode iptables`；勿传 `IPVS=true` |
 
 > ⚠️ **`SubnetId` 的条件必填**：容器网络插件为 CiliumOverlay 时，TKE 会从该子网获取 2 个 IP 用来创建内网负载均衡，故 `ClusterBasicSettings.SubnetId` 必传，且子网须有可用 IP。该字段 API 层 `required=false`（条件必填不体现在字段级 required 标记），易漏。
 
@@ -52,13 +60,13 @@ CiliumOverlay 是 TKE 的三种容器网络类型之一（另两种：Global Rou
 ```bash
 tccli tke CreateCluster --region ap-guangzhou \
   --ClusterType MANAGED_CLUSTER \
-  --ClusterBasicSettings '{"ClusterName":"<CLUSTER_NAME>","VpcId":"<VPC_ID>","SubnetId":"<SUBNET_ID>"}' \
+  --ClusterBasicSettings '{"ClusterName":"<CLUSTER_NAME>","ClusterOs":"tlinux3.1x86_64","VpcId":"<VPC_ID>","SubnetId":"<SUBNET_ID>"}' \
   --ClusterCIDRSettings '{"ClusterCIDR":"<CLUSTER_CIDR>","ServiceCIDR":"<SERVICE_CIDR>"}' \
-  --ClusterAdvancedSettings '{"NetworkType":"CiliumOverlay","IPVS":true,"CiliumMode":"clusterIP","DataPlaneV2":true}'
+  --ClusterAdvancedSettings '{"NetworkType":"CiliumOverlay"}'
 # expected: { "ClusterId": "cls-xxxxxxxx", "RequestId": "..." }（tccli 默认剥离 Response 包装层）
 ```
 
-> `ClusterType` 是 `CreateCluster` 顶层入参（不在 `ClusterBasicSettings`）；`ClusterCIDR`/`ServiceCIDR` 在 `ClusterCIDRSettings` object（非 `ClusterNetworkSettings`，后者是响应层 object）。完整入参结构以 `tccli tke CreateCluster --generate-cli-skeleton` 为准。
+> `ClusterType` 是 `CreateCluster` 顶层入参（不在 `ClusterBasicSettings`）；`ClusterCIDR`/`ServiceCIDR` 在 `ClusterCIDRSettings` object（非 `ClusterNetworkSettings`，后者是响应层 object）。完整入参结构以 `tccli tke CreateCluster help --detail` 为准。
 
 | 占位符 | 含义 | 约束 | 如何获取 |
 |:------------|:-----|:-----|:---------|
@@ -68,7 +76,7 @@ tccli tke CreateCluster --region ap-guangzhou \
 | `<CLUSTER_CIDR>` | 容器网段 | 不得与 VPC CIDR 冲突 | 自取，如 `172.16.0.0/16` |
 | `<SERVICE_CIDR>` | 服务网段 | 不与 ClusterCIDR/VPC 冲突 | 自取，如 `10.96.0.0/20` |
 
-> `CiliumMode`/`DataPlaneV2` 按需开启：只要 Overlay 网络模型可不传二者（留空/`false`）；要 Cilium 替代 kube-proxy 才设 `DataPlaneV2=true`，要 Cilium 支持 ClusterIP 才设 `CiliumMode=clusterIP`。
+> **CiliumOverlay 创建时只传 `NetworkType`**：勿叠 `CiliumMode` / `DataPlaneV2=true` / `IPVS=true`（真机均 `FailedOperation.Param`）。`ClusterOs` 用 `tlinux3.1x86_64`（ubuntu 系列真机拒 CiliumOverlay）。
 
 ### 用 --generate-cli-skeleton 取完整入参骨架
 
@@ -90,12 +98,16 @@ tccli tke DescribeClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]'
 | 维度 | 命令 | 预期 |
 |:-----|:-----|:-----|
 | 网络类型 | `DescribeClusters` → `Clusters[].Property`（JSON 字符串）解析 `NetworkType` | `CiliumOverlay` |
-| Cilium 模式 | `DescribeClusters` → `Clusters[].ClusterNetworkSettings.CiliumMode` | `clusterIP` 或空 |
-| DataPlaneV2 | `DescribeClusters` → `Clusters[].ClusterNetworkSettings.DataPlaneV2` | `true`/`false` |
 | 控制面子网 | `DescribeClusters` → `Clusters[].ClusterNetworkSettings.SubnetId` | CiliumOverlay 时返回控制面子网 ID |
 | 集群就绪 | `DescribeClusters` → `ClusterStatus` | `Running` |
 
 > ⚠️ **`NetworkType` 在响应层的落点**：创建时 `NetworkType` 传在 `ClusterAdvancedSettings`（入参 object），但 `DescribeClusters` 响应的 `Cluster` object **无顶层 `NetworkType` 字段**，`ClusterNetworkSettings` 也不含 `NetworkType`——`NetworkType` 藏在 `Cluster.Property` 这个 **JSON 字符串**里（如 `"{\"NodeNameType\":\"lan-ip\",\"NetworkType\":\"GR\"}"`），须二次解析。`CiliumMode`/`DataPlaneV2`/控制面 `SubnetId` 则在 `ClusterNetworkSettings`（正常字段）。确认网络类型时勿找 `ClusterNetworkSettings.NetworkType`（不存在）。
+
+## 回滚
+
+> CiliumOverlay 在集群创建时定型（`ClusterAdvancedSettings.NetworkType`），**创建后不可切换回 GR/VPC-CNI**——只能重建集群。误配参数（如 `ClusterAdvancedSettings` 子字段）可用 `ModifyClusterAdvancedSettings` 调整，但网络模型本身不可逆。
+
+---
 
 ## 限制与故障恢复
 
@@ -103,7 +115,7 @@ tccli tke DescribeClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]'
 
 | 限制 | 影响 | 规避 |
 |:-----|:-----|:-----|
-| 不支持 `AddClusterCIDR` 扩 Pod 网段 | 调用可能返回 RequestId 但 CIDR 不真正生效 | 容量规划在创建时一次定够；要扩网段只能选 GR 集群（见 [配置集群](../clusters/configure.md#步骤-5扩容容器网段)） |
+| 不支持 `AddClusterCIDR` 扩 Pod 网段 | 调用 **exit≠0**：`UnsupportedOperation.ClusterNotSuitAddClusterCIDR`（消息含 `CLUSTER NOT SUIT ADD CLUSTER CIDR` / `failed to get tke-bridge-agent`）；**不会**静默成功 | 容量规划在创建时一次定够；要扩网段只能选 GR 集群（见 [配置集群](../clusters/configure.md#步骤-5扩容容器网段)） |
 | 创建后不可切换网络模型 | 要换 GR/VPC-CNI 只能重建集群 | 选型在创建前定 |
 | 控制面子网须预留 ≥2 IP | IP 不足时创建失败或控制面异常 | 子网可用 IP ≥ 2，`tccli vpc DescribeSubnets` 核 `AvailableIpAddressCount` |
 
@@ -113,8 +125,29 @@ tccli tke DescribeClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]'
 |:--------|:----------|:------------|:-----|
 | `ResourceNotFound.SubnetId` | `tccli vpc DescribeSubnets` | 控制面子网不在集群 VPC 或不存在 | 用集群 VPC 内子网；CiliumOverlay 时 `SubnetId` 必传 |
 | `InvalidParameterValue` | 查 `NetworkType` 拼写 | 非 `GR`/`VPC-CNI`/`CiliumOverlay` 三枚举值 | 用 `CiliumOverlay`（注意大小写） |
+| `FailedOperation.Param`（`cluster os … not supported to use cilium overlay`） | 查 `ClusterOs` | OS 不在 CiliumOverlay 支持集（如 ubuntu20.04） | 改 `ClusterOs=tlinux3.1x86_64` |
+| `FailedOperation.Param`（`CiliumMode … must not set when use CiliumOverlay`） | 查 AdvancedSettings | 与 Overlay 同传了 `CiliumMode`/`VpcCniType` 等 | 删 `CiliumMode`，只留 `NetworkType=CiliumOverlay` |
+| `FailedOperation.Param`（`not supported to use dataplaneV2`） | 查 `DataPlaneV2` | Overlay 与 DataPlaneV2 互斥 | 勿传 `DataPlaneV2=true` |
+| `FailedOperation.Param`（`only support kubeproxy with mode iptables`） | 查 `IPVS` | Overlay 仅 iptables | 勿传 `IPVS=true` |
+| `UnsupportedOperation.ClusterNotSuitAddClusterCIDR`（`AddClusterCIDR`） | `DescribeClusters` → `Property` 解析 `NetworkType` | 集群为 CiliumOverlay（无 tke-bridge-agent 扩网段路径） | 勿对 Overlay 调 `AddClusterCIDR`；扩网段须 GR 集群 |
 
-> CiliumOverlay 专属的业务层错误码无静态源，上表为可从字段约束推导的通用码；特定失败码以实际调用返回的 `Error.Code` 为准，勿照抄通用码。
+## 收尾确认
+
+```bash
+# 一次性核对：Running + Property.NetworkType=CiliumOverlay（勿只滤 state/name）
+tccli tke DescribeClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]' \
+  --filter "Clusters[0].{state:ClusterStatus,name:ClusterName,property:Property,subnet:ClusterNetworkSettings.SubnetId}"
+# expected: state=Running；property 解析含 NetworkType=CiliumOverlay；subnet 为创建时 SubnetId
+
+# 衔接下一步前置：kubeconfig 可拉取（进创建节点池前须能连通集群）
+tccli tke DescribeClusterKubeconfig --region ap-guangzhou --ClusterId "<CLUSTER_ID>" \
+  --filter "Kubeconfig" --output text | head -1
+# expected: apiVersion: v1
+```
+
+> 集群 Running + NetworkType=CiliumOverlay 定型 + kubeconfig 可拉取 = 创建闭环完成。但空集群(0 节点)无法运行 Pod（业务可用性边界），须创建节点池；CiliumOverlay 的 Pod 跨节点通信依赖 Cilium Overlay 隧道，节点池就绪后用 `kubectl get pods -o wide` 核 Pod IP 不在 VPC 子网段（Overlay 独立网段）端到端验证。
+
+---
 
 ## 下一步
 
@@ -122,7 +155,3 @@ tccli tke DescribeClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]'
 - [配置 VPC-CNI](vpc-cni.md) — VPC-CNI 模型对比，若需固定 IP 改选此
 - [网络管理](index.md) — 三模型总览与端点
 - [配置集群](../clusters/configure.md) — 集群属性与扩容容器网段（CiliumOverlay 不支持）
-
-## 控制台替代方案
-
-[容器服务控制台 - 集群网络](https://console.cloud.tencent.com/tke2/cluster)

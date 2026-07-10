@@ -6,6 +6,14 @@ fused: true
 # 版本保留策略
 
 > 配置自动保留规则，按策略清理旧镜像版本。**该操作可能批量删除镜像**——匹配的 tag 会被永久删除，不可恢复。
+> 控制台: [版本保留](https://console.cloud.tencent.com/tcr/tagretention)（底层层数据回收见 [制品清理](https://console.cloud.tencent.com/tcr/gc)）
+
+## 触发条件
+
+- `tccli tcr DescribeImages --RegistryId "<ID>"` 返回的 `ImageInfoList` 版本数持续增长，旧镜像堆积占用存储（需定时清理）
+- `tccli tcr DescribeTagRetentionRules --RegistryId "<ID>"` 返回 `TotalCount: 0`，命名空间下无保留规则，旧版本无人清理
+- 镜像存储用量接近配额，`DescribeInstanceStatus` 返回的存储用量告警，需删旧留新
+
 
 ## 概述
 
@@ -16,7 +24,11 @@ fused: true
 | 保留最新 N 个 | `latestPushedK` | 保留最近推送的 N 个版本 | `10` |
 | 保留最近 N 天 | `nDays` | 保留 N 天内推送的版本 | `30` |
 
-> 规则作用于命名空间级别（`NamespaceId`）。规则创建后按 `CronSetting` 定时执行，也可 `CreateTagRetentionExecution` 手动触发。
+> 规则作用于命名空间级别（`NamespaceId`）。**单个命名空间暂只能创建一条**保留规则。规则创建后按 `CronSetting` 定时执行，也可 `CreateTagRetentionExecution` 手动触发。创建后**不可修改**生效的命名空间。
+
+> **删除边界**：版本保留删除的是**镜像版本信息**，**不删除**底层镜像层数据；要释放 COS 空间须再跑 GC / 制品清理（见 [生命周期概览](index.md)）。
+>
+> **Digest 风险**：多个 Tag 可能指向同一 Digest。删除其中一个 Tag 时，可能连带清理该 Digest 上的全部 Tag——仓库若存在「同 Digest、多 Tag」，启用保留规则前先评估，或暂时禁用已有规则。
 
 ## 准备工作
 
@@ -47,7 +59,7 @@ tccli tcr DescribeTagRetentionRules --region <REGION> --RegistryId "<REGISTRY_ID
 
 ## 关键字段
 
-> 来源：`tccli tcr CreateTagRetentionRule --generate-cli-skeleton`。
+> 完整入参以 `tccli tcr CreateTagRetentionRule help --detail` 为准。
 
 | 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
 |:------|------|:--------:|------------|---------------|
@@ -84,7 +96,13 @@ tccli tcr ModifyTagRetentionRule --region <REGION> \
 
 > `ModifyTagRetentionRule` 用 `RetentionId`（整数，来自 `DescribeTagRetentionRules`）定位规则，`RetentionRule`/`CronSetting` 覆盖式更新。`NamespaceId` 仍需传（规则绑命名空间）。改后用 `DescribeTagRetentionRules` 确认新值，或 `CreateTagRetentionExecution` 手动触发验证效果。
 
-### 步骤 2：创建 — 最小化
+### 步骤 2：创建保留规则
+
+`CreateTagRetentionRule` 必传 `RegistryId`/`NamespaceId`/`CronSetting`/`RetentionRule`。按场景**二选一**：A 最小化（命名空间级全仓库）或 B 增强（按仓库过滤）。
+
+> ⚠️ **A 与 B 是二选一变体，不是先做 A 再做 B**——两者各调一次 `CreateTagRetentionRule` 会建**两条规则**。规则创建后改配置用 `ModifyTagRetentionRule`（覆盖式，须含原值），**禁用第二次 `CreateTagRetentionRule` 改配置**。
+
+#### 选项 A：最小化（命名空间级全仓库）
 
 ```bash
 tccli tcr CreateTagRetentionRule --region <REGION> \
@@ -99,10 +117,11 @@ tccli tcr CreateTagRetentionRule --region <REGION> \
 | `<REGISTRY_ID>` | 实例 ID | `tcr-xxxxxxxx` | `tccli tcr DescribeInstances` |
 | `<NAMESPACE_ID>` | 命名空间 ID | 整数 | `tccli tcr DescribeNamespaces` → `NamespaceList[].NamespaceId` |
 
-### 步骤 3：创建 — 增强：按仓库过滤
+#### 选项 B：增强（按仓库过滤）
+
+> **与 A 二选一，非在 A 之后执行**。只对匹配的仓库应用规则（`AdvancedRuleItems`）。
 
 ```bash
-# 只对匹配的仓库应用规则（AdvancedRuleItems）
 tccli tcr CreateTagRetentionRule --region <REGION> \
   --RegistryId "<REGISTRY_ID>" --NamespaceId <NAMESPACE_ID> \
   --CronSetting "0 2 * * *" \
@@ -113,7 +132,7 @@ tccli tcr CreateTagRetentionRule --region <REGION> \
 
 > `AdvancedRuleItems` 按 `RepositoryFilter`/`TagFilter` 细化规则作用范围。`Decoration` 为 `matches`（匹配）或 `excludes`（排除）。
 
-### 步骤 4：手动触发执行（测试规则）
+### 步骤 3：手动触发执行（测试规则）
 
 ```bash
 # 手动触发一次执行（验证规则效果，先在测试仓库验证）
@@ -122,7 +141,7 @@ tccli tcr CreateTagRetentionExecution --region <REGION> \
 # expected: exit 0, 返回执行 ID
 ```
 
-### 步骤 5：验证
+### 步骤 4：验证
 
 ```bash
 # 查看规则
@@ -174,7 +193,7 @@ tccli tcr DescribeTagRetentionRules --region <REGION> --RegistryId "<REGISTRY_ID
 | `ResourceNotFound` | `DescribeNamespaces` 核对 ID | NamespaceId 错或命名空间不存在 | 用正确的 NamespaceId（整数） |
 | `InvalidParameterValue.CronSetting` | 检查 Cron 格式 | Cron 表达式错 | 用标准 5 段 Cron，如 `0 2 * * *` |
 | `InvalidParameterValue.RetentionRule` | 检查 Key/Value | Key 拼错或 Value 非数字 | Key 用 `latestPushedK`/`nDays`，Value 为正整数 |
-| `FailedOperation` | `DescribeInstanceStatus` 看状态 | 实例非 Running | 等实例 Running |
+| `FailedOperation` | `DescribeInstanceStatus` 查看状态 | 实例非 Running | 等实例 Running |
 
 ### 命令成功但状态不对 (exit = 0)
 
@@ -263,13 +282,35 @@ tccli tcr TerminateGCJob --RegistryId "<REGISTRY_ID>" --region <REGION>
 
 > GC 任务由系统在删除镜像后触发或手动发起。`DescribeGCJobs` 查任务状态（Running/Success/Failed），`TerminateGCJob` 终止进行中的 GC（仅 RegistryId）。
 
+## 收尾确认
+
+```bash
+# ③ 跨步骤汇总：规则创建 + 执行记录 + 删除效果一次性核对（Verify 逐项查，这里汇总三步产物确认闭环）
+# 规则已创建且启用
+tccli tcr DescribeTagRetentionRules --region <REGION> --RegistryId "<REGISTRY_ID>" \
+  --filter "RetentionPolicyList[0].{id:RetentionId,cron:CronSetting,disabled:Disabled}"
+# expected: id=<RETENTION_ID>, cron 与配置一致, disabled=false
+
+# 手动触发的执行已完成（Status=Succeed）
+tccli tcr DescribeTagRetentionExecution --region <REGION> --RegistryId "<REGISTRY_ID>" \
+  --RetentionId <RETENTION_ID> \
+  --filter "RetentionExecutionList[0].{status:Status,start:StartTime}"
+# expected: status=Succeed, start 为触发时间（Status 枚举: Failed/Succeed/Stopped/InProgress）
+
+# 镜像数已收敛到保留数量（latestPushedK=Value 的效果）
+tccli tcr DescribeImages --region <REGION> --RegistryId "<REGISTRY_ID>" \
+  --NamespaceName "<NS>" --RepositoryName "<REPO>" \
+  --filter "length(ImageInfoList)"
+# expected: ≤ RetentionRule.Value（保留数量上限）
+```
+
+> 规则启用 + 执行 Success + 镜像数收敛到保留值 = 版本保留闭环完成，旧版本已按策略清理。
+
+---
+
 ## 下一步
 
 - [不可变标签](immutable-tags.md) — 禁止覆盖（与保留互补）
 - [管理命名空间和仓库](../repositories/manage.md) — 创建命名空间
 - [推送拉取镜像](../images/push-pull.md) — 手动删除单个版本
 - [故障排查](../troubleshooting.md) — 规则不生效诊断
-
-## 控制台替代方案
-
-[容器镜像服务控制台 - 版本保留](https://console.cloud.tencent.com/tcr/retention)

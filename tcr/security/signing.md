@@ -5,7 +5,15 @@ fused: false
 ---
 # 镜像签名
 
+> 控制台: [容器镜像服务控制台 - 镜像签名](https://console.cloud.tencent.com/tcr/signature)
 > 配置镜像签名策略，用 KMS 托管密钥对镜像签名，确保镜像不被篡改。仅企业版 premium 支持。
+
+## 触发条件
+
+- `tccli tcr DescribeInstances --Registryids '["<ID>"]'` 返回 `RegistryType: premium` 且需镜像完整性校验（合规/安全要求镜像不可篡改）
+- `tccli kms ListKeys` 有可用签名密钥但镜像未签名，拉取侧 TKE 验签准入控制器拒绝未签名镜像
+- `tccli tcr CreateSignature` 报 `ResourceNotFound`（签名策略未创建）或 `UnsupportedOperation`（实例非 premium）
+
 
 ## 概述
 
@@ -19,7 +27,13 @@ fused: false
 
 > **产品边界**：tcr API 落地签名策略与手动签名；**自动签名**由策略触发（push 时 TCR 服务侧执行，无需 tcli 调用）；**验签**在 TKE 侧部署签名准入控制器（K8s 准入 webhook，非 tcli）。tcr 文档覆盖签名侧闭环，验签侧见 TKE 集成文档。
 
-> 签名是 premium 专属功能，basic/standard 不支持。需先在 KMS 服务创建密钥。
+> 签名是 **premium（高级版）** 专属；basic/standard 不支持。
+>
+> **前提半常量**：
+> - KMS 密钥用途须为 **非对称签名验签**，算法 **RSA_2048**（其他用途/算法不可用于本功能）
+> - 建议 KMS 密钥与 TCR 实例**同地域**（可跨地域，跨地域有额外开销）
+> - 服务角色 `TCR_QCSRole` 须关联 **QcloudKMSFullAccess**（或等价 KMS 权限），否则签名失败
+> - **单个命名空间仅一条**签名策略
 
 ## 准备工作
 
@@ -45,7 +59,7 @@ tccli kms ListKeys --region <REGION> --filter "Keys[].{id:KeyId,alias:Alias}" --
 
 ## 关键字段
 
-> 来源：`tccli tcr CreateSignaturePolicy --generate-cli-skeleton`。
+> 完整入参以 `tccli tcr CreateSignaturePolicy help --detail` 为准。
 
 | 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
 |:------|------|:--------:|------------|---------------|
@@ -70,7 +84,7 @@ tccli kms ListKeys --region <REGION> --filter "Keys[].{id:KeyId,alias:Alias}" --
 - **默认推荐**: KMS 托管 SM2（国密）或 RSA 密钥
 - **能改吗?**: 策略创建后可 `ModifySignaturePolicy`（如存在）改密钥，已签名镜像不受影响
 
-### 步骤 2：创建 — 最小化
+### 步骤 2：创建签名策略
 
 ```bash
 tccli tcr CreateSignaturePolicy --region <REGION> \
@@ -115,7 +129,7 @@ tccli tcr CreateSignature --region <REGION> \
 |:-----|:-----|:-----|
 | 策略存在 | `CreateSignature --DryRun` 不报策略错 | 无 `ResourceNotFound` |
 | 签名成功 | `CreateSignature` | exit 0 |
-| 证书未过期 | KMS 密钥状态 `Enabled` | `tccli kms ListKeys` |
+| 证书未过期 | KMS 密钥状态 `Enabled` | `tccli kms DescribeKey --KeyId "<KMS_KEY_ID>"` → `KeyMetadata.KeyState` |
 
 ## 清理
 
@@ -150,13 +164,30 @@ tccli tcr DeleteSignaturePolicy --region <REGION> \
 
 > 签名涉及 TCR + KMS 跨产品。TCR 无查询签名策略的 API（gap），管理主要靠控制台。
 
+## 收尾确认
+
+```bash
+# ③ 跨步骤汇总：签名策略有效 + 签名已生成 + KMS 证书未过期 一次性核对（TCR 无 DescribeSignaturePolicies，用 CreateSignature exit 0 反证策略有效；Verify 查单步，这里汇总三步产物）
+# 签名命令成功 = 反证策略有效 + 签名已生成（字段名 RepositoryName/ImageVersion，非 RepoName/Tag）
+tccli tcr CreateSignature --region <REGION> \
+  --RegistryId "<REGISTRY_ID>" --NamespaceName "<NAMESPACE_NAME>" \
+  --RepositoryName "<REPOSITORY_NAME>" --ImageVersion "<TAG>"
+# expected: exit 0（重复签名不报错，反证策略有效）
+
+# ② 业务可用性：KMS 证书未过期/未禁用（签名密钥可用，Verify 查 KMS 密钥存在，这里查 KeyState 保证证书有效）
+tccli kms DescribeKey --region <REGION> --KeyId "<KMS_KEY_ID>" \
+  --filter "KeyMetadata.{id:KeyId,state:KeyState,usage:KeyUsage}"
+# expected: state=Enabled, usage 含签名用途（state=Enabled 密钥可用，签名验签才有效；Disabled/PendingDelete 证书不可用）
+```
+
+> CreateSignature exit 0（策略有效+签名已生成）+ KMS 密钥 Enabled（证书未过期）= 签名闭环完成，镜像可被验签。密钥禁用后已签名镜像仍可验签，但新镜像无法再签名。
+
+---
+
 ## 下一步
 
 - [访问控制](../access/manage.md) — 签名后的访问权限
 - [推送拉取镜像](../images/push-pull.md) — 签名镜像的 push/pull
+- [CVE 白名单](cve-whitelist.md) — 漏洞扫描阻断白名单（与签名互补）
 - [实例概览](../instances/index.md) — premium 规格说明
 - [故障排查](../troubleshooting.md) — 签名失败诊断
-
-## 控制台替代方案
-
-[容器镜像服务控制台 - 镜像签名](https://console.cloud.tencent.com/tcr/signature)

@@ -5,20 +5,30 @@ fused: true
 ---
 # 访问控制
 
-> 配置谁能访问 TCR 实例：Token（CI/CD）、VPC 内网、公网白名单、服务账号。四种方式参数与失败模式各异。
+> 控制台: [公网访问](https://console.cloud.tencent.com/tcr/publicaccess) · [内网访问](https://console.cloud.tencent.com/tcr/privateaccess) · [用户级账号](https://console.cloud.tencent.com/tcr/token) · [服务级账号](https://console.cloud.tencent.com/tcr/serviceaccount)
+> 配置谁能访问 TCR 实例：用户级账号（Token）、VPC 内网、公网白名单、服务级账号。**推送/拉取优先走 VPC 内网**，公网作补充。
+
+## 触发条件
+
+- `docker push <DOMAIN>/<NS>/<REPO>` 报 `denied: requested access to the resource is denied`，`DescribeSecurityPolicies` 返回的白名单不含当前出口 IP
+- `docker login` 报 `unauthorized`，`DescribeInstanceToken` 返回 `Tokens: []`（需创建 Token）或需长期凭证（CI/CD 场景 `temp` Token 1 小时过期不够用）
+- VPC 内 TKE 集群拉取 TCR 镜像延迟高/走公网，`DescribeInternalEndpoints` 返回 `TotalCount: 0`（需开 VPC 内网接入）
+
 
 ## 概述
 
-四种访问方式，用途不同：
+推荐决策顺序：**先内网（VPC）→ 再按需开公网白名单 → 再选凭证类型**。
 
-| 访问方式 | 适用场景 | 创建方式 | 凭证类型 |
-|:--------|:--------|:--------|:--------|
-| Instance Token | CI/CD 自动化 | `CreateInstanceToken` | Username + Token（临时，1 小时） |
-| VPC 内网 | VPC 内拉取，低延迟 | `ManageInternalEndpoint` | DNS + IP（无认证，VPC 控制） |
-| 公网白名单 | 开发者本地推送 | `CreateSecurityPolicy` | IP 白名单（需固定 IP） |
-| 服务账号 | K8s 内 Pod 拉取 | `CreateServiceAccount` | 服务账号凭证 |
+> ⚠️ **创建后默认拒绝全部公网及内网访问**。未配置 VPC 内网或公网白名单前，`docker login`/`push`/`pull` 会失败——须先完成本文访问策略，再推镜像。公网入口开启后尽快配白名单并优先改走内网（公网产生 COS 公网流量费；内网不计该费）。`unauthorized: authentication required`：核对 `docker login` 凭证是否正确、临时 Token 是否过期。
 
-> 长期凭证（CI/CD）用 `CreateInstanceToken --TokenType longterm`（可禁用/删除），临时凭证用 `--TokenType temp`（默认，1 小时过期）。详见 [访问管理 — Token 生命周期](../instances/manage-access.md#token-生命周期闭环)。
+| 访问方式 | 控制台入口 | 适用场景 | 创建方式 | 凭证类型 |
+|:--------|:--------|:--------|:--------|:--------|
+| VPC 内网 | 内网访问 | VPC 内推送/拉取（优先） | `ManageInternalEndpoint` | DNS + IP（VPC 控制） |
+| 公网白名单 | 公网访问 | 开发者本地、无 VPC 时 | `CreateSecurityPolicy` | IP 白名单（需固定出口） |
+| 用户级账号 | 用户级账号 | CI/CD、需严格审计身份 | `CreateInstanceToken` | Username + Token |
+| 服务级账号 | 服务级账号 | 多租户 / 自动化；自定义用户名与权限范围 | `CreateServiceAccount` | 服务账号凭证 |
+
+> 用户级账号适合需追踪实际操作者的场景；服务级账号可自定义用户名与权限范围，但平台无法验证实际使用者身份——严格审计请用用户级账号。长期凭证用 `CreateInstanceToken --TokenType longterm`，临时用 `--TokenType temp`（默认约 1 小时）。列表字段是 `Tokens[].Id`（非 `TokenId`）；删除/禁用入参仍用 `--TokenId`（传 `Id` 值）。详见 [访问管理 — Token 生命周期](../instances/manage-access.md#token-生命周期闭环)。
 
 ## 准备工作
 
@@ -55,7 +65,7 @@ tccli tcr DescribeInternalEndpoints --region <REGION> --RegistryId "<REGISTRY_ID
 
 ### ManageInternalEndpoint（VPC 内网）
 
-> 来源：`tccli tcr ManageInternalEndpoint --generate-cli-skeleton`。
+> 完整入参以 `tccli tcr ManageInternalEndpoint help --detail` 为准。
 
 | 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
 |:------|------|:--------:|------------|---------------|
@@ -68,7 +78,7 @@ tccli tcr DescribeInternalEndpoints --region <REGION> --RegistryId "<REGISTRY_ID
 
 ### CreateSecurityPolicy（公网白名单）
 
-> 来源：`tccli tcr CreateSecurityPolicy --generate-cli-skeleton`。
+> 完整入参以 `tccli tcr CreateSecurityPolicy help --detail` 为准。
 
 | 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
 |:------|------|:--------:|------------|---------------|
@@ -78,7 +88,7 @@ tccli tcr DescribeInternalEndpoints --region <REGION> --RegistryId "<REGISTRY_ID
 
 ### CreateServiceAccount
 
-> 来源：`tccli tcr CreateServiceAccount --generate-cli-skeleton`。
+> 完整入参以 `tccli tcr CreateServiceAccount help --detail` 为准。
 
 | 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
 |:------|------|:--------:|------------|---------------|
@@ -101,13 +111,13 @@ tccli tcr DescribeInternalEndpoints --region <REGION> --RegistryId "<REGISTRY_ID
 - **默认推荐**: 生产用 VPC 内网 + 服务账号；本地临时用 Token
 - **能切换吗?**: 各方式独立，可同时开启
 
-### 步骤 2：VPC 内网接入 — 最小化
+### 步骤 2：VPC 内网接入
 
 > VPC 内网接入（`ManageInternalEndpoint` 开启实例内网访问 VPC 链接）属实例级访问开关，完整命令见 [实例访问管理 — 开启内网访问](../instances/manage-access.md#步骤-5开启内网访问-可选)。本篇聚焦访问策略层（白名单/服务账号/DNS），端点开关归实例访问篇，避免双篇重复。VPC 内网开通后，本篇 [内网 DNS 解析](#内网-dns-解析) 配置私有域名。
 
 > VPC 内网开通是异步操作，DNS 生效需等待。用 `DescribeInternalEndpoints` 轮询直到出现接入记录。
 
-### 步骤 3：公网白名单 — 增强
+### 步骤 3：公网白名单
 
 ```bash
 # 先确认公网端点已开启
@@ -125,9 +135,9 @@ tccli tcr CreateSecurityPolicy --region <REGION> \
 ```bash
 tccli tcr CreateServiceAccount --region <REGION> \
   --RegistryId "<REGISTRY_ID>" --Name "<SA_NAME>" \
-  --Permissions '[{"NamespaceName":"prod","Access":"readwrite"}]' \
+  --Permissions '[{"Resource":"prod","Actions":["tcr:PushRepository","tcr:PullRepository"]}]' \
   --Duration 2592000
-# expected: exit 0, 返回服务账号凭证
+# expected: exit 0, 返回服务账号凭证（Permissions 用 Resource=命名空间 + Actions 列表，非 NamespaceName/Access）
 ```
 
 | 占位符 | 含义 | 约束 | 如何获取 |
@@ -144,10 +154,10 @@ tccli tcr DescribeInternalEndpoints --region <REGION> --RegistryId "<REGISTRY_ID
   --filter "AccessVpcSet[].{vpc:VpcId,subnet:SubnetId}"
 # expected: 含刚接入的 VPC
 
-# 白名单列表
+# 白名单列表（公网端点须 Opened；Closed 时真机 ResourceNotFound: Failed to get security group id from registry）
 tccli tcr DescribeSecurityPolicies --region <REGION> --RegistryId "<REGISTRY_ID>" \
   --filter "SecurityPolicySet[].{cidr:CidrBlock,desc:Description}"
-# expected: 含刚添加的 IP
+# expected: Status=Opened 时含白名单；Closed → ResourceNotFound（先 ManageExternalEndpoint Open）
 
 # 服务账号列表（RegistryId + EmbedPermission=true 带权限，Filters 按名过滤）
 tccli tcr DescribeServiceAccounts --region <REGION> --RegistryId "<REGISTRY_ID>" \
@@ -169,7 +179,7 @@ tccli tcr DescribeServiceAccounts --region <REGION> --RegistryId "<REGISTRY_ID>"
 ```bash
 # 关闭 VPC 内网（端点开关归实例访问篇）
 tccli tcr ManageInternalEndpoint --region <REGION> \
-  --RegistryId "<REGISTRY_ID>" --Operation Close --VpcId "<VPC_ID>"  # 见 instances/manage-access.md
+  --RegistryId "<REGISTRY_ID>" --Operation Delete --VpcId "<VPC_ID>"  # 见 instances/manage-access.md
 # expected: exit 0
 
 # 删除白名单
@@ -187,8 +197,9 @@ tccli tcr DeleteSecurityPolicy --region <REGION> \
 | `ResourceNotFound.VpcId` | `tccli vpc DescribeVpcs` | VPC 不存在或跨账号 | 确认 VPC ID 与账号 |
 | `ResourceNotFound.SubnetId` | `tccli vpc DescribeSubnets` | 子网不在指定 VPC | 用 VPC 内子网 |
 | `InvalidParameterValue.CidrBlock` | 检查 CIDR 格式 | CIDR 格式错 | 用 `IP/掩码` 格式，如 `1.2.3.4/32` |
+| `ResourceNotFound`（消息含 `Failed to get security group id from registry`） | `DescribeExternalEndpointStatus` | 公网端点 `Closed` 或实例无安全组绑定（basic 常见） | 先 `ManageExternalEndpoint --Operation Open`；仍失败则查规格是否支持公网白名单 |
 | `LimitExceeded` | `DescribeSecurityPolicies` 看数量 | 白名单达上限（basic=5） | 删除闲置白名单或升规格 |
-| `FailedOperation` | `DescribeInstanceStatus` 看状态 | 实例非 Running | 等实例 Running |
+| `FailedOperation` | `DescribeInstanceStatus` 查看状态 | 实例非 Running | 等实例 Running |
 
 ### 命令成功但状态不对 (exit = 0)
 
@@ -272,13 +283,35 @@ tccli tcr DeleteServiceAccount --RegistryId "<REGISTRY_ID>" --Name "<SA_NAME>" -
 
 > `ModifyServiceAccountPassword` 的 `Random=true` 随机生成密码（返回新密码），`false` 用 `--Password` 指定。`Duration` 是有效期秒数，`ExpiresAt` 是过期时间戳。
 
+## 收尾确认
+
+```bash
+# ③ 跨步骤汇总：白名单 + 服务账号 + VPC 内网 三步产物一次性核对（字段名 SecurityPolicySet 非 Policies；Verify 逐项查，这里汇总）
+tccli tcr DescribeSecurityPolicies --region <REGION> --RegistryId "<REGISTRY_ID>" \
+  --filter "SecurityPolicySet[].{ip:CidrBlock,desc:Description}"
+# expected: 含你的出口 IP（如 "203.0.113.10/32"）
+
+tccli tcr DescribeServiceAccounts --region <REGION> --RegistryId "<REGISTRY_ID>" \
+  --EmbedPermission true --Offset 0 --Limit 20 \
+  --filter "ServiceAccounts[].{name:Name,perms:Permissions[].{res:Resource,actions:Actions}}"
+# expected: 含目标服务账号及其资源权限（Permissions 用 Resource/Actions，非 NamespaceName/Access）
+
+tccli tcr DescribeInternalEndpoints --region <REGION> --RegistryId "<REGISTRY_ID>" \
+  --filter "AccessVpcSet[].{vpc:VpcId,subnet:SubnetId}"
+# expected: 含已接入的 VPC（未开内网则空，仅白名单场景可豁免此项）
+
+# ② 业务可用性端到端：用配置的访问方式 docker login 真正成功（Verify 查配置记录存在，这里查端到端登录可达）
+docker login <REGISTRY_DOMAIN> --username <USERNAME> --password <TOKEN_OR_SA_PASSWORD>
+# expected: Login Succeeded
+```
+
+> 白名单含 IP + 服务账号带权限 + VPC 内网接入（如开）+ docker Login Succeeded = 访问控制闭环完成。任一缺失则 docker login/push 失败。
+
+---
+
 ## 下一步
 
 - [推送拉取镜像](../images/push-pull.md) — Token 获取与 docker login
 - [访问管理](../instances/manage-access.md) — 实例级访问配置
 - [创建实例](../instances/create.md) — 实例生命周期
 - [故障排查](../troubleshooting.md) — 访问失败诊断
-
-## 控制台替代方案
-
-[容器镜像服务控制台 - 访问控制](https://console.cloud.tencent.com/tcr/access)

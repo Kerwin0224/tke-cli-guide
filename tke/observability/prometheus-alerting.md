@@ -12,6 +12,13 @@ fused: true
 > 本文合并 AlertPolicy / AlertRule / GlobalNotification 三层于一篇。
 > 输出结构以实际响应为准；错误码与诊断见 [§故障恢复](#故障恢复)。
 
+## 触发条件
+
+- `DescribePrometheusAlertPolicy` 返回空，需为 Prometheus 实例创建告警策略监控指标越阈
+- 告警触发但通知未送达，`DescribePrometheusGlobalNotification` → `Enabled=false` 或接收组为空
+- `DescribePrometheusAlertHistory` 无记录，规则 PromQL 永假或 Agent 采集未生效 — 看 [故障恢复]段
+
+
 ## 概述
 
 TKE Prometheus 告警是三层模型：
@@ -74,7 +81,7 @@ tccli tke DescribePrometheusInstancesOverview --region <REGION>
 
 ## 操作步骤
 
-### 步骤 1：创建告警策略 — 最小化
+### 步骤 1：创建告警策略
 
 ```bash
 tccli tke CreatePrometheusAlertPolicy --region <REGION> \
@@ -91,7 +98,7 @@ tccli tke CreatePrometheusAlertPolicy --region <REGION> \
 
 > `AlertRule` 是单数入参名，但其内 `Rules[]` 是复数数组——一个策略可含多条规则。AlertRule（`CreatePrometheusAlertRule`）入参结构相同，是另一套独立 Action。
 
-### 步骤 2：配置全局通知 — 增强
+### 步骤 2：配置全局通知
 
 ```bash
 tccli tke CreatePrometheusGlobalNotification --region <REGION> \
@@ -219,6 +226,16 @@ tccli tke DeletePrometheusAlertRule --region <REGION> \
 | 告警触发但通知未送达 | `DescribePrometheusGlobalNotification` | `Enabled=false`、时段外、接收组为空 | 启用通知，检查 TimeRange 与 ReceiverGroups |
 | 规则冲突 | `DescribePrometheusAlertPolicy` | 同名策略/规则已存在 | 先删后建，或 Modify 覆盖 |
 | 通知重复轰炸 | 查 `RepeatInterval` | 间隔过短 | 调大 `RepeatInterval` |
+
+## 收尾确认
+
+```bash
+# 一次性核对：告警规则已创建（出参 AlertRules[]+Total，结构以实际响应为准）
+tccli tke DescribePrometheusAlertRule --region <REGION> --InstanceId <PROM_INSTANCE_ID>   --filter "{total:Total,rules:AlertRules[].{name:Name}}"
+# expected: total>=1 → 告警配置闭环完成
+```
+
+---
 
 ## 下一步
 

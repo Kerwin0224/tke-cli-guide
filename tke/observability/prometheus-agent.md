@@ -11,6 +11,13 @@ fused: false
 > ⚠️ 本文档所有 Action 属 **TKE 2018-05-25（默认版本）**。
 > ⚠️ 本篇出参结构未经验证，按实际响应为准；错误码与诊断见 [§故障恢复](#故障恢复)。
 
+## 触发条件
+
+- `DescribePrometheusClusterAgents` 不含目标 `ClusterId`，需为本集群安装 Agent 上报指标
+- `DescribePrometheusTargets` → 采集目标 `lastError` 非空，Agent 已装但采集失败
+- 多集群指标无法区分来源，`DescribePrometheusClusterAgents` → `ExternalLabels` 缺 `cluster` 标签 — 看 [故障恢复]段
+
+
 ## 概述
 
 Prometheus 集群采集 Agent（ClusterAgent）部署在被监控集群内，抓取集群指标（kubelet、kube-state-metrics、节点/容器指标等）并远端写到 TKE Prometheus 实例。一个 Prometheus 实例可对接多个集群的 Agent。
@@ -54,7 +61,7 @@ Agent 与 Prometheus 实例的关系：实例是存储与查询后端，Agent �
 
 ## 应用
 
-### 步骤 1：安装 Agent — 最小化
+### 步骤 1：安装 Agent
 
 ```bash
 tccli tke CreatePrometheusClusterAgent --region <REGION> \
@@ -71,7 +78,7 @@ tccli tke CreatePrometheusClusterAgent --region <REGION> \
 
 > ⚠️ **写操作 CAM 授权**：`CreatePrometheusClusterAgent` 需 `tke:CreatePrometheusClusterAgent` 权限，本环境返回 `AuthFailure.UnauthorizedOperation`。授权后回填成功输出。
 
-### 步骤 2：配置外部标签 — 增强
+### 步骤 2：配置外部标签
 
 ```bash
 tccli tke ModifyPrometheusAgentExternalLabels --region <REGION> \
@@ -179,6 +186,29 @@ tccli tke DescribePrometheusClusterAgents --region <REGION> --InstanceId <PROM_I
 | Agent 已装但无指标 | `DescribePrometheusTargets --ClusterId <CLUSTER_ID>` | `NotScrape: true` 或网络不通 | 改 `NotScrape: false`，检查实例与集群 VPC 互通 |
 | 采集目标 lastError 非空 | `DescribePrometheusTargets` | 目标 Service/ServiceMonitor 不存在或端口不符 | 修正 scrape 目标配置 |
 | 多集群指标无法区分 | `DescribePrometheusClusterAgents` 查 `ExternalLabels` | 未配 `cluster` 外部标签 | `ModifyPrometheusAgentExternalLabels` 补标签 |
+
+## 收尾确认
+
+```bash
+# Agent 已接入集群（Verify 查 Agent 列表与 target lastError，此处查指标真上报 + 衔接前置）
+tccli tke DescribePrometheusClusterAgents --region <REGION> --InstanceId <PROM_INSTANCE_ID> \
+  --filter "Agents[].{cluster:ClusterId,region:Region,status:Status}"
+# expected: 目标集群 Status=Running
+
+# 业务可用性端到端：指标真可查（Verify 查 target lastError，此处查指标数据真落库）
+tccli tke DescribePrometheusRecordRules --region <REGION> --InstanceId <PROM_INSTANCE_ID>
+# expected: 返回记录规则列表（说明 Agent 采集的指标已入库可查）
+
+# 衔接下一步前置：Agent Status=Running 是配告警规则/采集配置的前置
+tccli tke DescribePrometheusTargets --region <REGION> \
+  --InstanceId <PROM_INSTANCE_ID> --ClusterType MANAGED_CLUSTER --ClusterId <CLUSTER_ID> \
+  --filter "Targets[].{job:ScrapeJob,lastError:LastError}" --output text | head -5
+# expected: lastError 均为空 → Agent 管理闭环完成
+```
+
+> Agent Status=Running + 指标可查 + target lastError 全空 = 端到端闭环。Verify 段查 Agent 列表与 target 状态，此处确认 Agent 就绪是进下一阶段（配采集规则/告警策略）的前置。
+
+---
 
 ## 下一步
 

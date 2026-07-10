@@ -14,8 +14,8 @@ TKE 集群节点从子网分配内网 IP，Pod/Service 用 VPC CIDR 通信。创
 
 ## 触发条件
 
-- 需创建 TKE 集群但账号下还没有 VPC 或可用子网（`CreateCluster` 必传 `VpcId`）— 用本文从零建一个最小 VPC+子网
-- 已有 VPC+子网但不确定是否可用（可用 IP 是否 ≥10、CIDR 是否冲突）— 跳到 [验证](#验证) 段核对
+- 需创建 TKE 集群但 `tccli vpc DescribeVpcs` 返回空或无可用子网（`CreateCluster` 必传 `VpcId`）— 用本文从零建一个最小 VPC+子网
+- 已有 VPC+子网但 `tccli vpc DescribeSubnets` 返回 `AvailableIpAddressCount < 10` 或 CIDR 与已有 VPC 冲突 — 跳到 [验证](#验证) 段核对
 
 ## 决策依据
 
@@ -33,7 +33,7 @@ TKE 集群节点从子网分配内网 IP，Pod/Service 用 VPC CIDR 通信。创
 
 ```bash
 tccli --version
-# expected: 3.1.117.1 或更高
+# expected: 3.1.124.1 或更高
 
 tccli cvm DescribeRegions --filter "TotalCount" --output text
 # expected: 数字（如 49）→ 凭证有效（凭证配置见 [配置凭证](credentials.md)）
@@ -42,7 +42,7 @@ tccli cvm DescribeRegions --filter "TotalCount" --output text
 ### 资源检查
 
 ```bash
-# 查可用区（cvm 服务提供，vpc 服务无 DescribeZones）
+# 查可用区
 tccli cvm DescribeZones --region <REGION> \
   --filter "ZoneSet[0].{zone:Zone,state:ZoneState}"
 # expected: AVAILABLE 状态的可用区，如 ap-guangzhou-3
@@ -82,6 +82,37 @@ tccli vpc CreateVpc --region <REGION> \
 
 > 记下返回的 `VpcId`，下一步用。
 
+### 1a. 创建双栈 VPC（IPv4/IPv6） {#create-dualstack-vpc}
+
+> 仅当集群要建 **IPv4/IPv6 双栈**（`NetworkType=VPC-CNI` + `IsDualStack=true`）时才需本步。单栈 IPv4 集群跳过，用上一步的 VPC 即可。双栈集群的前序资源约束：VPC 须已开 IPv6 + 子网须已分配 IPv6 CIDR，否则集群创建中途失败（见 [创建集群 — 集群 IP 类型决策树](../tke/clusters/create.md#集群-ip-类型决策树)）。
+
+`CreateVpc` 本身只声明"启用 IPv6 路由发布"标志，真正的 IPv6 CIDR 须创建 VPC 后用 `AssignIpv6CidrBlock` 分配：
+
+```bash
+# 1. 创建 VPC 时启用 IPv6 路由发布（EnableRouteVpcPublishIpv6=true）
+tccli vpc CreateVpc --region <REGION> \
+  --VpcName "<VPC_NAME>" --CidrBlock "10.0.0.0/16" --EnableRouteVpcPublishIpv6 true
+# expected: exit 0，返回 Vpc.VpcId（含 IsDualStack 或可后续核 IPv6）
+
+# 2. 给 VPC 分配 IPv6 CIDR（AssignIpv6CidrBlock）
+tccli vpc AssignIpv6CidrBlock --region <REGION> --VpcId "<VPC_ID>"
+# expected: { "Ipv6CidrBlock": "2402:xxxx::/56", "RequestId": "..." } → VPC 已开 IPv6
+
+# 3. 给子网分配 IPv6 CIDR（AssignIpv6SubnetCidrBlock，子网创建后执行）
+tccli vpc AssignIpv6SubnetCidrBlock --region <REGION> \
+  --VpcId "<VPC_ID>" \
+  --Ipv6SubnetCidrBlocks '[{"SubnetId":"<SUBNET_ID>","Ipv6SubnetCidrBlock":"2402:xxxx::/64"}]'
+# expected: { "Ipv6SubnetCidrBlockSet": [{"SubnetId":"<SUBNET_ID>","Ipv6SubnetCidrBlock":"2402:xxxx::/64"}], "RequestId": "..." }
+```
+
+| 占位符 | 含义 | 约束 | 如何获取 |
+|:------|:-----|:-----|:--------|
+| `<VPC_ID>` | VPC ID | 须已创建 | 上一步 `CreateVpc` 返回 `Vpc.VpcId` |
+| `<SUBNET_ID>` | 子网 ID | 须在 VPC 内 | `### 2. 创建子网` 返回的 `SubnetId` |
+| `Ipv6SubnetCidrBlock` | 子网 IPv6 CIDR | 须在 VPC 的 IPv6 CIDR `/56` 范围内，子网用 `/64` | 自取（如 `2402:xxxx::/64`） |
+
+> ⚠️ **顺序约束**：`AssignIpv6SubnetCidrBlock` 须在 `### 2. 创建子网` 之后执行（须先有子网 ID）。故双栈集群的完整准备顺序是：创建 VPC(开 IPv6) → 分配 VPC IPv6 CIDR → 创建子网 → 分配子网 IPv6 CIDR → 创建集群(双栈)。`Ipv6CidrBlock` 由腾讯云分配（非自取），子网 IPv6 CIDR 须落在 VPC 的 `/56` 内。
+
 ### 2. 创建子网
 
 ```bash
@@ -102,11 +133,37 @@ tccli vpc CreateSubnet --region <REGION> \
 
 ## 验证
 
+从四个维度确认 VPC + 子网就绪：
+
 ```bash
+# 维度 1: VPC 存在且 CIDR 正确
+tccli vpc DescribeVpcs --region <REGION> \
+  --VpcIds '["<VPC_ID>"]' \
+  --filter "VpcSet[0].{id:VpcId,cidr:CidrBlock,name:VpcName}" --output json
+# expected: 返回创建的 VPC，CidrBlock=10.0.0.0/16
+```
+
+```bash
+# 维度 2: 子网存在且可用 IP 充足（≥10 才能创建集群）
 tccli vpc DescribeSubnets --region <REGION> \
   --Filters '[{"Name":"vpc-id","Values":["<VPC_ID>"]}]' \
-  --filter "SubnetSet[0].{id:SubnetId,cidr:CidrBlock,avail:AvailableIpAddressCount}"
-# expected: 含创建的子网，AvailableIpAddressCount ≥ 250
+  --filter "SubnetSet[0].{id:SubnetId,cidr:CidrBlock,avail:AvailableIpAddressCount}" --output json
+# expected: 含创建的子网，AvailableIpAddressCount ≥ 240
+```
+
+```bash
+# 维度 3: 子网所在可用区支持 TKE（ZoneState=AVAILABLE）
+tccli cvm DescribeZones --region <REGION> \
+  --filter "ZoneSet[?Zone=='<ZONE>'].{zone:Zone,state:ZoneState}" --output json
+# expected: state=AVAILABLE
+```
+
+```bash
+# 维度 4: 子网网段是 VPC CIDR 的子段（无冲突）
+tccli vpc DescribeSubnets --region <REGION> \
+  --Filters '[{"Name":"vpc-id","Values":["<VPC_ID>"]}]' \
+  --filter "SubnetSet[0].CidrBlock" --output text
+# expected: 10.0.1.0/24（是 VPC CIDR 10.0.0.0/16 的子段）
 ```
 
 ## 故障恢复
@@ -135,12 +192,18 @@ tccli vpc DeleteVpc --region <REGION> --VpcId "<VPC_ID>"
 ## 收尾确认
 
 ```bash
-# 一次性核对：VPC + 子网均存在，且子网可用 IP 充足
+# 跨步骤汇总：VPC + 子网 + 可用区三要素一次性核对齐备（Verify 分查各维度，此处合一确认）
 tccli vpc DescribeSubnets --region <REGION> \
   --Filters '[{"Name":"vpc-id","Values":["<VPC_ID>"]}]' \
-  --filter "SubnetSet[0].{subnet:SubnetId,vpc:VpcId,cidr:CidrBlock,avail:AvailableIpAddressCount}" --output text
-# expected: 返回创建的子网行，avail ≥ 10，可据此进入创建集群
+  --filter "SubnetSet[0].{subnet:SubnetId,vpc:VpcId,zone:Zone,cidr:CidrBlock,avail:AvailableIpAddressCount}" --output text
+# expected: 返回创建的子网行，avail ≥ 10，zone 为目标可用区，三要素齐备
+
+# 衔接下一步前置：VPC + 子网可进入创建集群（CreateCluster 必传 VpcId/SubnetId 均就绪）
+tccli tke DescribeRegions --filter "TotalCount" --output text
+# expected: 数字（如 42）→ TKE 域可达，VPC+子网就绪可进入 [创建集群](../quickstart/tke-first-cluster.md)
 ```
+
+> VPC 存在 + 子网可用 IP ≥ 10 + 可用区支持 TKE = 网络底座三要素齐备，满足 `CreateCluster` 的 `VpcId`/`SubnetId` 前置要求，可进入创建集群。
 
 ## 下一步
 

@@ -8,6 +8,23 @@ fused: true
 > 创建和管理 TKE 边缘集群 —— 适合边缘计算场景的轻量级 K8s 集群。
 > 控制台: [容器服务 - 边缘集群](https://console.cloud.tencent.com/tke2/edge)
 
+> ⚠️ **已下线（禁止新建）**：TKE-Edge 边缘容器服务已于 **2024-08-28** 下线；**创建入口已封闭**。边缘/IDC 场景改用 [注册节点公网版](https://cloud.tencent.com/document/product/457/57916)（标准集群 + 注册节点）。存量边缘集群可继续运维/迁移，见下方操作；**禁止**再调 `CreateTKEEdgeCluster` 创建新集群。
+
+## 触发条件
+
+- **新建边缘场景** → **禁止用本文创建**：改走标准集群 + [扩展节点/注册节点](../nodes/external-nodes.md)（注册节点公网版）
+- 存量：`DescribeTKEEdgeClusters` 已有边缘集群，需查询状态/凭证/注册脚本/升级 — 用本文运维段
+- `DescribeTKEEdgeClusterStatus` → `ClusterState` 非 `Running`，或节点未注册 — 看 [故障恢复]段
+- 迁移存量边缘集群到注册节点公网版 — 先读官方迁移前置，再按注册节点流程接入
+
+## 准备工作
+
+- 已安装 tccli 并配置凭证 (见 [配置凭证](../../getting-started/credentials.md))
+- 已确认地域支持边缘集群 (DescribeRegions 查地域)
+- 边缘集群相关资源配额充足
+
+
+
 ## 概述
 
 边缘集群是 TKE 为边缘计算场景提供的 K8s 集群类型，运行在边缘节点上。与标准集群的主要区别:
@@ -25,79 +42,113 @@ fused: true
 
 ```bash
 tccli tke CreateTKEEdgeCluster \
-  --region ap-guangzhou \
+  --region <EDGE_REGION> \
   --ClusterName "<NAME>-edge" \
-  --ClusterVersion "1.28.3" \
+  --K8SVersion "1.28.3" \
   --VpcId "<VPC_ID>" \
-  --SubnetId "<SUBNET_ID>"
-# expected: { "ClusterId": "cls-xxxxxxxx" }
+  --PodCIDR "<POD_CIDR>" \
+  --ServiceCIDR "<SERVICE_CIDR>"
+# expected: { "ClusterId": "cls-xxxxxxxx" }；UnsupportedRegion → 换 <EDGE_REGION>（如 ap-beijing）
 ```
+
+> ⚠️ **参数名核对**: `CreateTKEEdgeCluster` 顶层参数是 `K8SVersion`（非 `ClusterVersion`）、`VpcId`（无 `SubnetId`，边缘集群节点通过 VPC 接入，不指定子网）。完整入参以 `tccli tke CreateTKEEdgeCluster help --detail` 为准。`ap-guangzhou` 对 Edge Action 真机返回 `UnsupportedRegion`，创建前先用 `DescribeTKEEdgeClusters --region <候选>` 探测支持地域。
 
 ### 查询边缘集群
 
 ```bash
 # 列出所有边缘集群
-tccli tke DescribeTKEEdgeClusters --region ap-guangzhou
-# expected: { "TotalCount": ..., "Clusters": [...] }
+# 注意：ap-guangzhou 对 Edge Action 返回 UnsupportedRegion；真机可达地域含 ap-beijing（须用 DescribeTKEEdgeClusters 探测）
+tccli tke DescribeTKEEdgeClusters --region <EDGE_REGION>
+# expected: { "TotalCount": ..., "Clusters": [...] }；UnsupportedRegion → 换 Edge 支持地域
 
 # 查询状态
-tccli tke DescribeTKEEdgeClusterStatus --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
+tccli tke DescribeTKEEdgeClusterStatus --region <EDGE_REGION> --ClusterId "<CLUSTER_ID>"
 # expected: ClusterState: "Running"
 
 # 获取凭证
-tccli tke DescribeTKEEdgeClusterCredential --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
+tccli tke DescribeTKEEdgeClusterCredential --region <EDGE_REGION> --ClusterId "<CLUSTER_ID>"
 # expected: 返回 kubeconfig
 ```
+
+| 占位符 | 含义 | 约束 | 获取方式 |
+|--------|------|------|---------|
+| `<EDGE_REGION>` | Edge 支持的地域 | 非任意 TKE 地域；`ap-guangzhou` 真机 `UnsupportedRegion` | `tccli tke DescribeTKEEdgeClusters --region <候选>` 无 `UnsupportedRegion` 即支持（如 `ap-beijing`） |
 
 ### 获取注册脚本 (添加边缘节点)
 
 边缘节点通过脚本注册到集群，而非通过 CVM:
 
 ```bash
-tccli tke DescribeTKEEdgeScript --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
-# expected: 返回边缘节点安装脚本
+# Interface 为 API 必填：边缘节点上 kubelet 向 apiserver 注册使用的网卡名（如 eth0）
+tccli tke DescribeTKEEdgeScript --region <EDGE_REGION> \
+  --ClusterId "<CLUSTER_ID>" --Interface "<INTERFACE>"
+# expected: 返回 Link/Token/Command（安装脚本）
 ```
+
+| 占位符 | 含义 | 约束 | 获取方式 |
+|--------|------|------|---------|
+| `<INTERFACE>` | 边缘节点网卡名 | API 必填；常见 `eth0` | 边缘节点 `ip -o link` / 运维约定 |
 
 在边缘节点上执行返回的脚本来注册节点。
 
 ### 升级边缘集群
 
 ```bash
-# 1. 查询可升级版本
-tccli tke DescribeEdgeClusterUpgradeInfo --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
-# expected: 返回可升级的目标版本列表
+# 1. 查询升级信息（EdgeVersion 为 API 必填：目标 TKEEdge 版本）
+tccli tke DescribeEdgeClusterUpgradeInfo --region <EDGE_REGION> \
+  --ClusterId "<CLUSTER_ID>" --EdgeVersion "<EDGE_VERSION>"
+# expected: 返回 EdgeVersionCurrent / ClusterUpgradeStatus 等
 
 # 2. 执行升级
-tccli tke UpdateEdgeClusterVersion --region ap-guangzhou \
+tccli tke UpdateEdgeClusterVersion --region <EDGE_REGION> \
   --ClusterId "<CLUSTER_ID>" \
   --Version "<TARGET_VERSION>"
 # expected: exit 0
 ```
 
+| 占位符 | 含义 | 约束 | 获取方式 |
+|--------|------|------|---------|
+| `<EDGE_VERSION>` | 目标 TKEEdge 版本 | `DescribeEdgeClusterUpgradeInfo` 必填 | `DescribeAvailableTKEEdgeVersion` / 运维指定版本号 |
+
 ### 边缘集群日志
 
 ```bash
 # 创建日志配置
-tccli tke CreateEdgeLogConfig --region ap-guangzhou \
+tccli tke CreateEdgeLogConfig --region <EDGE_REGION> \
   --ClusterId "<CLUSTER_ID>" \
   --LogConfig "<LOG_CONFIG_JSON>"
+# expected: exit 0, 返回 RequestId
 
-# 查询日志开关
-tccli tke DescribeEdgeLogSwitches --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
+# 查询日志开关（入参是 --ClusterIds 数组，非 --ClusterId）
+tccli tke DescribeEdgeLogSwitches --region <EDGE_REGION> \
+  --ClusterIds '["<CLUSTER_ID>"]'
 
 # 安装日志 Agent
-tccli tke InstallEdgeLogAgent --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
+tccli tke InstallEdgeLogAgent --region <EDGE_REGION> --ClusterId "<CLUSTER_ID>"
 ```
+
+## 验证
+
+```bash
+# 验证边缘集群创建成功（须用 DescribeTKEEdgeClusters，非 DescribeClusters）
+tccli tke DescribeTKEEdgeClusters --region <EDGE_REGION> --ClusterIds '["<CLUSTER_ID>"]' \
+  --filter "Clusters[0].{id:ClusterId,state:ClusterStatus,name:ClusterName}"
+# expected: state=Running, id/name 与创建参数一致
+```
+
+> 边缘集群 state=Running = 创建成功, 可进入 [关键操作]段管理。
+
+---
 
 ## 清理
 
 ```bash
 # 1. 删除边缘集群
-tccli tke DeleteTKEEdgeCluster --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
+tccli tke DeleteTKEEdgeCluster --region <EDGE_REGION> --ClusterId "<CLUSTER_ID>"
 # expected: exit 0
 
 # 2. 验证
-tccli tke DescribeTKEEdgeClusters --region ap-guangzhou
+tccli tke DescribeTKEEdgeClusters --region <EDGE_REGION>
 # expected: TotalCount 减少，目标集群不在列表中
 ```
 
@@ -118,7 +169,7 @@ tccli tke DescribeTKEEdgeClusters --region ap-guangzhou
 
 ## 集群更新与诊断
 
-> 更新边缘集群属性、查可用版本与额外参数、外部 kubeconfig、CIDR 冲突检查、日志 Agent 卸载。参数以 `--generate-cli-skeleton` 为准（注意 Edge 域 `ClusterID` 大写 vs `ClusterId` 小写不一致）。
+> 更新边缘集群属性、查可用版本与额外参数、外部 kubeconfig、CIDR 冲突检查、日志 Agent 卸载。参数见各 Action 的 `help --detail`（注意 Edge 域 `ClusterID` 大写 vs `ClusterId` 小写不一致）。
 >
 > ⚠️ Edge 域多数 action 在 ap-guangzhou 返回 `UnsupportedRegion`（`DescribeEdgeClusterExtraArgs`/`CheckEdgeClusterCIDR`/`DescribeEdgeClusterInstances`）或 CAM 拦截（`DescribeEdgeAvailableExtraArgs`/`UpdateTKEEdgeCluster`/`UninstallEdgeLogAgent` 返回 `UnauthorizedOperation`/`AuthFailure.UnauthorizedOperation`）。仅 `DescribeAvailableTKEEdgeVersion` 可用（但 action 已废弃，edge 产品已下线）。下方命令参数名已验证（错误是地域/CAM/资源，非参数名）。
 
@@ -212,9 +263,33 @@ tccli tke DeleteECMInstances --ClusterID "<CLUSTER_ID>" --region <REGION> --EcmI
 
 > ECM 用 `ModuleId`（边缘计算模块 ID）+ `ZoneInstanceCountISPSet[]`（按可用区+ISP 运营商分配）。`EcmIdSet[]`/`CvmIdSet[]` 是实例 ID 数组。
 
+## 收尾确认
+
+```bash
+# 集群已 Running（Verify 查状态，此处端到端核节点注册 + kubeconfig 可拉取）
+tccli tke DescribeTKEEdgeClusters --region <EDGE_REGION> --ClusterIds '["<CLUSTER_ID>"]' \
+  --filter "Clusters[0].{state:ClusterStatus,name:ClusterName}"
+# expected: state=Running
+
+# 业务可用性端到端：边缘节点注册成功（Verify 查集群状态，此处查节点真在线）
+# 注意：DescribeEdgeClusterInstances 在 ap-guangzhou 返回 UnsupportedRegion，须在 <EDGE_REGION> 执行
+tccli tke DescribeEdgeClusterInstances --ClusterID "<CLUSTER_ID>" --region <EDGE_REGION> \
+  --Offset 0 --Limit 20
+# expected: TotalCount ≥1，InstanceInfoSet 含已注册边缘节点
+
+# 衔接下一步前置：kubeconfig 可拉取（进部署应用前须能连通集群）
+tccli tke DescribeTKEEdgeClusterCredential --region <EDGE_REGION> --ClusterId "<CLUSTER_ID>" \
+  --filter "Kubeconfig" --output text | head -1
+# expected: apiVersion: v1 → 边缘集群闭环完成
+```
+
+> 集群 Running + 边缘节点注册在线 + kubeconfig 可拉取 = 端到端闭环。Verify 段查集群状态，此处确认边缘节点真注册（业务可用性，Edge 地域须真机核实）+ kubeconfig 可连通集群是进下一阶段（部署应用）的前置。
+
+---
+
 ## 下一步
 
-- [EKS 弹性集群](eks-cluster.md) — Serverless 集群与容器实例（对比边缘）
-- [虚拟节点 (超级节点)](../nodes/virtual-nodes.md) — 标准集群内的 Serverless 节点
-- [专用工作负载概览](index.md) — 边缘/EKS 选型
+- [EKS / 容器实例](eks-cluster.md) — 存量 EKS 集群与容器实例（对比边缘）
+- [虚拟节点 (超级节点)](../nodes/virtual-nodes.md) — 标准集群内免 CVM 容量（先 CreateCluster）
+- [专用工作负载概览](index.md) — 边缘 / EKS / 虚拟节点选型
 - [标准集群概览](../clusters/index.md) — 对比标准集群

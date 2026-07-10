@@ -7,6 +7,12 @@ fused: true
 > 3 步完成 TKE 集群从 TCR 镜像仓库拉取镜像并部署。
 > TKE 控制台: [容器服务](https://console.cloud.tencent.com/tke2) | TCR 控制台: [镜像仓库](https://console.cloud.tencent.com/tcr)
 
+## 触发条件
+
+- TKE 集群中 Pod 报 `ImagePullBackOff` 且镜像地址指向 TCR 私有仓库 — 用本文配置拉取链路
+- 需让 TKE 集群从 TCR 拉取私有镜像部署工作负载（VPC 内网拉取场景）— 从 [步骤 1](#步骤-1创建-tcr-访问凭证) 开始
+
+
 ## 概述
 
 TKE 集群拉取 TCR 镜像的三种典型场景：
@@ -17,9 +23,13 @@ TKE 集群拉取 TCR 镜像的三种典型场景：
 | 公网拉取 | TKE → TCR PublicDomain（公网 + 白名单） | TKE 与 TCR 不同 VPC | 高 |
 | CI/CD 自动部署 | CI 推 TCR → TKE 拉取（imagePullSecret） | 持续部署流水线 | 中 |
 
-> 本 Quickstart 走最常用的 **VPC 内网拉取** 场景。跨产品操作：tccli（取凭证）+ kubectl（配 Secret + 部署）。
+> 本 Quickstart 走 **VPC 内网拉取** + `imagePullSecret` 场景。跨产品操作：TCCLI（取凭证）+ kubectl（配 Secret + 部署）。
+>
+> **免密替代路径**：TKE 集群可用 **TCR 插件**做内网免密拉取（无需本篇 Secret）；见 [TKE 使用 TCR 插件免密拉取](https://cloud.tencent.com/document/product/1141/48184)。公网拉取产生 COS 公网流量费；同 VPC 内网不计该费。`ImagePullBackOff` / `unauthorized` 时先核：内网端点是否接入、白名单/凭证是否有效、镜像地址是否用对域名。
 
 ## 准备工作
+
+> 本篇跨三个 CLI：tccli（管 TCR 凭证/TKE 端点）+ kubectl（部署 Pod 验证拉取，K8s 原生）+ docker（本地镜像操作）。kubectl 用于验证镜像拉取链路终点（Pod 级验证 tccli 做不到）。
 
 ```bash
 # 1. tccli 可用
@@ -95,17 +105,25 @@ kubectl run my-app --image="<REGISTRY_DOMAIN>/<NAMESPACE>/<REPO>:<TAG>" \
   --overrides='{"spec":{"template":{"spec":{"imagePullSecrets":[{"name":"tcr-secret"}]}}}}' \
   --image-pull-policy=Always --replicas=1
 # expected: deployment.apps/my-app created
+```
 
-# 验证 Pod 拉取成功
+### 验证
+
+从两个维度确认镜像拉取链路通：
+
+```bash
+# 维度 1: Pod Running，无 ImagePullBackOff
 kubectl get pods -l app=my-app
-# expected: Pod Running，无 ImagePullBackOff
+# expected: Pod Running，STATUS 非 ImagePullBackOff/ErrImagePull
 ```
 
 ```bash
-# 确认镜像拉取来源
+# 维度 2: 确认镜像拉取来源
 kubectl describe pod -l app=my-app | /usr/bin/grep -A2 "Events:"
-# expected: Successfully pulled image <REGISTRY_DOMAIN>/...
+# expected: Successfully pulled image "<REGISTRY_DOMAIN>/..."
 ```
+
+> Pod Running + Events 含 "Successfully pulled image" = TKE→TCR 镜像拉取链路通。
 
 ## 清理
 
@@ -124,6 +142,30 @@ tccli tcr DeleteInstanceToken --region ap-guangzhou --RegistryId "<REGISTRY_ID>"
 ```
 
 > TCR 实例与镜像版本保留（不影响其他业务）。临时 Token 1 小时后自动过期。
+
+---
+
+## 收尾确认
+
+```bash
+# 业务可用性端到端：清理后重新部署 Pod，kubectl get pods 返回 ready=true
+# 证明镜像拉取+运行成功（Verify 在清理前查 Pod Running，此处清理后重部署验证链路可复现）
+kubectl run verify-app --image="<REGISTRY_DOMAIN>/<NAMESPACE>/<REPO>:<TAG>" \
+  --overrides='{"spec":{"template":{"spec":{"imagePullSecrets":[{"name":"tcr-secret"}]}}}}' \
+  --image-pull-policy=Always --replicas=1
+# expected: deployment.apps/verify-app created
+
+kubectl get pods -l app=verify-app -o jsonpath='{.items[0].status.containerStatuses[0].ready}'
+# expected: true → 镜像拉取+容器运行端到端成功
+
+# 清理验证 Pod
+kubectl delete deployment verify-app
+# expected: deployment.apps "verify-app" deleted
+```
+
+> 清理后重部署 Pod ready=true = TKE 拉取 TCR 镜像链路可复现，端到端闭环完成。
+
+---
 
 ## 下一步
 

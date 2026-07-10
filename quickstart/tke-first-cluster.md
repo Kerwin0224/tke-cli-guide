@@ -5,12 +5,12 @@ fused: true
 
 # TKE: 5 分钟创建第一个集群
 
-> **Traceability**: [TKE 产品文档](https://cloud.tencent.com/document/product/457)
+> **Traceability**: [TKE 产品文档](https://cloud.tencent.com/document/product/457) | 控制台: [TKE 集群创建](https://console.cloud.tencent.com/tke2/cluster/create?rid=1)
 >
 > ⚠️ **计费警告**: 创建托管集群（MANAGED_CLUSTER）即开始计收**集群管理费**（L5 为最低等级）。
-> 完成本 Quickstart 后务必执行 [Step 3: 删除集群](#step-3-删除集群清理) 以避免持续计费。
+> 完成本 Quickstart 后须执行 [Step 3: 删除集群](#step-3-删除集群清理) 以避免持续计费。
 >
-> **目标读者**: DevOps / SRE — 用 tccli 管理 TKE 集群。
+> **目标读者**: DevOps / SRE — 用 TCCLI 管理 TKE 集群。
 >
 > **阅读路径**: 本文 → [TKE 概览](../tke/index.md) → [创建集群详解](../tke/clusters/create.md)
 >
@@ -18,13 +18,19 @@ fused: true
 
 ---
 
+## 触发条件
+
+- 需用 TCCLI 验证创建并管理一个 TKE 集群（创建→查询→删除闭环）— 本篇是最短路径
+- 终端执行 `tccli tke DescribeClusters` 返回空或需验证 TCCLI 集群管理能力 — 从 [Step 0 环境检查](#step-0-环境检查) 开始
+- 要使用 TCCLI 的 `--waiter` 异步等待 + `--filter` JMESPath 过滤实操集群生命周期 — 本 Quickstart 含完整示例
+
 ## 准备工作
 
 逐条验证，每条后附可执行命令。
 
 | # | 条件 | 验证命令 | 预期结果 |
 |:--|:-----|:--------|:---------|
-| 1 | tccli 已安装 (≥ 3.0) | `tccli --version` | `3.x.x` 或更高 |
+| 1 | TCCLI 已安装 (≥ 3.0) | `tccli --version` | `3.x.x` 或更高 |
 | 2 | 凭证已配置 | `tccli tke DescribeRegions` | 返回 `"RequestId"`，无 `Error` |
 | 3 | 目标地域可用 | `tccli tke DescribeRegions` | 输出含 `ap-guangzhou`、`Status` 非空 |
 | 4 | VPC 和子网已就绪 | `tccli vpc DescribeSubnets --region <REGION>` | 某子网 `AvailableIpAddressCount ≥ 10` |
@@ -32,14 +38,14 @@ fused: true
 
 ```bash
 tccli --version
-# expected: 3.1.117.1
+# expected: 3.1.124.1
 
 tccli tke DescribeRegions \
     --filter "RegionInstanceSet[0].{name:RegionName,status:Status}" --output text
 # expected: ap-guangzhou    alluser
 ```
 
-> 未安装 tccli → [安装 tccli](../getting-started/install.md)。凭证未配置 → [配置凭证](../getting-started/credentials.md)（`tccli configure` 或 `tccli auth login`）。缺少 VPC/子网 → [准备 VPC 与子网](../getting-started/prepare-vpc.md)。未装 kubectl → [kubectl 安装](https://kubernetes.io/docs/tasks/tools/)（验证集群用，非创建集群必需）。
+> 未安装 TCCLI → [安装 TCCLI](../getting-started/install.md)。凭证未配置 → [配置凭证](../getting-started/credentials.md)（`tccli configure` 或 `tccli auth login`）。缺少 VPC/子网 → [准备 VPC 与子网](../getting-started/prepare-vpc.md)。未装 kubectl → [kubectl 安装](https://kubernetes.io/docs/tasks/tools/)（验证集群用，非创建集群必需）。
 
 ---
 
@@ -76,7 +82,7 @@ tccli tke DescribeVersions --region <REGION> \
 | 高可用 | 内置 HA | 需自行配置 3 节点 |
 | SLO | 99.95% | 取决于用户配置 |
 
-> **推荐**: `MANAGED_CLUSTER` — 适用绝大多数场景。
+> **推荐**: `MANAGED_CLUSTER` — 适用多数场景。
 
 ### 创建集群
 
@@ -197,8 +203,7 @@ tccli tke DescribeClusterStatus \
 
 ```bash
 # 维度 1: 状态 = Running，删除保护 = false
-tccli tke DescribeClusterStatus --region <REGION> --ClusterIds '["<CLUSTER_ID>"]' \
-    --filter "ClusterStatusSet[0].{state:ClusterState,protection:ClusterDeletionProtection}" --output json
+tccli tke DescribeClusterStatus --region <REGION> --filter "ClusterStatusSet[?ClusterId=='<CLUSTER_ID>'] | [0].{state:ClusterState,protection:ClusterDeletionProtection}" --output json
 # expected: {"state":"Running","protection":false}
 ```
 ```json
@@ -231,6 +236,7 @@ tccli tke DescribeClusterSecurity --region <REGION> --ClusterId <CLUSTER_ID> \
     --filter "Kubeconfig" --output text > ~/.kube/config-qs
 # expected: 文件写入成功，kubeconfig 为有效 YAML
 export KUBECONFIG=~/.kube/config-qs
+# kubectl 验证 kubeconfig 可用 (tccli 取凭证后, 用 kubectl 验证集群连通, K8s 原生命令)
 kubectl cluster-info
 # expected: Kubernetes control plane is running at https://cls-xxxxxxxx.ccs.tencent-cloud.com
 ```
@@ -289,8 +295,7 @@ tccli tke DescribeClusters --region <REGION> --ClusterIds '["<CLUSTER_ID>"]' \
 确认删除保护已关闭。
 
 ```bash
-tccli tke DescribeClusterStatus --region <REGION> --ClusterIds '["<CLUSTER_ID>"]' \
-    --filter "ClusterStatusSet[0].ClusterDeletionProtection" --output text
+tccli tke DescribeClusterStatus --region <REGION> --filter "ClusterStatusSet[?ClusterId=='<CLUSTER_ID>'] | [0].ClusterDeletionProtection" --output text
 # expected: false
 ```
 ```text
@@ -361,18 +366,44 @@ tccli tke DescribeClusters --region <REGION> --ClusterIds '["<CLUSTER_ID>"]' \
 
 ---
 
+## 收尾确认
+
+```bash
+# 残留资源核查：DeleteCluster 不会自动删除 CBS 云硬盘、EIP、CLB，须手动清零
+tccli cbs DescribeDisks --region <REGION> --filter "TotalCount" --output text
+# expected: 0（或仅余与 TKE 无关的盘）→ 无 TKE 残留 CBS
+
+tccli vpc DescribeAddresses --region <REGION> --filter "TotalCount" --output text
+# expected: 0（或仅余与 TKE 无关的 EIP）→ 无 TKE 残留 EIP
+
+tccli clb DescribeLoadBalancers --region <REGION> --filter "TotalCount" --output text
+# expected: 0（或仅余与 TKE 无关的 CLB）→ 无 TKE 残留 CLB
+```
+
+> 集群已删（TotalCount=0）+ CBS/EIP/CLB 均清零 = 本 Quickstart 的创建→查询→删除闭环完成，无残留资源计费。
+
+---
+
 ## 下一步
+
+### 上线前检查（弱校验）
+
+Quickstart 闭环后、生产部署前，对照下列项（完整表见 [容器应用部署 Check List](https://cloud.tencent.com/document/product/457/41497)）：
+
+| 类别 | 检查项 | 未做的后果 | 本仓库入口 |
+|:-----|:-------|:-----------|:-----------|
+| 网络 | 创建前规划节点网段与容器网段容量 | 扩容时节点/Pod IP 不足 | [创建集群 — 创建前必读](../tke/clusters/create.md#创建前必读创建后改不了) · [网络管理](../tke/networking/index.md) |
+| 网络 | 专线/对等连接/VPN 场景避免网段冲突 | 跨网互通失败 | [准备 VPC](../getting-started/prepare-vpc.md) |
+| 安全 | 安全组按推荐放通容器/节点网段 | 节点 NotReady、DNS 失败 | [创建节点池 — 安全组](../tke/nodes/nodepool-create.md#安全组节点加入前) |
+| 部署 | 运行时（containerd/docker）创建时选定 | 改运行时仅影响无节点池归属的增量节点 | [创建集群](../tke/clusters/create.md) |
+| 部署 | IPVS 仅创建时可开，开后不可关 | 转发模式锁死 | [网络 — 转发模式半常量](../tke/networking/index.md#转发模式半常量与-networktype-正交) |
+| 部署 | **新建**用托管集群（独立已停止新建） | 误选独立则无法新建 | [集群管理](../tke/clusters/index.md) |
+| 工作负载 | 设 CPU/内存 limit；配存活/就绪探针 | 资源争抢或业务挂了 Pod 仍 Ready | 工作负载 YAML / 控制台 |
 
 - [创建集群详解](../tke/clusters/create.md) — 完整参数、高级配置（Global Router 模式、双栈、IPVS）
 - [查询和过滤集群](../tke/clusters/query.md) — JMESPath 高级过滤技巧
 - [删除集群详解](../tke/clusters/delete.md) — 残留资源清理、批量删除
 - [给集群添加节点](../tke/nodes/nodepool-create.md) — 创建节点池、扩容
 - [TKE 拉取 TCR 镜像](../cross-product/tke-pull-tcr.md) — 跨产品：集群工作负载使用 TCR 私有镜像
-
----
-
-## 控制台替代
-
-[TKE 控制台创建集群](https://console.cloud.tencent.com/tke2/cluster/create?rid=1)
 
 ---

@@ -8,6 +8,18 @@ fused: true
 > 为 TCR 企业版实例开启镜像加速服务，加速镜像拉取。
 > 控制台: [容器镜像服务 - 镜像加速](https://console.cloud.tencent.com/tcr/acceleration)
 
+## 触发条件
+
+- 你拉取大镜像（如 AI/模型镜像）延迟高，需 CFS 缓存加速后端就近读取降延迟 — 用本文开启镜像加速（`DescribeImageAccelerateService` 返回 IsEnable=false）
+- 你遇到加速未生效/CFSVIP 不可达/拉取仍走公网 — 看 [故障恢复](#故障恢复) 段诊断
+
+## 准备工作
+
+- 已创建 TCR 实例 + 已备 VPC/子网/CFS 文件系统
+- 已配置 tccli 凭证 (见 [配置凭证](../../getting-started/credentials.md))
+
+
+
 ## 概述
 
 镜像加速服务为 TCR 实例创建一个 CFS（云文件存储）加速后端，镜像层缓存在 CFS 中，拉取时从 CFS 就近读取，降低大镜像拉取延迟。`CFSVIP` 是加速后端访问入口。
@@ -100,7 +112,7 @@ tccli tcr DescribeImageAccelerateService --region <REGION> --RegistryId <REGISTR
 | `<VPC_ID>` | VPC ID | CFS 所在 VPC | `tccli vpc DescribeVpcs` |
 | `<SUBNET_ID>` | 子网 ID | 与 Zone 同可用区 | `tccli vpc DescribeSubnets` |
 | `<PGROUP_ID>` | CFS 权限组 ID | 已创建 | CFS 服务创建 |
-| `<ZONE>` | 可用区 | 与 SubnetId 一致 | `tccli tcr DescribeRegions` / `tccli cbs DescribeZones` |
+| `<ZONE>` | 可用区 | 与 SubnetId 一致 | `tccli tcr DescribeRegions` / `tccli cvm DescribeZones` |
 
 ## 清理
 
@@ -129,6 +141,17 @@ tccli tcr DeleteImageAccelerateService --region <REGION> --RegistryId <REGISTRY_
 | 拉取未加速 | 客户端未走 CFSVIP | 确认拉取走 `CFSVIP`，非默认域名 |
 
 > 参数校验样本：缺 `--PGroupId` → `tccli: error: the following arguments are required: --PGroupId`（exit 252，客户端解析错误）。
+
+## 收尾确认
+
+```bash
+# 一次性核对：镜像加速服务已开启且后端就绪
+tccli tcr DescribeImageAccelerateService --region <REGION> --RegistryId "<REGISTRY_ID>" \
+  --filter "{enable:IsEnable,vip:CFSVIP,status:Status}"
+# expected: enable=true, vip 非空, status 正常 → 加速闭环完成
+```
+
+---
 
 ## 下一步
 

@@ -10,11 +10,11 @@ fused: false
 
 | 术语 | 英文 | 释义 |
 |:-----|:-----|:-----|
-| CAM | Cloud Access Management | 腾讯云访问管理。管理子账号、API 密钥、权限策略。tccli 凭证（SecretId/SecretKey）在此创建。 |
-| SecretId / SecretKey | — | CAM API 密钥对。SecretId 是公开标识，SecretKey 是密钥（切勿泄露）。tccli 用它调用腾讯云 API。 |
+| CAM | Cloud Access Management | 腾讯云访问管理。管理子账号、API 密钥、权限策略。TCCLI 凭证（SecretId/SecretKey）在此创建。 |
+| SecretId / SecretKey | — | CAM API 密钥对。SecretId 是公开标识，SecretKey 是密钥（切勿泄露）。TCCLI 用它调用腾讯云 API。 |
 | 主账号 | Root account | 腾讯云注册账号，拥有全部权限。其 API 密钥风险最高，生产环境用子账号。 |
 | 子账号 | Sub-account / CAM 用户 | 主账号下创建的用户，授予最小权限。生产/CI/CD 应使用子账号密钥。 |
-| profile | — | tccli 的命名配置集。一个 profile 存一组凭证+地域，用 `--profile <NAME>` 切换，支持多账号。 |
+| profile | — | TCCLI 的命名配置集。一个 profile 存一组凭证+地域，用 `--profile <NAME>` 切换，支持多账号。 |
 | 地域 | Region | 腾讯云数据中心的地理区域，如 `ap-guangzhou`（广州）、`ap-shanghai`（上海）。资源不可跨地域访问。 |
 | VPC | Virtual Private Cloud | 虚拟私有云。腾讯云上逻辑隔离的网络空间，TKE 集群和 TCR 实例都部署在 VPC 内。 |
 | 子网 | Subnet | VPC 内的 IP 地址段。TKE 节点、CVM 实例从子网分配内网 IP。 |
@@ -42,7 +42,7 @@ fused: false
 | CLB | Cloud Load Balancer | 腾讯云负载均衡。TKE Service 类型 LoadBalancer 自动创建 CLB。 |
 | CBS | Cloud Block Storage | 腾讯云云硬盘。TKE 节点系统盘/数据盘、PV 持久化卷常用 CBS。 |
 | L5 | L5 | 腾讯云软负载组件（旧名 CLB-L5）。部分 TKE 网络场景提及，新场景用 CLB 替代。 |
-| kubectl | kubectl | Kubernetes 命令行工具。操作集群资源（Pod/Service/Deployment）用，与 tccli（操作腾讯云资源）不同。安装见 [Kubernetes 官方文档](https://kubernetes.io/docs/tasks/tools/)。 |
+| kubectl | kubectl | Kubernetes 命令行工具。操作集群资源（Pod/Service/Deployment）用，与 TCCLI（操作腾讯云资源）不同。安装见 [Kubernetes 官方文档](https://kubernetes.io/docs/tasks/tools/)。 |
 
 ## TCR（容器镜像服务）
 
@@ -62,16 +62,16 @@ fused: false
 | 术语 | 释义 |
 |:-----|:-----|
 | tccli | 腾讯云命令行工具。本指南所有操作的入口。 |
-| Action | tccli 调用的 API 操作名，如 `CreateCluster`、`DescribeClusters`。 |
+| Action | TCCLI 调用的 API 操作名，如 `CreateCluster`、`DescribeClusters`。 |
 | `--generate-cli-skeleton` | 生成 Action 入参骨架 JSON 的命令（调试用辅助命令，终端用户一般不用）。 |
 | `--filter` | JMESPath 表达式，从响应中提取字段。如 `--filter "Clusters[0].ClusterId"`。 |
 | `--version` | 指定 API 版本。TKE 有 2018-05-25（默认，全功能）和 2022-05-01（官方当前版）两版本。 |
 | `--region` | 指定地域。如 `--region ap-guangzhou`。 |
-| `# expected:` | 代码块内的注释，标注命令的成功信号。读者复制命令时一并复制该注释无妨。 |
+| `# expected:` | 代码块内的注释，标注命令的成功信号。读者复制命令时保留该注释无害。 |
 
 ## 下一步
 
-- [安装 tccli](install.md) — 若尚未安装
-- [配置凭证](credentials.md) — 获取 CAM 密钥并配置 tccli
+- [安装 TCCLI](install.md) — 若尚未安装
+- [配置凭证](credentials.md) — 获取 CAM 密钥并配置 TCCLI
 - [TKE 概览](../tke/index.md) — 了解 TKE 对象模型
 - [TCR 概览](../tcr/index.md) — 了解 TCR 对象模型

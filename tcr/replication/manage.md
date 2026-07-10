@@ -6,7 +6,20 @@ fused: true
 # 实例同步（跨地域复制）
 
 > 配置 TCR 企业版实例间的镜像跨地域同步，将主实例的镜像自动复制到从实例。
-> 控制台: [容器镜像服务 - 实例同步](https://console.cloud.tencent.com/tcr/replication)
+> 控制台: [实例同步](https://console.cloud.tencent.com/tcr/sync) · [实例复制](https://console.cloud.tencent.com/tcr/replication)（运维中心「同步复制」下两个入口）。**基础版不支持**实例同步——控制台在 basic 实例上打开同步页会提示「基础版实例不支持，请前往实例管理调整实例规格」；API 返回 `UnsupportedOperation: only supports standard and premium instance`。
+
+## 触发条件
+
+- `tccli tcr DescribeInstances --Registryids '["<ID>"]'` 返回 `RegistryType: basic`，跨地域容灾/就近拉取需求，basic 不支持同步（`ManageReplication` 报 `UnsupportedOperation: only supports standard and premium instance`）
+- `DescribeReplicationInstances --RegistryId "<ID>"` 返回 `TotalCount: 0`，主实例无从实例，镜像无法跨地域复制
+- 跨地域 CI/CD 拉取超时，需在目标地域建从实例就近拉取（`docker pull` 延迟高）
+
+## 准备工作
+
+- 已创建主实例 (src) + 目标地域有配额建从实例
+- 已配置 tccli 凭证 (见 [配置凭证](../../getting-started/credentials.md))
+
+
 
 ## 概述
 
@@ -85,7 +98,10 @@ tccli tcr CreateReplicationInstance --region <SOURCE_REGION> \
 
 ### 步骤 2：配置同步规则
 
+同账号主从实例：只传 `Rule`。跨账号：另加 `PeerReplicationOption`（见上文「跨账号同步」）。
+
 ```bash
+# 同账号：配置同步规则（无 PeerReplicationOption）
 tccli tcr ManageReplication --region <SOURCE_REGION> \
   --SourceRegistryId <SOURCE_REGISTRY_ID> \
   --DestinationRegistryId <DEST_REGISTRY_ID> \
@@ -190,6 +206,29 @@ tccli tcr DescribeReplicationInstanceCreateTasks --region <SOURCE_REGION> \
 ```
 
 > `DescribeReplicationPolicies` 用 `Page`/`PageSize`（从 1 开始的页码），与同域 `DescribeReplicationInstances` 的 `Offset`/`Limit` 不同——切换接口必须改分页参数。`DescribeReplicationInstanceCreateTasks` 用 `ReplicationRegistryId`（从实例 ID，步骤 1 返回）+ `ReplicationRegionId`（从实例地域数字 ID）查创建任务，区别于 `DescribeReplicationInstanceSyncStatus` 查的是同步状态。
+
+## 收尾确认
+
+```bash
+# ③ 跨步骤汇总：从实例创建 + 同步规则就绪 + 同步状态完成 一次性核对（Verify 逐项查，这里汇总三步产物）
+tccli tcr DescribeReplicationInstances --region <SOURCE_REGION> --RegistryId "<SOURCE_REGISTRY_ID>" \
+  --filter "{total:TotalCount,regs:ReplicationRegistries[].{dest:ReplicationRegistryId,region:ReplicationRegionId}}"
+# expected: total>=1, 含目标从实例（字段名 ReplicationRegistries 非 ReplicationInstances）
+
+tccli tcr DescribeReplicationInstanceSyncStatus --region <SOURCE_REGION> \
+  --RegistryId "<SOURCE_REGISTRY_ID>" \
+  --ReplicationRegistryId "<REPLICATION_REGISTRY_ID>" \
+  --ReplicationRegionId <DEST_REGION_ID>
+# expected: 同步状态=完成（无 Pending/InProgress）
+
+# ② 业务可用性端到端：镜像真从从实例拉取成功（跨地域复制的终极证明，Verify 查记录存在，这里查端到端可达）
+docker pull <DEST_REGISTRY_DOMAIN>/<DEST_NAMESPACE>/<IMAGE>:<TAG>
+# expected: Pull complete（从从实例公网端点拉取，DEST_REGISTRY_DOMAIN 从从实例 DescribeInstances 取 PublicDomain）
+```
+
+> 从实例已建 + 同步状态完成 + 从实例 docker pull 成功 = 实例同步闭环完成，主实例镜像已跨地域复制可达。
+
+---
 
 ## 下一步
 

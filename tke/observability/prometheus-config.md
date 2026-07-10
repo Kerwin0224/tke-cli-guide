@@ -12,6 +12,13 @@ fused: true
 > 本文合并 Config / RecordRule / Temp / Template / Dashboard 五类操作于一篇，单会话读者无需切页。
 > 输出结构以实际响应为准；错误码与诊断见 [§故障恢复](#故障恢复)。
 
+## 触发条件
+
+- `DescribePrometheusConfig` 返回的 ServiceMonitors/PodMonitors 不含目标采集器，需创建采集配置
+- `DescribePrometheusRecordRules` 不含目标规则，或记录规则 PromQL 不生效，需创建/修改记录规则
+- 多实例需复用采集/告警规则，`DescribePrometheusTemp` 无合适模板，需建模板并 `Sync` 推送 — 看 [故障恢复]段
+
+
 ## 概述
 
 TKE Prometheus 配置分五个正交维度，各有独立 CRUD：
@@ -81,7 +88,7 @@ tccli tke DescribeClusters --region <REGION> --filter "Clusters[*].ClusterId" --
 
 ## 操作步骤
 
-### 步骤 1：创建采集配置 — 最小化
+### 步骤 1：创建采集配置
 
 ```bash
 tccli tke CreatePrometheusConfig --region <REGION> \
@@ -97,7 +104,7 @@ tccli tke CreatePrometheusConfig --region <REGION> \
 | `<SM_NAME>` | ServiceMonitor 名 | 集群内唯一 | 自定义 |
 | `<SM_YAML>` | ServiceMonitor 配置 | 合法 YAML 字符串 | 自定义 |
 
-### 步骤 2：创建记录规则 — 增强
+### 步骤 2：创建记录规则
 
 ```bash
 tccli tke CreatePrometheusRecordRuleYaml --region <REGION> \
@@ -108,7 +115,7 @@ tccli tke CreatePrometheusRecordRuleYaml --region <REGION> \
 
 `Content` 是含 `record:`/`expr:` 的 YAML 字符串，规则名在 `record:` 行内（非独立 Name 参数）。Modify 时需额外传 `Name` 指定改哪条。
 
-### 步骤 3：创建模板并同步到实例 — 增强（Temp）
+### 步骤 3：创建模板并同步到实例
 
 ```bash
 # 创建聚合模板（全局，不绑实例）
@@ -161,7 +168,7 @@ tccli tke DeletePrometheusTemplate --region <REGION> --TemplateId <TEMPLATE_ID>
 
 > Temp 与 Template 命令一一对应：`Create/Describe/Modify/Sync/Delete` × `PrometheusTemp|PrometheusTemplate`。区别仅内容字段——Temp 用 `RecordRules`，Template 用 `AlertRules`；`Describe` 也不同（`DescribePrometheusTemp` 单数 vs `DescribePrometheusTemplates` 复数 + Filters）。
 
-### 步骤 4：创建 Grafana Dashboard — 增强
+### 步骤 4：创建 Grafana Dashboard
 
 ```bash
 tccli tke CreatePrometheusDashboard --region <REGION> \
@@ -257,7 +264,7 @@ tccli tke DeletePrometheusTemp --region <REGION> --TemplateId <TEMPLATE_ID>
 |:-----|:-----|:-----|:-----|
 | `AuthFailure.UnauthorizedOperation` (tke:CreatePrometheusConfig 等) | 查账号 CAM | 写 Prometheus 配置需对应 `tke:ActionName` 权限 | 申请写权限。此为环境限制 |
 | `UnauthorizedOperation` 您未授权访问该接口 (DescribePrometheus*) | 同上 | 读操作在云 API 网关层被拦 | 申请 `tke:DescribePrometheus*` 读权限 |
-| `Unknown options` | `tccli tke <Action> --generate-cli-skeleton` | Create/Delete 同名入参类型不同（对象 vs 字符串数组）混用 | 按 [§关键字段](#关键字字段) 区分对象/字符串数组 |
+| `Unknown options` | `tccli tke <Action> --generate-cli-skeleton` | Create/Delete 同名入参类型不同（对象 vs 字符串数组）混用 | 按 [§关键字段](#关键字段) 区分对象/字符串数组 |
 | 模板同步失败 | `DescribePrometheusTempSync` | `Targets[].InstanceId`/`ClusterId` 不存在或地域不符 | 核对目标实例与集群 |
 
 ### 命令成功但状态不对（exit = 0）
@@ -268,6 +275,31 @@ tccli tke DeletePrometheusTemp --region <REGION> --TemplateId <TEMPLATE_ID>
 | 记录规则不生效 | `DescribePrometheusRecordRules` | `Content` YAML 格式错或 expr 语法错 | 校验 YAML 与 PromQL |
 | 模板同步后实例配置未变 | `DescribePrometheusConfig` | 同步是覆盖式但目标 Version 落后 | 重新 `SyncPrometheusTemp` 指定新 Version |
 | Dashboard 创建后空白 | — | `Contents` JSON 非合法 Grafana 定义 | 校验 Dashboard JSON |
+
+## 收尾确认
+
+```bash
+# 跨步骤汇总三项合一：采集配置下发 + 记录规则生效 + 模板同步成功
+# 1. 采集配置已下发（Verify 查配置存在，此处查时间戳为最新）
+tccli tke DescribePrometheusConfig --region <REGION> \
+  --InstanceId <PROM_INSTANCE_ID> --ClusterId <CLUSTER_ID> \
+  --filter "{name:Name,update:LatestUpdateTimestamp}"
+# expected: 返回配置且时间戳为新
+
+# 2. 记录规则生效
+tccli tke DescribePrometheusRecordRules --region <REGION> --InstanceId <PROM_INSTANCE_ID> \
+  --filter "RecordRules[].{name:Name}"
+# expected: 含创建的规则名
+
+# 3. 模板同步成功
+tccli tke DescribePrometheusTempSync --region <REGION> --TemplateId <TEMPLATE_ID> \
+  --filter "Targets[].{instance:InstanceId,status:Status}"
+# expected: 目标实例同步 Status=Succeeded → 配置闭环完成
+```
+
+> 采集配置下发 + 记录规则生效 + 模板同步 Succeeded = 跨步骤闭环。Verify 段查各维度存在性，此处汇总五类配置（Config/RecordRule/Temp/Template/Dashboard）的产物一次性核对，确认全链路生效。
+
+---
 
 ## 下一步
 

@@ -5,7 +5,15 @@ fused: false
 ---
 # 配置 VPC-CNI 网络
 
+> 控制台: [容器服务控制台 - 集群网络](https://console.cloud.tencent.com/tke2/cluster)
 > 开启/关闭 VPC-CNI 网络模型。VPC-CNI 让 Pod 直接从 VPC 子网获取 IP，支持固定 IP 与安全组直通。配置型操作（改变行为，不创建/销毁资源）。
+
+## 触发条件
+
+- `DescribeClusters` → `NetworkType` 含 `GR`（Global Router）但需 Pod 固定 IP 或安全组直通，要开启 VPC-CNI
+- `DescribeEnableVpcCniProgress` 返回 `Status` 非 `Enabled`，或 Pod 卡在 `ContainerCreating` 且 `kubectl describe pod` 显示 IP 分配失败
+- `DescribeIPAMD` → `EnableIPAMD=false`，需开启 VPC-CNI 让 Pod 从 VPC 子网获 IP — 看 [故障恢复]段
+
 
 ## 概述
 
@@ -18,29 +26,40 @@ VPC-CNI 是 TKE 的三种 Pod 网络模型之一（另两种：Global Router / C
 | CiliumOverlay | Overlay 隧道 | ❌ | ❌ | 少（不占 VPC IP） | ❌ |
 
 > VPC-CNI 可与 Global Router 共存：Global Router 为主，VPC-CNI 子网补充。开启 VPC-CNI 不影响已有 Global Router Pod。CiliumOverlay 与两者互斥（创建时定型，不可切换），见 [配置 CiliumOverlay](cilium-overlay.md)。
+>
+> **eniipamd 组件**：VPC-CNI 依赖集群内 `tke-eni-agent` / `tke-eni-ipamd` / `tke-eni-ip-scheduler`（Addon 名常为 `eniipamd`）。三组件版本一般相同，`tke-eni-ip-scheduler` 可能略旧。排障或升级前用镜像 Tag 核对版本；变更记录见 [VPC-CNI（eniipamd）组件变更记录](https://cloud.tencent.com/document/product/457/64920)。安装/升级走 [插件管理](../addons/manage.md)。
+
+```bash
+# 核对 eniipamd 相关组件镜像 Tag（版本）
+kubectl -n kube-system get ds tke-eni-agent -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
+kubectl -n kube-system get deploy tke-eni-ipamd -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
+kubectl -n kube-system get deploy tke-eni-ip-scheduler -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
+# expected: 镜像地址含版本 Tag；组件未装则报 NotFound
+```
 
 ## 决策依据
 
 #### 为什么用 VPC-CNI
 
 - **VPC-CNI vs Global Router vs CiliumOverlay**: VPC-CNI 让 Pod 拿 VPC IP，支持固定 IP（StatefulSet 稳定地址）与安全组直通（Pod 级网络策略）；Global Router 的 Pod 用容器网段 IP，不暴露到 VPC；CiliumOverlay 用 Overlay 隧道，不占 VPC IP 但无固定 IP/安全组直通，适合要 Cilium 数据面的场景（见 [配置 CiliumOverlay](cilium-overlay.md)）
-- **默认推荐**: 不确定就用 Global Router（默认）。仅当需要固定 IP 或安全组直通时开启 VPC-CNI；仅当需要 Cilium 数据面且接受创建时定型时选 CiliumOverlay
+- **默认推荐**: 不需要固定 IP / 安全组直通时用 Global Router（契约默认 `NetworkType=GR`）。需要固定 IP 或安全组直通时开启 VPC-CNI；需要 Cilium 数据面且接受创建时定型时选 CiliumOverlay
 - **能关闭吗?**: VPC-CNI 能，`DisableVpcCniNetworkType`（已有 VPC-CNI Pod 需先迁移）。CiliumOverlay 不能——创建时定型，无独立开关 Action
+- **与 IPVS 的关系**: IPVS / kube-proxy 模式在**创建集群**时选定，开启 IPVS 后不可关闭（见 [网络管理 — 转发模式半常量](index.md#转发模式半常量与-networktype-正交)）；开启 VPC-CNI **不改变**已选定的转发模式
 
 ## 配置项
-
-> 来源：`tccli tke EnableVpcCniNetworkType --generate-cli-skeleton`。
 
 | 字段 | 类型 | 必填 | 默认值 | 有效值 | 填错的影响 |
 |:------|------|:--------:|:------:|-------|-----------|
 | ClusterId | string | 是 | — | `cls-xxxxxxxx` | `ResourceNotFound` |
 | VpcCniType | string | 是 | — | `tke-route-eni` / `tke-direct-route-eni` | IP 分配方式不对 |
-| EnableStaticIp | boolean | 否 | false | `true`/`false` | 固定 IP 不生效 |
+| EnableStaticIp | boolean | 是 | — | `true`/`false` | 固定 IP 不生效 |
 | Subnets | list | 是 | — | VPC 子网 ID 列表 | `ResourceNotFound.SubnetId` |
-| ExpiredSeconds | int | 否 | 0 | 固定 IP 回收秒数 | IP 回收时机不对 |
+| ExpiredSeconds | int | 条件 | 0 | 固定 IP 回收秒数；`EnableStaticIp=true` 时必填且须 >300，不传默认 IP 永不销毁 | IP 回收时机不对 |
 | SkipAddingNonMasqueradeCIDRs | boolean | 否 | false | `true`/`false` | 路由配置影响 |
 
-> `VpcCniType`: `tke-route-eni`（弹性网卡路由，常用）/ `tke-direct-route-eni`（直连路由）。`EnableStaticIp=true` 开启固定 IP，配合 `ExpiredSeconds` 设回收时间。
+> `VpcCniType`: `tke-route-eni`（弹性网卡路由，常用）/ `tke-direct-route-eni`（直连路由）。`EnableStaticIp=true` 开启固定 IP，配合 `ExpiredSeconds` 设回收时间（须 >300 秒）。
+>
+> ⚠️ **必填对齐 Action 入参契约**：`EnableStaticIp` 在 `EnableVpcCniNetworkType` 入参中为必填（非可选）——开启 VPC-CNI 时必须显式传 `true`/`false` 声明是否固定 IP；`ExpiredSeconds` 是条件必填（`EnableStaticIp=true` 时必填且 >300）。完整入参以 `tccli tke EnableVpcCniNetworkType help --detail` 为准。
 
 ## 应用
 
@@ -150,14 +169,21 @@ tccli tke DeleteClusterRouteTable --region <REGION> --RouteTableName "<RT_NAME>"
 ## 验证
 
 ```bash
-# 查询开启进度
+# 查询开启进度（仅已是 / 正在开启 VPC-CNI 的集群可用）
+# 非 VPC-CNI 集群会报 FailedOperation.EnableVPCCNIFailed: ... is not vpc-cni cluster
 tccli tke DescribeEnableVpcCniProgress --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
-# expected: Status="Enabled"，进度 100%
+# expected: Status="Enabled"；出参仅 Status/ErrorMessage（无进度百分比字段）
+
+# 未开启时先用 IPAMD 诊断（沙箱 Global Router 常见：EnableIPAMD=false）
+tccli tke DescribeIPAMD --region ap-guangzhou --ClusterId "<CLUSTER_ID>" \
+  --filter "{enable:EnableIPAMD,phase:Phase,subnets:SubnetIds}"
+# expected: EnableIPAMD=true 且 Phase 就绪后，再查 Progress
 ```
 
 | 维度 | 命令 | 预期 |
 |:-----|:-----|:-----|
-| 开启进度 | `DescribeEnableVpcCniProgress` → `Status` | `Enabled` |
+| IPAMD | `DescribeIPAMD` → `EnableIPAMD` | `true`（开启后） |
+| 开启进度 | `DescribeEnableVpcCniProgress` → `Status` | `Enabled`（非 VPC-CNI 集群勿调，会 FailedOperation） |
 | 网络类型 | `DescribeClusters` → `NetworkType` | 含 `VPC-CNI` |
 | Pod 获 IP | `kubectl get pod -o wide` | Pod IP 在 VPC 子网段内 |
 
@@ -191,7 +217,7 @@ tccli tke DisableVpcCniNetworkType --region ap-guangzhou --ClusterId "<CLUSTER_I
 
 ### 子网 IP 不足时增加子网
 
-> VPC-CNI Pod 卡在 ContainerCreating 多因子网 IP 耗尽。`AddVpcCniSubnets` 给已开启的 VPC-CNI 追加子网，参数以 `--generate-cli-skeleton` 为准（`SubnetIds[]` 复数 + `VpcId`）。
+> VPC-CNI Pod 卡在 ContainerCreating 多因子网 IP 耗尽。`AddVpcCniSubnets` 给已开启的 VPC-CNI 追加子网，参数以 `tccli tke AddVpcCniSubnets help --detail` 为准（`SubnetIds[]` 复数 + `VpcId`）。
 
 ```bash
 # 给 VPC-CNI 追加子网（ClusterId + VpcId + SubnetIds[]）
@@ -209,13 +235,28 @@ tccli tke AddVpcCniSubnets --region ap-guangzhou \
 
 > `AddVpcCniSubnets` 用复数 `SubnetIds[]`（可一次追加多个子网），需带 `VpcId` 标识子网所属 VPC。追加后用 `DescribeEnableVpcCniProgress` 确认子网已生效，新 Pod 将从新子网获 IP。
 
+## 收尾确认
+
+```bash
+# VPC-CNI 开启进度完成（Verify 查进度，此处端到端核 Pod 真从子网获 IP）
+tccli tke DescribeEnableVpcCniProgress --region ap-guangzhou --ClusterId "<CLUSTER_ID>" \
+  --filter "{status:Status}"
+# expected: status=Enabled
+
+# 业务可用性端到端：部署测试 Pod，核 Pod IP 在指定子网段内（Verify 仅列维度未端到端验证）
+kubectl run vpc-cni-test --image=nginx --restart=Never
+kubectl get pod vpc-cni-test -o wide --no-headers | awk '{print $6}'
+# expected: Pod IP 在 <SUBNET_ID> 子网 CidrBlock 段内 → VPC-CNI 配置闭环完成
+kubectl delete pod vpc-cni-test
+```
+
+> 开启进度 Enabled + Pod IP 落在 VPC 子网段 = 端到端闭环。Verify 段查进度与开关状态，此处用真实 Pod 验证 IP 分配行为符合 VPC-CNI 契约（Pod 与 CVM 同级从子网拿 IP），是固定 IP / 安全组直通功能的前置。
+
+---
+
 ## 下一步
 
 - [管理访问端点](endpoints.md) — API Server 访问入口
 - [配置 CiliumOverlay](cilium-overlay.md) — 第三种网络模型，Cilium 数据面
 - [创建集群](../clusters/create.md) — 建集群时选网络模型
 - [故障排查](../troubleshooting.md) — Pod IP 不足诊断
-
-## 控制台替代方案
-
-[容器服务控制台 - 集群网络](https://console.cloud.tencent.com/tke2/cluster)

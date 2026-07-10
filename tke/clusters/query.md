@@ -5,6 +5,7 @@ fused: true
 ---
 # 查询和过滤集群
 
+> 控制台: [容器服务控制台 - 集群列表](https://console.cloud.tencent.com/tke2/cluster)
 > 查询集群列表与详情。只读操作，无副作用。支持两种粒度：列表查询（`DescribeClusters`）与单集群全貌（`DescribeClusterStatus` + `DescribeClusterEndpoints`）。
 
 ## 概述
@@ -23,7 +24,7 @@ fused: true
 
 - 需要查看账号下有哪些集群、某集群的状态/版本/类型（创建后核对、日常巡检）— 用本文列表查询或单集群健康查询
 - 写操作（删除/升级/配置）前需确认目标集群 ID 与状态 — 用 `DescribeClusters`/`DescribeClusterStatus` 锁定目标
-- `--filter` 取字段返回空或 None，怀疑跨版本字段踩空 — 跳到 [§踩空陷阱](#跨版本取字段的踩空陷阱) 核对版本响应结构
+- `--filter` 取字段返回空或 None，怀疑跨版本字段缺失 — 跳到 [§字段缺失](#跨版本字段缺失的静默返回) 核对版本响应结构
 
 ## 准备工作
 
@@ -51,14 +52,14 @@ tccli tke DescribeClusters --region ap-guangzhou --version 2022-05-01 --output t
 
 | 版本 | `--version` | 顶层字段 | `Clusters[]` 字段数 | 定位 |
 |:-----|:-----|:-----|:-----|:-----|
-| 2018-05-25（tccli 默认） | `--version 2018-05-25` | `TotalCount`/`Clusters`/`RequestId`（**无 `Errors`**） | **28**（含网络/节点数/运行时等） | 字段丰富，一次查询拿全部信息 |
+| 2018-05-25（TCCLI 默认） | `--version 2018-05-25` | `TotalCount`/`Clusters`/`RequestId`（**无 `Errors`**） | **28**（含网络/节点数/运行时等） | 字段丰富，一次查询拿全部信息 |
 | 2022-05-01（官方当前版） | `--version 2022-05-01` | `TotalCount`/`Clusters`/**`Errors`**/`RequestId` | **10**（精简） | 官方当前版本，长期维护方向 |
 
 > **本文主示例走新版（2022-05-01，官方当前版）**。需要网络配置/节点数/运行时等丰富字段时走旧版（见 [§取丰富字段（旧版独有）](#取丰富字段旧版独有)）。两版 `Clusters[]` 共有 9 字段：`ClusterId`/`ClusterName`/`ClusterDescription`/`ClusterVersion`/`ClusterType`/`ClusterStatus`/`ClusterLevel`/`CreatedTime`/`TagSpecification`。
 
-### 跨版本取字段的踩空陷阱
+### 跨版本字段缺失的静默返回
 
-> `--filter`（JMESPath）按所调版本的响应结构取字段。**跨版本套用 `--filter` 表达式会踩空**——期待的字段在另一版不存在，JMESPath 不报错但返回 `None`（空），agent 据此判断会误以为"集群无此属性"。
+> `--filter`（JMESPath）按所调版本的响应结构取字段。**跨版本套用 `--filter` 表达式会取不到字段**——期待的字段在另一版不存在，JMESPath 不报错但返回 `None`（空），agent 据此判断会误以为"集群无此属性"。
 
 | 跨版本套用 | 旧版取新版独有 | 新版取旧版独有 |
 |:-----|:-----|:-----|
@@ -94,7 +95,7 @@ tccli tke DescribeClusters --region ap-guangzhou --version 2022-05-01 --Limit 1 
 | Offset | int | 否 | 默认 0，分页偏移 | — |
 | ClusterType | string | 否 | `MANAGED_CLUSTER` / `INDEPENDENT_CLUSTER` | `InvalidParameter` |
 
-> Filter 的 `ClusterStatus` 值用 `Running`（首字母大写），见 [状态机](../reference/states.md)。
+> Filter 的 `ClusterStatus` 值用 `Running`（首字母大写），见 [状态机](../reference/states.md)。Filter 结构与多 Filter AND/OR 语义见 [共享字段](../reference/shared-fields.md#filter-查询过滤)。
 
 ## 操作步骤
 
@@ -155,7 +156,7 @@ tccli tke DescribeClusters --region ap-guangzhou --version 2022-05-01 --Limit 10
 
 ### 取丰富字段（旧版独有）
 
-> 需要网络配置、节点数、容器运行时、删除保护等字段时走旧版——这些字段新版 `Clusters[]` 已精简（19 个旧版独有字段在新版丢失）。旧版是 tccli 默认版，可省略 `--version`，但为自证意图建议显式标注。
+> 需要网络配置、节点数、容器运行时、删除保护等字段时走旧版——这些字段新版 `Clusters[]` 已精简（19 个旧版独有字段在新版丢失）。旧版是 TCCLI 默认版，可省略 `--version`，但为自证意图建议显式标注。
 
 ```bash
 tccli tke DescribeClusters --region ap-guangzhou --version 2018-05-25 \
@@ -186,11 +187,15 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_I
         {
             "ClusterId": "cls-example",
             "ClusterState": "Running",
-            "ClusterInstanceState": "AllNormal",
-            "ClusterRunningNodeNum": 2,
+            "ClusterInstanceState": "-",
+            "ClusterBMonitor": false,
+            "ClusterInitNodeNum": 0,
+            "ClusterRunningNodeNum": 0,
             "ClusterFailedNodeNum": 0,
-            "ClusterDeletionProtection": true,
-            "ClusterAuditEnabled": true
+            "ClusterClosedNodeNum": 0,
+            "ClusterClosingNodeNum": 0,
+            "ClusterDeletionProtection": false,
+            "ClusterAuditEnabled": false
         }
     ],
     "TotalCount": 1,
@@ -198,7 +203,7 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_I
 }
 ```
 
-> `ClusterInstanceState` 为 `-` 表示空集群（`ClusterRunningNodeNum=0`）；有节点且健康为 `AllNormal`。`ClusterDeletionProtection` 是布尔值（`true`/`false`）。
+> 实跑字段（2018 默认版）：上表键齐全。`ClusterInstanceState` 为 `-` 表示空集群（`ClusterRunningNodeNum=0`）；有节点且健康为 `AllNormal`。新建托管空集群默认 `ClusterDeletionProtection=false`、`ClusterAuditEnabled=false`（需显式 `Enable*` 才为 `true`）。
 
 ### 单集群访问地址与凭证
 
@@ -335,10 +340,6 @@ tccli tke DescribeBatchModifyTagsStatus --ClusterId "<CLUSTER_ID>" --region <REG
 | 访问地址 | `DescribeClusterEndpoints` | `ClusterDomain` 字段存在 |
 | 版本一致性 | `DescribeClusters` 两版 `--filter "Clusters[0].ClusterId"` | 两版返回相同集群 ID（入参一致） |
 
-## 清理
-
-> 只读操作，无副作用，无需清理。
-
 ## 故障恢复
 
 ### 命令返回错误 (exit ≠ 0)
@@ -355,19 +356,24 @@ tccli tke DescribeBatchModifyTagsStatus --ClusterId "<CLUSTER_ID>" --region <REG
 | 现象 | 诊断 | 根因 | 修复 |
 |:--------|:----------|:------------|:-----|
 | `TotalCount: 0` 但集群存在 | 换地域查 `tccli tke DescribeClusters --region <其他地域>` | region 不对，集群在别的地域 | 用正确地域重查 |
-| `--filter` 返回空但 `TotalCount > 0` | 先去掉 `--filter` 看 Clusters 字段名 | JMESPath 字段名拼错（如 `ClusterState` 写成 `cluster_state`），或跨版本取了不存在的字段（见 [§踩空陷阱](#跨版本取字段的踩空陷阱)） | 用所调版本响应的实际字段名，区分大小写；查丰富字段走旧版 |
+| `--filter` 返回空但 `TotalCount > 0` | 先去掉 `--filter` 看 Clusters 字段名 | JMESPath 字段名拼错（如 `ClusterState` 写成 `cluster_state`），或跨版本取了不存在的字段（见 [§字段缺失](#跨版本字段缺失的静默返回)） | 用所调版本响应的实际字段名，区分大小写；查丰富字段走旧版 |
 | 分页遗漏集群 | 检查 Offset/Limit | 只读了前 N 条，未翻页 | 循环 `Offset += Limit` 直到 Clusters 为空 |
 | `DescribeClusterStatus` 返回空 ClusterStatusSet | 核对 ClusterIds 参数格式 | `ClusterIds` 未用 JSON 数组 | 传 `--ClusterIds '["cls-xxx"]'`（JSON 字符串数组） |
 
-> ⚠️ `--filter` 字段名必须匹配 API 实际响应键名，且须与所调版本一致。响应是 `Clusters` 就不能写 `clusters`，是 `ClusterState` 就不能写 `cluster_state`。跨版本时，旧版独有字段（`ClusterNetworkSettings` 等）在新版取会返回 `None` 而非报错——这是静默踩空，最易误导。首次用某接口/版本时，先 `--Limit 1` 看响应结构，再构造 `--filter`。
+> ⚠️ `--filter` 字段名必须匹配 API 实际响应键名，且须与所调版本一致。响应是 `Clusters` 就不能写 `clusters`，是 `ClusterState` 就不能写 `cluster_state`。跨版本时，旧版独有字段（`ClusterNetworkSettings` 等）在新版取会返回 `None` 而非报错——这是静默返回 None，最易误导。首次用某接口/版本时，先 `--Limit 1` 看响应结构，再构造 `--filter`。
 
 ## 收尾确认
 
 ```bash
-# 一次性核对：列表查询 + 单集群状态查询均可用（只读，无副作用）
+# 衔接下一步前置：查询通道可用 + 可进入写操作前目标核对（只读操作无残留资源/业务可用性维度，此处核对查询通道就绪供后续写操作用）
 tccli tke DescribeClusters --region <REGION> --filter "TotalCount" --output text
-# expected: 数字 ≥ 0 → 列表查询通道正常，可据此进入写操作前的目标核对
+# expected: 数字 ≥ 0 → 列表查询通道正常
+
+tccli tke DescribeClusterStatus --region <REGION> --filter "ClusterStatusSet[?ClusterId=='<CLUSTER_ID>'] | [0].{state:ClusterState,id:ClusterId}" --output text
+# expected: state=Running → 目标集群健康，可进入写操作（删除/升级/配置）前的目标核对
 ```
+
+> 查询通道可用 + 目标集群 `Running` = 只读闭环完成，可衔接写操作（[删除](delete.md)/[升级](upgrade.md)/[配置](configure.md)）前用本文核对目标集群 ID 与状态。只读操作无残留资源/业务可用性维度，Confirm 核对查询通道就绪作为下一步前置。
 
 ## 下一步
 
@@ -377,7 +383,3 @@ tccli tke DescribeClusters --region <REGION> --filter "TotalCount" --output text
 - [管理端点](../networking/endpoints.md) — `ClusterExternalEndpoint` 为空时如何开启
 - [认证配置](../security/auth.md) — 用 `DescribeClusterSecurity` 的 kubeconfig 配置 kubectl
 - [故障排查](../troubleshooting.md) — `ClusterInstanceState` 非 AllNormal 的诊断
-
-## 控制台替代方案
-
-[容器服务控制台 - 集群列表](https://console.cloud.tencent.com/tke2/cluster)

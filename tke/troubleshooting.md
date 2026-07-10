@@ -47,7 +47,7 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_I
 # expected: 查看 ClusterState 值和状态变更时间
 ```
 
-如果 `ClusterState: "Creating"` 持续超过 30 分钟，通常是底层资源问题。
+如果 `ClusterState: "Creating"` 持续超过 30 分钟，多为底层资源问题。
 
 **修复**：
 
@@ -134,6 +134,7 @@ tccli tke UpdateClusterKubeconfig --region ap-guangzhou --ClusterId "<CLUSTER_ID
 **验证**：
 
 ```bash
+# kubectl 验证 kubeconfig 连通 (K8s 原生命令, tccli 不提供集群连通验证)
 kubectl --kubeconfig <KUBECONFIG_FILE> cluster-info
 # expected: Kubernetes control plane is running at https://...
 ```
@@ -145,8 +146,7 @@ kubectl --kubeconfig <KUBECONFIG_FILE> cluster-info
 **诊断**：
 
 ```bash
-tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]' \
-  --filter "ClusterStatusSet[0].ClusterDeletionProtection"
+tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet[?ClusterId=='<CLUSTER_ID>'] | [0].ClusterDeletionProtection"
 # expected: true（开启删除保护）
 ```
 
@@ -157,8 +157,7 @@ tccli tke DisableClusterDeletionProtection --region ap-guangzhou --ClusterId "<C
 # expected: exit 0
 
 # 验证
-tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]' \
-  --filter "ClusterStatusSet[0].ClusterDeletionProtection"
+tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet[?ClusterId=='<CLUSTER_ID>'] | [0].ClusterDeletionProtection"
 # expected: false（已关闭）
 ```
 
@@ -168,6 +167,35 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_I
 tccli tke DeleteCluster --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
 # expected: exit 0 (不再返回删除保护错误)
 ```
+
+## 高危操作后果速查
+
+> 下列操作易导致业务故障；部分**不可恢复**。排障前先对照：是否刚改过安全组、内核参数、LB 控制台、CBS 挂载。
+
+### 集群 / 节点
+
+| 对象 | 高危操作 | 后果 | 误操作处理 |
+|:-----|:---------|:-----|:-----------|
+| Master/Etcd | 改节点安全组未按推荐放通 | Master 可能不可用 | 按 [安全组](https://cloud.tencent.com/document/product/457/9084) 放通 |
+| Master/Etcd | 节点到期/销毁、重装 OS、删 `/etc/kubernetes`、自行换证书 | Master 不可用 | **不可恢复**（须重建） |
+| Master/Etcd | 自行升级 master/etcd 组件版本 | 集群可能不可用 | 回退到原始版本 |
+| Master/Etcd | 更改节点 IP | Master 不可用 | 改回原 IP |
+| Worker | 改安全组 / 改规格强制关机 / 重装 OS / 改 IP | 节点不可用 | 移出再加入；到期销毁则**不可恢复** |
+| Worker | 自行改核心组件参数 / OS 配置 | 节点可能不可用 | 还原配置或删节点重购 |
+| 账号 | CAM 权限变更 | CLB 等资源可能创建失败 | 恢复权限 |
+
+### 网络 / LB / 日志 / CBS
+
+| 高危操作 | 后果 | 误操作处理 |
+|:---------|:-----|:-----------|
+| `net.ipv4.ip_forward=0` | 网络不通 | 改回 `=1` |
+| `net.ipv4.tcp_tw_recycle=1` | NAT 异常 | 改回 `=0` |
+| 安全组未放通容器 CIDR 的 53/udp | 集群 DNS 失败 | 按推荐放通安全组 |
+| 改/删 TKE 管理的 LB 标签 | 可能触发新购 LB | 恢复标签 |
+| 在 LB 控制台改 TKE 管理的监听器/后端 RS/证书/监听器名 | 被 TKE 重置或禁止 | 用 Service/Ingress YAML 管理 |
+| 删宿主机 `/tmp/ccs-log-collector/pos` | 日志重复采集 | 无（pos 记采集位点） |
+| 删 `/tmp/ccs-log-collector/buffer` | 日志丢失 | 无 |
+| 控制台手动解挂 CBS / 节点 umount / 直接操作块设备 | Pod IO 异常或写本地盘 | 清 mount 后重调度；或重新 mount |
 
 ## 升级
 

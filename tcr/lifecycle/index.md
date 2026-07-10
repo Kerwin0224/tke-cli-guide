@@ -23,13 +23,13 @@ TCR 镜像生命周期管理自动化处理镜像版本的保留、保护与清�
 
 | 子主题 | 作用 | 接口 | 文档 |
 |:-------|:-----|:-----|:-----|
-| 版本保留 | 按规则自动删旧留新 | `CreateTagRetentionRule` | [版本保留](tag-retention.md) |
+| 版本保留 | 按规则自动删旧留新（Tag 层） | `CreateTagRetentionRule` | [版本保留](tag-retention.md) |
 | 不可变规则 | 禁止覆盖已存在 Tag | `CreateImmutableTagRules` | [不可变标签](immutable-tags.md) |
-| GC 垃圾回收 | 清理未引用镜像层 | `CreateGCJob` | [版本保留 - GC](tag-retention.md#gc-垃圾回收任务) |
+| 制品清理 / GC | 回收未引用镜像层，释放 COS | `CreateGCJob` | [版本保留 - GC](tag-retention.md#gc-垃圾回收任务) · 控制台 [制品清理](https://console.cloud.tencent.com/tcr/gc) |
 | Webhook 触发 | 推送/删除事件回调 | `CreateWebhookTrigger` | [版本保留 - Webhook](tag-retention.md#webhook-触发器) |
 | 实例同步 | 跨地域复制 | `CreateReplicationInstance` | [实例同步](../replication/manage.md) |
 
-> GC（垃圾回收）清理删除镜像后残留的镜像层，释放存储。完整闭环（创建 `CreateGCJob` → 查状态 `DescribeGCJobs` → 终止 `TerminateGCJob`）见 [版本保留 — GC 垃圾回收任务](tag-retention.md#gc-垃圾回收任务)。`GCParameters` 含 `DryRun` 试跑开关，建议先预览影响范围再正式执行（GC 删除镜像层后不可逆）。
+> **版本保留 ≠ 制品清理**：保留规则删的是版本/Tag 信息；制品清理（GC）才回收底层层数据。完整闭环：`CreateGCJob` → `DescribeGCJobs` → 必要时 `TerminateGCJob`（见 [GC 垃圾回收任务](tag-retention.md#gc-垃圾回收任务)）。`GCParameters.DryRun` 可先模拟再正式执行（正式删除层后不可逆）。
 
 ## 治理三步联合配置
 
@@ -68,4 +68,4 @@ tccli tcr DescribeImmutableTagRules --region <REGION> --RegistryId "<REGISTRY_ID
 - [版本保留策略](tag-retention.md) — 自动清理旧版本、按规则保留
 - [镜像不可变规则](immutable-tags.md) — 禁止覆盖已存在的 Tag
 - [推送拉取镜像](../images/push-pull.md) — 手动删除单个镜像版本
-- [配额和限制](../reference/states.md) — 命名空间/仓库配额
+- [配额和限制](../reference/quotas.md) — 命名空间/仓库配额

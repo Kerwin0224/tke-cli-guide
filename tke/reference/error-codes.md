@@ -20,7 +20,7 @@ subtype: 8D
 | 错误码 | 含义 | 可重试 | 诊断 | 修复 |
 |------|---------|:---------:|----------|-----|
 | `InvalidParameter.Param` | 参数错误（含资源不存在） | 否 | 核对参数值与资源 ID | 确认资源 ID 存在、参数格式正确；删不存在的集群返回 `[E404000 ResourceNotFound] record not found` |
-| `InternalError.QuotaMaxClsLimit` | 集群数超配额 | 否 | `tccli tke DescribeClusters` 看集群存量 | 删除闲置集群或提工单提额（默认 50/地域） |
+| `InternalError.QuotaMaxClsLimit` | 集群数超配额 | 否 | `tccli tke DescribeClusters` 看集群存量 | 删除闲置集群或提工单提额（单地域默认 **20**） |
 | `InternalError.QuotaMaxNodLimit` | 节点数超配额 | 否 | `tccli tke DescribeClusterStatus` 看节点数 | 删除闲置节点或提工单提额 |
 | `LimitExceeded` | 超过配额限制（节点池等） | 否 | `tccli tke DescribeClusterNodePools` 看节点池数 | 删除闲置节点池（单集群建议 ≤20） |
 | `InvalidParameter.CidrConflictWithOtherCluster` | 容器 CIDR 与同 VPC 其他集群冲突 | 否 | `tccli tke DescribeClusters --ClusterIds '["<ID>"]' --filter "Clusters[].ClusterCIDRSettings.ClusterCIDR"` 看已用 CIDR | 换不重叠的 CIDR 段重建（不得与 VPC CIDR 或同 VPC 其他集群 CIDR 重叠，消息含 `CIDR_CONFLICT_WITH_OTHER_CLUSTER[cidr X is conflict with cluster id: Y]`） |

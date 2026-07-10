@@ -5,11 +5,19 @@ fused: false
 ---
 # 开启集群审计
 
+> 控制台: [容器服务控制台 - 集群审计](https://console.cloud.tencent.com/tke2/cluster)
 > 开启/关闭集群审计日志。审计记录所有 API Server 操作到 CLS（日志服务），用于合规与事故追溯。配置型操作。
+
+## 触发条件
+
+- `DescribeClusterStatus` → `ClusterAuditEnabled=false`，生产集群需开启审计满足合规要求
+- 合规审计要求追溯"谁在什么时候对什么资源做了什么操作"，当前集群无 API 操作记录可查
+- `ClusterAuditEnabled=true` 但 CLS 检索无日志，需排查投递链路 — 看 [故障恢复]段
+
 
 ## 概述
 
-审计日志记录"谁在什么时候对什么资源做了什么操作"。开启后，集群 API Server 的所有操作（kubectl/tccli/控制台）落盘到 CLS 日志集。
+审计日志记录"谁在什么时候对什么资源做了什么操作"。开启后，集群 API Server 的所有操作（kubectl/TCCLI/控制台）落盘到 CLS 日志集。
 
 | 状态 | 含义 | 查询 |
 |:-----|:-----|:-----|
@@ -23,12 +31,12 @@ fused: false
 #### 为什么开启审计
 
 - **开启 vs 关闭**: 开启后所有 API 操作可追溯（合规、事故定位）；关闭省 CLS 存储费
-- **默认推荐**: 生产环境必须开启；测试集群可关
+- **默认推荐**: 生产环境开启（合规追溯需要）；测试集群可关
 - **能关闭吗?**: 能，`DisableClusterAudit`。但已存的审计日志保留在 CLS
 
 ## 配置项
 
-> 来源：`tccli tke EnableClusterAudit --generate-cli-skeleton`。需先在 CLS 创建日志集与主题。
+> 完整入参以 `tccli tke EnableClusterAudit help --detail` 为准。需先在 CLS 创建日志集与主题。
 
 | 字段 | 类型 | 必填 | 默认值 | 有效值 | 填错的影响 |
 |:------|------|:--------:|:------:|-------|-----------|
@@ -72,8 +80,7 @@ tccli tke EnableClusterAudit --region ap-guangzhou \
 
 ```bash
 # 查看审计开关状态（ClusterAuditEnabled=true）
-tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]' \
-  --filter "ClusterStatusSet[0].ClusterAuditEnabled"
+tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet[?ClusterId=='<CLUSTER_ID>'] | [0].ClusterAuditEnabled"
 # expected: true
 ```
 
@@ -93,8 +100,7 @@ tccli tke DisableClusterAudit --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
 # expected: exit 0
 
 # 验证已关
-tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]' \
-  --filter "ClusterStatusSet[0].ClusterAuditEnabled"
+tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet[?ClusterId=='<CLUSTER_ID>'] | [0].ClusterAuditEnabled"
 # expected: false
 ```
 
@@ -148,8 +154,8 @@ tccli tke EnableEncryptionProtection --region <REGION> \
 
 | 占位符 | 含义 | 如何获取 |
 |:-------|:-----|:---------|
-| `<KMS_REGION>` | KMS 密钥所在地域 | `tccli kms ListKey --region <REGION>` |
-| `<KMS_KEY_ID>` | KMS 主密钥 ID | `tccli kms ListKey` → `Keys[].KeyId` |
+| `<KMS_REGION>` | KMS 密钥所在地域 | `tccli kms ListKeys --region <REGION>` |
+| `<KMS_KEY_ID>` | KMS 主密钥 ID | `tccli kms ListKeys` → `Keys[].KeyId` |
 
 > `EnableEncryptionProtection` 的 `KmsConfiguration` 是嵌套对象（含 `KmsRegion`/`KmsKeyId`），开启后 etcd 数据用 KMS 密钥加密。开启是异步操作，用 `DescribeEncryptionStatus` 轮询 `Status` 到 `Enabled`。开启前需先在 KMS 创建密钥并授权 TKE 使用。
 
@@ -158,16 +164,18 @@ tccli tke EnableEncryptionProtection --region <REGION> \
 > 开放策略（OpenPolicy）基于 OPA/Gatekeeper 强制集群安全/合规规则（如禁止删带节点的集群）。属准入控制，是集群加固的一环。
 
 ```bash
-# 查询开放策略列表 (按 Category 分类)
-tccli tke DescribeOpenPolicyList --ClusterId "<CLUSTER_ID>" --Category "<CATEGORY>" --region <REGION>
-# expected: exit 0, OpenPolicyInfoList[] 含 PolicyName/EnforcementAction/EnabledStatus
+# 查询开放策略列表（入参 Category ≠ 响应 PolicyCategory）
+tccli tke DescribeOpenPolicyList --ClusterId "<CLUSTER_ID>" --Category "baseline" --region <REGION>
+# expected: exit 0；OpenPolicyInfoList[] + GatekeeperStatus；省略 Category 返回全量
 ```
 ```json
 {
     "OpenPolicyInfoList": [
-        {"PolicyCategory": "cluster", "PolicyName": "存在节点的集群不允许删除",
-         "EnforcementAction": "deny", "EnabledStatus": "open", "Name": "example-policy-rule"}
-    ]
+        {"PolicyCategory": "cluster", "PolicyName": "NodeExistBlockDeleteCluster",
+         "EnforcementAction": "deny", "EnabledStatus": "open", "Name": "block-cluster-deletion-rule",
+         "Kind": "blockclusterdeletion"}
+    ],
+    "GatekeeperStatus": 1
 }
 ```
 
@@ -178,12 +186,22 @@ tccli tke ModifyOpenPolicyList --ClusterId "<CLUSTER_ID>" --region <REGION> \
 # expected: exit 0
 ```
 
-> `EnforcementAction` 状态：`deny`（强制拒绝违规操作）/ `dryrun`（仅告警不拒绝）。`EnabledStatus`：`open`/`close`。`Category` 如 `cluster`（集群级）/ `namespace`（命名空间级）。开放策略与 [巡检](../observability/logging.md#集群巡检与日志配置) 互补——策略强制合规，巡检发现隐患。
+> `EnforcementAction`：`deny` / `dryrun`。`EnabledStatus`：`open` / `close`。入参 `--Category` 与响应 `PolicyCategory` **不是同一枚举**（见下表）。开放策略与 [巡检](../observability/logging.md#集群巡检与日志配置) 互补。
 
-`PolicyCategory` 枚举：
+入参 `--Category`（`help --detail`：基线 / 优选 / 可选）：
 
-| Category | 分类 |
-|:---------|:-----|
+| Category（入参） | 含义 | 实跑条数量级（空托管集群） |
+|:-----------------|:-----|:---------------------------|
+| `baseline` | 基线 | 少（如 1） |
+| `priority` | 优选 | 中（如十余） |
+| `optional` | 可选 | 多（如数十） |
+
+> 非法值（如 `soft`）不报错，行为未文档化——**只用上表三值**。勿把响应里的 `PolicyCategory`（cluster/node/…）填进 `--Category`。
+
+响应 `PolicyCategory` 枚举：
+
+| PolicyCategory | 分类 |
+|:---------------|:-----|
 | `cluster` | 集群策略 |
 | `node` | 节点策略 |
 | `namespace` | 命名空间策略 |
@@ -210,7 +228,7 @@ tccli tke ModifyOpenPolicyList --ClusterId "<CLUSTER_ID>" --region <REGION> \
 | `blockworkloadcrossversionupgrade` | 工作负载镜像版本升级策略管控 | 管控跨版本升级 |
 | `blockserviceaccountgranthighprivilegepermission` | ServiceAccount 高权限制约 | 防 SA 过权 |
 
-> 完整 Kind 列表以 `tccli tke DescribeOpenPolicyList --ClusterId "<ID>" --Category "<CATEGORY>"` 返回为准（。启用时 `ModifyOpenPolicyList --OpenPolicyInfoList '[{"Name":"<KIND>","EnforcementAction":"deny","EnabledStatus":"open"}]'`。
+> 完整 Kind 列表以 `tccli tke DescribeOpenPolicyList --ClusterId "<ID>" --Category "baseline|priority|optional"` 返回为准。启用时 `ModifyOpenPolicyList --OpenPolicyInfoList '[{"Name":"<规则 Name>","EnforcementAction":"deny","EnabledStatus":"open"}]'`（`Name` 用返回的规则名，如 `block-cluster-deletion-rule`，非 Kind）。
 
 ## 故障恢复
 
@@ -220,7 +238,7 @@ tccli tke ModifyOpenPolicyList --ClusterId "<CLUSTER_ID>" --region <REGION> \
 |:--------|:----------|:------------|:-----|
 | `ResourceNotFound` (LogsetId/TopicId) | `tccli cls DescribeLogsets` 核对 | CLS 日志集/主题不存在 | 先在 CLS 创建 |
 | `InvalidParameterValue.TopicRegion` | 核对地域 | TopicRegion 与日志集地域不一致 | 用 CLS 日志集所在地域 |
-| `FailedOperation` | `DescribeClusterStatus` 看状态 | 集群非 Running | 等集群 Running 后重试 |
+| `FailedOperation` | `DescribeClusterStatus` 查看状态 | 集群非 Running | 等集群 Running 后重试 |
 | `UnauthorizedOperation.CamNoAuth` | 查 CAM 策略 | 无 `tke:EnableClusterAudit` 权限 | 授予权限 |
 
 ### 命令成功但状态不对 (exit = 0)
@@ -230,13 +248,31 @@ tccli tke ModifyOpenPolicyList --ClusterId "<CLUSTER_ID>" --region <REGION> \
 | `ClusterAuditEnabled=true` 但 CLS 无日志 | `tccli cls SearchLog` | CLS 主题索引未开启或权限不对 | 在 CLS 开启主题索引 |
 | 审计日志缺部分操作 | CLS 检索时间范围 | 检索范围太窄或延迟 | 扩大时间范围，等延迟 |
 
+## 收尾确认
+
+```bash
+# 跨步骤汇总三项合一：审计开关已开 + CLS 日志集/主题存在 + 投递可查
+# 1. 审计开关（TKE 侧）
+tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet[?ClusterId=='<CLUSTER_ID>'] | [0].ClusterAuditEnabled"
+# expected: true
+
+# 2. CLS 日志集/主题存在（跨产品 cls）
+tccli cls DescribeLogsets --region <REGION> --LogsetId "<LOGSET_ID>"
+# expected: 返回日志集，含 TopicId
+
+# 3. 业务可用性端到端：做一次操作后 CLS 能检索到该操作
+tccli tke DescribeClusters --region ap-guangzhou --filter "TotalCount"
+tccli cls SearchLog --region <REGION> --TopicId "<TOPIC_ID>" --Content '"DescribeClusters"'
+# expected: 命中含 DescribeClusters 的审计记录 → 审计日志闭环完成
+```
+
+> 审计开关 true + CLS 日志集/主题存在 + 操作可检索 = 端到端闭环。Verify 段查开关状态与日志投递维度，此处跨步骤汇总 TKE 侧开关 + CLS 侧资源存在 + 真实操作可检索三项，确认投递链路完整可用。
+
+---
+
 ## 下一步
 
 - [认证配置](auth.md) — 审计记录的认证操作
 - [日志采集](../observability/logging.md) — 业务日志（非审计）采集
 - [查询集群](../clusters/query.md) — 查审计开关
 - [故障排查](../troubleshooting.md) — 审计缺失诊断
-
-## 控制台替代方案
-
-[容器服务控制台 - 集群审计](https://console.cloud.tencent.com/tke2/cluster)

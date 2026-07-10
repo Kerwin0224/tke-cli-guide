@@ -17,7 +17,7 @@ tccli tcr DescribeInstances --region ap-guangzhou
 
 | 命令 | 检查什么 | 何时使用 |
 |---------|---------------|------------|
-| `tccli tcr DescribeInstances --RegistryIds '["<ID>"]'` | 实例状态 + 域名 + 规格 | 怀疑实例异常时第一步 |
+| `tccli tcr DescribeInstances --Registryids '["<ID>"]'` | 实例状态 + 域名 + 规格 | 怀疑实例异常时首先执行 |
 | `tccli tcr DescribeExternalEndpointStatus --RegistryId "<ID>"` | 公网访问开关状态 | docker login 超时 |
 | `tccli tcr DescribeInternalEndpoints --RegistryId "<ID>"` | 内网 VPC 链接状态 | VPC 内 docker pull 失败 |
 | `tccli tcr DescribeInstanceToken --RegistryId "<ID>"` | Token 列表 + 启用状态 | docker login 认证失败 |
@@ -117,9 +117,13 @@ curl -s -o /dev/null -w "%{http_code}" https://<REGISTRY_DOMAIN>/v2/
 **诊断**：
 
 ```bash
+# 0. 先确认公网端点（Closed 时 DescribeSecurityPolicies 真机 ResourceNotFound: Failed to get security group id）
+tccli tcr DescribeExternalEndpointStatus --region ap-guangzhou --RegistryId "<REGISTRY_ID>"
+# expected: Status=Opened；若 Closed → 先 ManageExternalEndpoint --Operation Open
+
 # 1. 检查白名单
 tccli tcr DescribeSecurityPolicies --region ap-guangzhou --RegistryId "<REGISTRY_ID>"
-# expected: SecurityPolicySet 列表
+# expected: SecurityPolicySet 列表；Closed 端点 → ResourceNotFound（非「无白名单」）
 
 # 2. 检查当前公网 IP
 curl -s ifconfig.me
@@ -153,7 +157,7 @@ docker pull <REGISTRY_DOMAIN>/<NAMESPACE>/<REPO>:<TAG>
 **诊断**：
 
 ```bash
-tccli tcr DescribeInstances --region ap-guangzhou --RegistryIds '["<REGISTRY_ID>"]'
+tccli tcr DescribeInstances --region ap-guangzhou --Registryids '["<REGISTRY_ID>"]'
 # expected: 查看 Status 和 DescribeInstanceStatus 中的过程信息
 ```
 
@@ -168,7 +172,7 @@ tccli tcr DescribeInstances --region ap-guangzhou --RegistryIds '["<REGISTRY_ID>
 **验证**：
 
 ```bash
-tccli tcr DescribeInstances --region ap-guangzhou --RegistryIds '["<REGISTRY_ID>"]'
+tccli tcr DescribeInstances --region ap-guangzhou --Registryids '["<REGISTRY_ID>"]'
 # expected: Status: "Running"
 ```
 
@@ -210,11 +214,11 @@ tccli tcr DescribeImages --region ap-guangzhou \
 
 ```bash
 # 1. 实例信息
-tccli tcr DescribeInstances --region ap-guangzhou --RegistryIds '["<REGISTRY_ID>"]' > tcr-info.json
+tccli tcr DescribeInstances --region ap-guangzhou --Registryids '["<REGISTRY_ID>"]' > tcr-info.json
 
 # 2. 访问配置
-tccli tcr DescribeExternalEndpointStatus --Region ap-guangzhou --RegistryId "<ID>" > tcr-endpoint.json
-tccli tcr DescribeSecurityPolicies --Region ap-guangzhou --RegistryId "<ID>" > tcr-policies.json
+tccli tcr DescribeExternalEndpointStatus --region ap-guangzhou --RegistryId "<ID>" > tcr-endpoint.json
+tccli tcr DescribeSecurityPolicies --region ap-guangzhou --RegistryId "<ID>" > tcr-policies.json
 
 # 3. 操作日志 (CloudAudit)
 # 从控制台获取或: tccli cloudaudit LookUpEvents --LookupAttributes '[{"AttributeKey":"ResourceName","AttributeValue":"<REGISTRY_ID>"}]'

@@ -3,31 +3,31 @@ doc_type: How-to
 subtype: 6A
 fused: false
 ---
-# 配置 tccli 凭证
+# 配置 TCCLI 凭证
 
-> 获取腾讯云 CAM 凭证（SecretId/SecretKey）并配置到 tccli，让 tccli 能调用 TKE/TCR API。这是使用本指南所有命令的**唯一前置**——没配凭证，第一条命令就跑不通。
+> 获取腾讯云 CAM 凭证（SecretId/SecretKey）并配置到 TCCLI，让 TCCLI 能调用 TKE/TCR API。这是使用本指南所有命令的**唯一前置**——未配置凭证时，第一条 API 调用返回 `AuthFailure.SecretIdNotFound`。
 > 控制台: [访问管理 CAM](https://console.cloud.tencent.com/cam)
 
-> ⚠️ **控制台是固有边界**：CAM 根凭证（SecretId/SecretKey）的**首次获取**本质上需要腾讯云控制台/浏览器——腾讯云不允许用 tccli 自举创建 API 密钥（`tccli auth login` 也触发浏览器登录）。本指南定位是"tccli 操作手册"，凭证首次获取这一步**必须**经控制台一次性操作，无法纯 CLI 闭环。这是腾讯云的固有边界，非文档缺陷。配好凭证后，后续所有 TKE/TCR 操作均可纯 CLI 完成。
+> ⚠️ **控制台是固有边界**：CAM 根凭证（SecretId/SecretKey）的**首次获取**须经腾讯云控制台/浏览器——腾讯云不允许用 TCCLI 自举创建 API 密钥（`tccli auth login` 也触发浏览器登录）。本指南定位是"TCCLI 操作手册"，凭证首次获取这一步**必须**经控制台一次性操作，无法纯 CLI 闭环。这是腾讯云的固有边界，非文档缺陷。配好凭证后，后续所有 TKE/TCR 操作均可纯 CLI 完成。
 
 > **前置**：你需有一个腾讯云账号。若没有，先在 [腾讯云首页](https://cloud.tencent.com/) 注册（注册需浏览器+手机验证，属一次性操作）。
 
 ## 概述
 
-tccli 调用腾讯云 API 需要凭证。三类凭证作用域不同，本文只管第一类（CAM 根凭证，全局前置）；后两类在各自产品文档里配置：
+TCCLI 调用腾讯云 API 需要凭证。三类凭证作用域不同，本文只管第一类（CAM 根凭证，全局前置）；后两类在各自产品文档里配置：
 
 | 凭证类型 | 作用 | 作用域 | 归属文档 |
 |:---------|:-----|:-------|:---------|
-| **CAM 根凭证**（SecretId/SecretKey） | 让 tccli 能调用腾讯云 API | 全局前置（产品之上） | 本文 |
+| **CAM 根凭证**（SecretId/SecretKey） | 让 TCCLI 能调用腾讯云 API | 全局前置（产品之上） | 本文 |
 | kubeconfig | kubectl 连 TKE 集群 | TKE 产品内 | [TKE 集群认证](../tke/security/auth.md) |
 | TCR Token | docker login TCR 仓库 | TCR 产品内 | [TCR 访问控制](../tcr/access/manage.md) |
 
-> 本文解决"tccli 怎么配凭证"。配好后所有 `tccli tke ...` / `tccli tcr ...` 命令才能工作。
+> 本文解决"TCCLI 怎么配凭证"。配好后所有 `tccli tke ...` / `tccli tcr ...` 命令才能工作。
 
 ## 触发条件
 
 - 任意 `tccli <service> <Action>` 返回 `AuthFailure.SecretIdNotFound`（secretId is invalid）— 凭证未配或已失效，用本文配置
-- 首次在新机器装好 tccli 后，还没配过凭证 — 本文是所有写操作的前置
+- 终端执行 `tccli configure list` 显示 secretId/secretKey 为空或 `****` 占位但调用报 `AuthFailure` — 凭证未配或已失效
 
 ## 决策依据
 
@@ -51,14 +51,16 @@ tccli 调用腾讯云 API 需要凭证。三类凭证作用域不同，本文只
 
 ## 准备工作
 
-### 1. 安装 tccli
+### 1. 安装 TCCLI
 
-若未安装，见 [安装 tccli](install.md)。验证：
+若未安装，见 [安装 TCCLI](install.md)。验证：
 
 ```bash
 tccli --version
-# expected: tccli 3.1.117.1 或更高
+# expected: tccli 3.1.124.1 或更高
 ```
+
+> 版本过低会缺新接口或字段名不一致。升级：`uv tool upgrade tccli`（uv 管理的 TCCLI）；非 uv 安装见 [安装 TCCLI](install.md)。
 
 ### 2. 获取 CAM API 密钥
 
@@ -73,7 +75,7 @@ tccli --version
 | SecretId | 密钥 ID（可公开标识） | CAM 控制台新建密钥 |
 | SecretKey | 密钥（**切勿泄露**） | CAM 控制台新建密钥（仅创建时显示） |
 
-> ⚠️ SecretKey 仅在创建时完整显示一次，务必立即保存。泄露后须在 CAM 吊销重建。
+> ⚠️ SecretKey 仅在创建时完整显示一次，须立即保存。泄露后须在 CAM 吊销重建。
 
 ## 操作步骤
 
@@ -164,7 +166,7 @@ tccli configure list
 
 ## 清理
 
-凭证本身不删除（删除=tccli 无法工作）。如需删除某 profile 的本地配置：
+凭证本身不删除（删除=TCCLI 无法工作）。如需删除某 profile 的本地配置：
 
 ```bash
 # 删除指定 profile 的本地配置（profile 须存在，否则报 "profile not exist"）
@@ -181,13 +183,20 @@ tccli configure remove --profile <PROFILE_NAME>
 ## 收尾确认
 
 ```bash
-tccli tke DescribeRegions --filter "TotalCount" --output text
-# expected: 数字（如 42）→ 凭证有效，可进入任意 TKE/TCR 操作
+# 跨产品端到端：凭证对 TKE 和 TCR 两个产品域均生效（Verify 仅验证 TKE 域）
+tccli tcr DescribeRegions --filter "TotalCount" --output text
+# expected: 数字（如 11）→ 凭证对 TCR 域同样可达，跨产品配置闭环完成
+
+# 安全残留核查：默认 profile 未误配主账号密钥（主账号泄露=全资源失守）
+tccli configure list | grep -E "^default" | awk '{print $2}'
+# expected: default（仅默认 profile，子账号凭证已隔离）
 ```
+
+> TKE + TCR 双域均可调用 + 默认 profile 仅子账号密钥 = 凭证配置闭环完成，可进入任意 TKE/TCR 操作。
 
 ## 下一步
 
-- [安装 tccli](install.md) — 若尚未安装
+- [安装 TCCLI](install.md) — 若尚未安装
 - [TKE 快速入门](../quickstart/tke-first-cluster.md) — 凭证配好后创建第一个集群
 - [TCR 快速入门](../quickstart/tcr-first-registry.md) — 凭证配好后推送第一份镜像
 - [术语表](glossary.md) — VPC/CIDR/CAM 等术语释义

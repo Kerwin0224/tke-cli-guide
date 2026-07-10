@@ -5,16 +5,35 @@ fused: true
 ---
 # 扩展节点接入（混合云）
 
-> 将自建 IDC 或第三方（非腾讯云）节点接入 TKE 集群，统一管理混合云工作负载。
+> 将自建 IDC 或非腾讯云节点接入 TKE 集群，统一管理混合云工作负载。
 > 控制台: [容器服务 - 节点池](https://console.cloud.tencent.com/tke2/nodepool)
 
+> ⚠️ **形态勿混淆**：
+> - **注册节点**（本文主路径）：把自建/非腾讯云机器接入**已有标准集群**（`EnableExternalNodeSupport` → 注册脚本）。边缘场景替代品见 [注册节点公网版](https://cloud.tencent.com/document/product/457/57916)。
+> - **注册集群**（独立产品形态）：控制台标「即将下线」；与「注册节点」不是同一对象。官方注册集群专文若未入库，以控制台生命周期徽标为准，**勿把注册集群下线结论套到注册节点配额上**。
+>
+> **主路径**：控制台多为**单页** + **「查看注册命令」**（agent.yaml + `kubectl apply`，命令有过期时间）完成接入——与标准 `CreateCluster` / CVM 节点池完全不同。勿套用 [托管四步全景](../index.md#控制台创建流全景) 或 [创建节点池](nodepool-create.md)。
+
 > 本文档 Action 均属 **TKE 2018-05-25**（扩展节点功能仅旧版有，2022-05-01 无对应抽象）。
+
+## 触发条件
+
+- DescribeExternalNodeSupportConfig 返回 Status=Disabled，需开启外部节点支持接入自建 IDC/非腾讯云节点
+- 你要在已开启外部节点支持的集群中创建外部节点池并注册节点（混合云/边缘服务器/其他云）
+- 你遇到扩展节点接入问题想查诊断路径 — 看 [故障恢复]段
+
+## 准备工作
+
+- 已创建 TKE 集群 (见 [创建集群](../clusters/create.md))
+- 已配置 tccli 凭证 (见 [配置凭证](../../getting-started/credentials.md))
+
+
 
 ## 概述
 
 扩展节点（External Node）让非腾讯云机器（自建机房、边缘服务器、其他云）作为节点加入 TKE 集群。接入流程：开启集群外部节点支持 → 创建外部节点池 → 获取注册脚本 → 在目标机器执行脚本 → 节点注册上线。
 
-> ⚠️ 扩展节点接入流程与腾讯云 CVM 节点池**完全不同**：CVM 节点由 TKE 创建 CVM 实例，外部节点需用户自行在目标机器跑注册脚本。本文档独立成篇，勿与 [创建节点池](nodepool-create.md)（CVM 节点池）混用。
+> ⚠️ 扩展节点接入流程与腾讯云 CVM 节点池**完全不同**：CVM 节点由 TKE 创建 CVM 实例，外部节点需用户自行在目标机器执行注册脚本。本文档独立成篇，勿与 [创建节点池](nodepool-create.md)（CVM 节点池）混用。
 
 ## 决策依据
 
@@ -142,7 +161,7 @@ tccli tke ModifyExternalNodePool --region <REGION> \
 # expected: exit 0; 节点池不存在报 FailedOperation.RecordNotFound
 ```
 
-> `DescribeExternalNode` 用 `NodePoolId` 定位池后返回池内节点；`ModifyExternalNodePool` 改池级配置（Labels/Taints/DeletionProtection），单数 `NodePoolId`。两者参数以 `--generate-cli-skeleton` 为准。
+> `DescribeExternalNode` 用 `NodePoolId` 定位池后返回池内节点；`ModifyExternalNodePool` 改池级配置（Labels/Taints/DeletionProtection），单数 `NodePoolId`。两者参数见各 Action 的 `help --detail`。
 
 | 占位符 | 含义 | 约束 | 获取方式 |
 |--------|------|------|---------|
@@ -194,6 +213,26 @@ tccli tke DeleteExternalNodePool --ClusterId <CLUSTER_ID> --NodePoolIds '["<NODE
 
 > CAM 拒绝样本（ap-guangzhou）：
 > `code:AuthFailure.UnauthorizedOperation ... you are not authorized to perform operation (tke:CreateExternalNodePool)`
+
+## 收尾确认
+
+```bash
+# ②业务可用性端到端: 节点真注册上线（任务核心交付物：外部机器进集群）
+tccli tke DescribeExternalNode --ClusterId "<CLUSTER_ID>" \
+  --NodePoolId "<NODE_POOL_ID>" --region ap-guangzhou
+# expected: 返回 Nodes[]+TotalCount≥1，节点对象非空（节点已注册上线，Verify 只查池 normal 未查节点实体）
+
+# ③跨步骤多资源汇总: 5 步链路终态一次性核对（支持开启→池存在→节点注册→脚本可用）
+tccli tke DescribeExternalNodeSupportConfig --ClusterId "<CLUSTER_ID>" --region ap-guangzhou \
+  --filter "{status:Status,network:NetworkType}" \
+  && tccli tke DescribeExternalNodePools --ClusterId "<CLUSTER_ID>" --region ap-guangzhou \
+  --filter "ExternalNodePoolSet[0].{state:LifeState,name:Name}"
+# expected: Status=Enabled + 节点池 LifeState=normal + DescribeExternalNode 返回节点（三步产物合一）
+```
+
+> Status=Enabled + 节点池 LifeState=normal + DescribeExternalNode 返回节点实体（核心交付物）= 扩展节点接入 5 步链路终态完成，外部机器已进集群。
+
+---
 
 ## 下一步
 

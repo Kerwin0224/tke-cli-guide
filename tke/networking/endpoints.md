@@ -5,11 +5,19 @@ fused: true
 ---
 # 管理集群访问端点
 
+> 控制台: [容器服务控制台 - 集群访问地址](https://console.cloud.tencent.com/tke2/cluster)
 > 开启/关闭集群的公网或内网访问端点。端点是 kubectl/API 访问 API Server 的入口。异步操作。
+
+## 触发条件
+
+- `DescribeClusterEndpointStatus` 返回 `Status=NotFound`，需从公网或 VPC 内网访问 API Server
+- `kubectl get nodes` 报 `Unable to connect to the server` 或 `connection refused`，集群端点未开启
+- 公网端点 `Running` 但 `ModifyClusterEndpointSP` 后你的 IP 未放行，kubectl 报 `Unauthorized` — 看 [故障恢复]段
+
 
 ## 概述
 
-集群创建后默认无外网端点（`DescribeClusterEndpointStatus` 返 `NotFound`）。需显式开启才能从公网或 VPC 内网访问 API Server。
+集群创建后默认无外网端点（`DescribeClusterEndpointStatus` 返回 `NotFound`）。需显式开启才能从公网或 VPC 内网访问 API Server。
 
 | 端点 | 接口 | 作用 | 安全 |
 |:-----|:-----|:-----|:-----|
@@ -26,17 +34,17 @@ fused: true
 tccli --version
 # expected: tccli 版本号
 
-tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]' \
-  --filter "ClusterStatusSet[0].ClusterState"
+tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet[?ClusterId=='<CLUSTER_ID>'] | [0].ClusterState"
 # expected: "Running"
 ```
 
 ### 资源检查
 
 ```bash
-# 确认当前无端点或端点状态
-tccli tke DescribeClusterEndpointStatus --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
-# expected: Status="NotFound"（未开启）或 "Running"（已开启）
+# 确认当前无端点或端点状态（建议显式传 IsExtranet；省略时亦返回 Status）
+tccli tke DescribeClusterEndpointStatus --region ap-guangzhou \
+  --ClusterId "<CLUSTER_ID>" --IsExtranet true
+# expected: Status="NotFound"（未开公网端点，新建托管集群常见默认）或 "Running"；内网用 --IsExtranet false
 
 # 内网端点需子网
 tccli vpc DescribeSubnets --region <REGION> --Filters '[{"Name":"vpc-id","Values":["<VPC_ID>"]}]' \
@@ -46,7 +54,7 @@ tccli vpc DescribeSubnets --region <REGION> --Filters '[{"Name":"vpc-id","Values
 
 ## 关键字段
 
-> 来源：`tccli tke CreateClusterEndpoint --generate-cli-skeleton`。
+> 完整入参以 `tccli tke CreateClusterEndpoint help --detail` 为准。
 
 | 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
 |:------|------|:--------:|------------|---------------|
@@ -70,7 +78,7 @@ tccli vpc DescribeSubnets --region <REGION> --Filters '[{"Name":"vpc-id","Values
 - **默认推荐**: 生产用内网端点；本地开发临时用公网端点 + 白名单
 - **能切换吗?**: 能。`SwitchClusterEndpoint` 切换公网/内网，或先 `DeleteClusterEndpoint` 再建
 
-### 步骤 2：开启公网端点 — 最小化
+### 步骤 2：开启公网端点
 
 ```bash
 tccli tke CreateClusterEndpoint --region ap-guangzhou \
@@ -82,7 +90,7 @@ tccli tke CreateClusterEndpoint --region ap-guangzhou \
 |:------------|:-----|:-----|:---------|
 | `<CLUSTER_ID>` | 集群 ID | `cls-xxxxxxxx` | `tccli tke DescribeClusters` → `Clusters[].ClusterId` |
 
-### 步骤 3：开启内网端点 — 增强
+### 步骤 3：开启内网端点
 
 ```bash
 tccli tke CreateClusterEndpoint --region ap-guangzhou \
@@ -117,7 +125,7 @@ tccli tke DescribeClusterEndpointStatus --region ap-guangzhou --ClusterId "<CLUS
 |:-----|:-----|:-----|
 | 端点状态 | `DescribeClusterEndpointStatus` → `Status` | `Running` |
 | 端点地址 | `DescribeClusterEndpoints` → `ClusterExternalEndpoint`/`ClusterIntranetEndpoint` | 非空 IP |
-| ACL 生效 | `DescribeClusterEndpoints` → `SecurityPolicy` | 含白名单规则 |
+| ACL 生效 | `DescribeClusterEndpoints` → `ClusterExternalACL` | 含白名单规则（非 `SecurityPolicy`；后者属 `DescribeClusterSecurity`） |
 | kubeconfig 可用 | `kubectl get nodes`（用 kubeconfig） | 节点列表返回 |
 
 ### 独立 VIP 端点
@@ -148,7 +156,7 @@ tccli tke DeleteClusterEndpointVip --ClusterId "<CLUSTER_ID>" --region <REGION>
 
 ### 切换公网/内网端点
 
-> 已开启的端点可在公网/内网间切换，避免先删再建。`SwitchClusterEndpoint` 的 `IsExtranet` 指定目标类型，`Rollback` 控制切换失败是否回滚。参数以 `--generate-cli-skeleton` 为准。
+> 已开启的端点可在公网/内网间切换，避免先删再建。`SwitchClusterEndpoint` 的 `IsExtranet` 指定目标类型，`Rollback` 控制切换失败是否回滚。参数以 `tccli tke SwitchClusterEndpoint help --detail` 为准。
 
 ```bash
 # 切换端点类型（IsExtranet=true 切公网，false 切内网；Rollback=true 失败自动回滚）
@@ -188,7 +196,7 @@ tccli tke DescribeClusterEndpointStatus --region ap-guangzhou --ClusterId "<CLUS
 | `ResourceNotFound.SubnetId` | `tccli vpc DescribeSubnets` | 内网端点未指定子网或子网不在集群 VPC | 用集群 VPC 内的子网 |
 | `ResourceNotFound.SecurityGroup` | `tccli vpc DescribeSecurityGroups` | 安全组不存在 | 重建安全组或换一个 |
 | `FailedOperation` | `DescribeClusterEndpointStatus` → `ErrorMsg` | 端点创建中或 CLB 资源不足 | 等待；超时查 ErrorMsg |
-| `UnsupportedOperation` | `DescribeClusterStatus` 看状态 | 集群非 Running | 等集群 Running 后重试 |
+| `UnsupportedOperation` | `DescribeClusterStatus` 查看状态 | 集群非 Running | 等集群 Running 后重试 |
 | `ResourceInUse` | `DescribeClusterEndpointStatus` | 端点已存在 | 先 `DeleteClusterEndpoint` 再建 |
 
 ### 命令成功但状态不对 (exit = 0)
@@ -199,13 +207,31 @@ tccli tke DescribeClusterEndpointStatus --region ap-guangzhou --ClusterId "<CLUS
 | 端点 `Running` 但 kubectl 连不上 | `kubectl get nodes --v=6` | ACL 白名单未放行你的 IP | `ModifyClusterEndpointSP` 加你的 IP |
 | 公网端点 `Running` 但 `ClusterExternalEndpoint` 为空 | `DescribeClusterEndpoints` | CLB VIP 分配延迟 | 等 1-2 分钟重查 |
 
+## 收尾确认
+
+```bash
+# 端点状态符合预期（Verify 已查字段存在，此处查端到端可达）
+tccli tke DescribeClusterEndpointStatus --region ap-guangzhou --ClusterId "<CLUSTER_ID>" \
+  --filter "{status:Status}"
+# expected: status=Running
+
+# 业务可用性端到端：端点真可达（Verify 查 Status=Running 但未查网络层可达）
+tccli tke DescribeClusterEndpoints --region ap-guangzhou --ClusterId "<CLUSTER_ID>" \
+  --filter "ClusterExternalEndpoint" --output text
+# expected: 非空 IP（公网端点）
+
+# 用 kubeconfig 端到端验证 kubectl 可连通集群（端点开启是远程连接前置）
+kubectl --kubeconfig kubeconfig.yaml get nodes
+# expected: 节点列表返回 → 端点管理闭环完成
+```
+
+> 端点 Status=Running + 端点地址非空 + kubectl 可连通 = 端到端闭环。`kubectl get nodes` 成功即证明端点可达 + ACL 放行 + kubeconfig 有效三者齐备，是进下一阶段（部署应用/配置认证）的前置。
+
+---
+
 ## 下一步
 
 - [查询集群](../clusters/query.md) — `DescribeClusterEndpoints` 看端点地址
 - [认证配置](../security/auth.md) — 用端点 + kubeconfig 配置 kubectl
 - [配置 VPC-CNI](vpc-cni.md) — Pod 网络模型
 - [故障排查](../troubleshooting.md) — 端点不通的诊断
-
-## 控制台替代方案
-
-[容器服务控制台 - 集群访问地址](https://console.cloud.tencent.com/tke2/cluster)

@@ -3,19 +3,23 @@ doc_type: Overview
 ---
 # 可观测性
 
-> 集群的监控、告警、日志。决定你怎么发现集群问题、排查故障。
+> 集群的监控、告警、日志。决定如何发现集群问题、排查故障。
 
 ## 是什么
 
-TKE 可观测分三块：Prometheus 监控（指标 + 告警）、日志采集（业务 + 控制面）、事件管理。覆盖"集群有没有出问题"和"出了什么问题"。
+TKE 可观测按三条能力线组织：**指标**（云监控默认集成 + TMP/Prometheus + 可选自建）、**日志**（应用日志 CLS + 事件/审计）、**链路追踪**（APM）。用外部输出（指标/日志/追踪）推断集群与应用内部状态。
+
+> **入口**：控制台把 Prometheus 放在「云原生服务」；日志采集/查看以**集群详情**侧栏为主（运维中心多为跨集群开关，不是日志正文入口）。本域文档以 tccli 可调的 Prometheus/日志 Action 为主；装默认 `monitoragent` 见 [插件](../addons/index.md)。
 
 ## 核心概念
 
 | 概念 | 含义 | 为什么重要 |
 |:-----|:-----|:-----|
-| Prometheus | 指标采集与告警系统 | 监控集群与应用指标 |
-| Prometheus 实例 | 独立的 Prometheus 服务 | 承载采集目标与告警规则 |
-| ClusterAgent | 集群内的采集代理 | 把集群指标上报到 Prometheus 实例 |
+| 指标可观测 | 数值型 Metrics：资源利用率、调度、控制面健康等 | 量化集群与应用状态；默认云监控 + 可选 TMP |
+| 日志可观测 | 应用日志、K8s 事件、审计等文本流 | 排障与审计的证据链；常落 CLS |
+| 链路追踪 | 分布式调用链（APM） | 定位跨服务延迟与故障根因 |
+| Prometheus / TMP | 托管或自建 Prometheus；TKE 侧大量 `*Prometheus*` Action | 本域 How-to 主路径；须 CAM 单独授权 |
+| ClusterAgent | 集群内采集代理 | 把集群指标上报到 Prometheus 实例 |
 | 告警策略 | 聚合告警规则 | 按策略触发告警 |
 | CLS 日志 | 业务日志投递到 CLS | 业务日志集中检索 |
 | 控制面日志 | Master 组件日志 | 排查控制面问题 |
@@ -41,18 +45,26 @@ TKE 的 Prometheus 相关功能（48 个 Action）分四层，每层独立文档
 | 控制面日志 | `EnableControlPlaneLogs` 开启 | CLS | [日志采集](logging.md) |
 | 审计日志 | `EnableClusterAudit` 开启 | CLS | [审计日志](../security/audit.md) |
 
+## 三条能力线（对照）
+
+| 能力线 | 默认/常见路径 | 本仓库文档 |
+|:-------|:--------------|:-----------|
+| 指标 | 新建集群默认集成云监控；进阶用 TMP（`RunPrometheusInstance` + Agent）或自建 Prometheus | [Prometheus 入门](prometheus.md) 及同目录告警/配置/Agent |
+| 日志 | CLS 采集容器日志；事件见事件日志专文；审计见 [审计日志](../security/audit.md) | [日志采集](logging.md) · [审计日志](../security/audit.md) |
+| 链路 | 腾讯云 APM（探针采集调用链） | 控制台/APM 产品文档；非本域 `*Prometheus*` Action |
+
 ## 不适用场景
 
-- 不需监控（测试集群）→ 跳过 Prometheus
-- 已用云监控 → 看 [Prometheus 入门](prometheus.md) 对比
+- 测试集群、不需指标告警 → 跳过 TMP/Prometheus 实例创建（云监控默认仍可能已装）
+- 只要控制台基础监控曲线 → 用云监控即可；本域 Prometheus How-to 面向 TMP/自建路径
+- 只要调用链、不要 Prometheus → 走 APM，不调用本域 `*Prometheus*` Action
 - 不需业务日志检索 → 跳过日志采集
 
 ## 快速检查
 
 ```bash
 # 查看集群监控状态
-tccli tke DescribeClusterStatus --region <REGION> --ClusterIds '["<CLUSTER_ID>"]' \
-  --filter "ClusterStatusSet[0].ClusterBMonitor"
+tccli tke DescribeClusterStatus --region <REGION> --filter "ClusterStatusSet[?ClusterId=='<CLUSTER_ID>'] | [0].ClusterBMonitor"
 # expected: true（已开启监控）
 
 # 查看 Prometheus 实例

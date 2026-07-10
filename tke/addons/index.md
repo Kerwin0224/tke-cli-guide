@@ -21,15 +21,22 @@ doc_type: Overview
 
 ## 常见插件
 
-| 插件 | 作用 |
-|:-----|:-----|
-| `eniipamd` | VPC-CNI 弹性网卡管理 |
-| `cbs-csi` | CBS 云硬盘 CSI 存储 |
-| `cionfig` | 集群配置管理 |
-| `kubejarvisservice` | 集群巡检 |
-| `gatekeeper` | OPA 策略引擎 |
+> 创建确认步**默认会装**：`cbs`（存储）+ `monitoragent`（监控）+ `ip-masq-agent`（网络）。其余按需 `InstallAddon`。控制台增强组件按类分桶（监控/镜像/DNS/调度/网络/GPU/安全/认证授权/其他等），合计 **30+**——下表是高频入口，**不是全集**；安装前用 `GetTkeAppChartList` / `DescribeAddonValues` 核对当前集群可用的 `AddonName` 与版本。
 
-> 插件本质是 Helm Release，用 `DescribeClusterReleases` 也能查到。见 [应用发布](../releases/manage.md)。
+### 按意图分桶（高频）
+
+| 意图 | 典型 AddonName | 作用 |
+|:-----|:---------------|:-----|
+| 存储 | `cbs`（部分 chart 为 `cbs-csi`） | CBS 云硬盘 |
+| 监控 | `monitoragent` | 节点/集群监控 Agent |
+| 网络 | `ip-masq-agent`、`eniipamd` | 伪装/VPC-CNI 弹性网卡 |
+| 镜像 | `tcr` | 集群侧 TCR 拉取凭证 |
+| 日志 | `tke-log-agent` | 日志采集 Agent |
+| 调度/弹性 | `cluster-autoscaler` | 自动扩缩容 |
+| 安全/策略 | `gatekeeper` | OPA 策略引擎 |
+| 巡检 | `kubejarvisservice` | 集群巡检 |
+
+> 插件本质是 Helm Release，用 `DescribeClusterReleases` 也能查到。见 [应用发布](../releases/manage.md)。Prometheus 监控在控制台属「云原生服务」入口，文档见 [可观测](../observability/index.md)，不要只在插件列表里找。
 
 ## 不适用场景
 

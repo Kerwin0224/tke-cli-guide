@@ -5,7 +5,15 @@ fused: false
 ---
 # 个人版全功能操作
 
+> 控制台：企业版侧栏无独立「个人版」管理页（`/tcr/personal` 当前不可用）。个人版规格见 [购买页对比](https://buy.cloud.tencent.com/tcr)；公开镜像浏览见 [公有镜像](https://console.cloud.tencent.com/tcr/publicimage)（域名 `ccr.ccs.tencentyun.com`）。日常管理以本页 API / docker 为准。
 > TCR 个人版的用户、命名空间、仓库管理与镜像推送。个人版 API 形态与企业版完全不同——所有 Action 带 `Personal` 后缀，全局服务不传 `--region`。
+
+## 触发条件
+
+- `tccli tcr DescribeUserQuotaPersonal` 返回 `Data.LimitInfo` 显示个人版配额（无个人版用户时 `CreateUserPersonal` 报 `ResourceNotFound.ErrNoUser`）
+- `docker login ccr.ccs.tencentyun.com` 报 `unauthorized`（个人版用户未创建或密码错），或 `DescribeNamespacePersonal` 返回 `Data.NamespaceCount: 0`（无命名空间无法 push）
+- 个人开发/小团队场景，企业版实例成本过高，`DescribeInstances` 返回 `TotalCount: 0`
+
 
 ## 概述
 
@@ -19,7 +27,7 @@ fused: false
 | 查询命名空间 | `DescribeNamespacePersonal` | 看已有命名空间 |
 | 推送/拉取 | docker CLI | 镜像传输 |
 
-> 个人版无实例概念，所有操作直接在账号下的个人版空间进行。配额：命名空间 2000、仓库 10000。
+> 个人版无实例概念，所有操作直接在账号下的个人版空间进行。配额（不可调额）：命名空间 **10**/地域；仓库 **广州 500 / 其他地域 100**；单镜像 Tag **100**。不够则升企业版。
 
 ## 准备工作
 
@@ -42,12 +50,12 @@ tccli tcr DescribeUserQuotaPersonal
 
 # 查看已有命名空间（必填 Namespace/Limit/Offset）
 tccli tcr DescribeNamespacePersonal --Namespace "" --Limit 10 --Offset 0
-# expected: Data.NamespaceList
+# expected: Data.NamespaceInfo（数组）+ Data.NamespaceCount
 ```
 
 ## 关键字段
 
-> 来源：`--generate-cli-skeleton`。个人版 Action 入参极简。
+> 完整入参以各 Action 的 `help --detail` 为准。个人版 Action 入参极简。
 
 ### CreateUserPersonal
 
@@ -133,11 +141,11 @@ docker push ccr.ccs.tencentyun.com/<NAMESPACE_NAME>/<REPO_NAME>:v1
 ```bash
 # 查命名空间
 tccli tcr DescribeNamespacePersonal --Namespace "<NAMESPACE_NAME>" --Limit 10 --Offset 0
-# expected: Data.NamespaceList 含目标命名空间
+# expected: Data.NamespaceInfo 含目标命名空间
 
-# 查镜像版本
-tccli tcr DescribeImagePersonal --Namespace "<NAMESPACE_NAME>" --RepoName "<REPO_NAME>" --Limit 10 --Offset 0
-# expected: 含刚推送的 tag
+# 查镜像版本（RepoName 须为 "namespace/repo"；无 --Namespace，传了报 Unknown options）
+tccli tcr DescribeImagePersonal --RepoName "<NAMESPACE_NAME>/<REPO_NAME>" --Limit 10 --Offset 0
+# expected: 含刚推送的 tag；仓库不存在报 ResourceNotFound.ErrNoRepo
 
 # 查仓库详情（RepoName 须为 "namespace/repo" 格式，无 Limit/Offset 参数）
 tccli tcr DescribeRepositoryPersonal --RepoName "<NAMESPACE_NAME>/<REPO_NAME>"
@@ -148,7 +156,7 @@ tccli tcr DescribeRepositoryPersonal --RepoName "<NAMESPACE_NAME>/<REPO_NAME>"
 |:-----|:-----|:-----|
 | 命名空间存在 | `DescribeNamespacePersonal` | 含目标命名空间 |
 | 仓库存在 | `DescribeRepositoryPersonal` | 含目标仓库 |
-| 镜像版本 | `DescribeImagePersonal` | 含推送的 tag |
+| 镜像版本 | `DescribeImagePersonal --RepoName ns/repo` | 含推送的 tag |
 | docker 本地 | `docker images ccr.ccs.tencentyun.com/<ns>/<repo>` | 含推送的 tag |
 
 ## 清理
@@ -170,7 +178,7 @@ tccli tcr DeleteNamespacePersonal --Namespace "<NAMESPACE_NAME>"
 
 # 4. 验证已删
 tccli tcr DescribeNamespacePersonal --Namespace "<NAMESPACE_NAME>" --Limit 10 --Offset 0
-# expected: Data.NamespaceList 不含目标
+# expected: Data.NamespaceInfo 不含目标
 ```
 
 ## 故障恢复
@@ -192,6 +200,25 @@ tccli tcr DescribeNamespacePersonal --Namespace "<NAMESPACE_NAME>" --Limit 10 --
 | docker push 报 `denied` | `DescribeRepositoryPersonal` 看权限 | 仓库私有且无权限 | 个人版默认创建者有权限，核对账号 |
 | 个人版域名连不上 | `docker login ccr.ccs.tencentyun.com` | 用错域名（用了企业版域名） | 个人版用 `ccr.ccs.tencentyun.com` |
 
+## 收尾确认
+
+```bash
+# ② 业务可用性端到端：docker login + push 真正可达（Verify 查 TCR 侧记录存在，这里查端到端镜像传输成功）
+docker login ccr.ccs.tencentyun.com -u "<USERNAME>" -p "<PASSWORD>"
+# expected: Login Succeeded
+
+docker push ccr.ccs.tencentyun.com/<NAMESPACE_NAME>/<REPO_NAME>:v1
+# expected: digest: sha256:... Push complete
+
+# ④ 衔接下一步前置：镜像在个人版可被拉取（进高级管理/触发器前须确认镜像可用）
+docker pull ccr.ccs.tencentyun.com/<NAMESPACE_NAME>/<REPO_NAME>:v1
+# expected: Pull complete / Status: Image is up to date
+```
+
+> docker login 成功 + push 成功 + pull 成功 = 个人版管理闭环完成，可进入高级管理（触发器/复制）。push 失败说明用户/命名空间/仓库配置有缺。
+
+---
+
 ## 下一步
 
 - [个人版概览](index.md) — 个人版与企业版差异
@@ -199,7 +226,3 @@ tccli tcr DescribeNamespacePersonal --Namespace "<NAMESPACE_NAME>" --Limit 10 --
 - [TCR 企业版](../instances/index.md) — 升级路径
 - [推送拉取镜像](../images/push-pull.md) — 企业版推送（对比）
 - [故障排查](../troubleshooting.md) — docker login/push 失败诊断
-
-## 控制台替代方案
-
-[容器镜像服务控制台 - 个人版](https://console.cloud.tencent.com/tcr/personal)

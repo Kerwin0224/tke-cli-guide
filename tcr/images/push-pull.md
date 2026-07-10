@@ -5,19 +5,27 @@ fused: true
 ---
 # 推送和拉取镜像
 
-> 用 tccli 获取访问凭证、docker CLI 推送/拉取镜像、tccli 验证。跨工具操作——tccli 管 TCR 侧，docker 管镜像传输。
+> 控制台: [容器镜像服务控制台 - 镜像管理](https://console.cloud.tencent.com/tcr/image)
+> 用 TCCLI 获取访问凭证、docker CLI 推送/拉取镜像、TCCLI 验证。跨工具操作——TCCLI 管 TCR 侧，docker 管镜像传输。
+
+## 触发条件
+
+- `tccli tcr DescribeInstances --Registryids '["<ID>"]'` 返回 `Status: "Running"` 但 `DescribeImages` 返回 `ImageInfoList: []`（实例就绪但无镜像，需 push）
+- `docker push <DOMAIN>/<NS>/<REPO>:<TAG>` 报 `unauthorized: authentication required`（Token 过期，`DescribeInstanceToken` 返回空或 `Enabled: false`）
+- `docker pull` 报 `repository not found` 或本地缺镜像，`DescribeImages` 确认镜像在 TCR 侧但本地未拉取
+
 
 ## 概述
 
-完整流程：tccli 取 Token → docker login → docker tag/push 或 pull → tccli DescribeImages 验证。
+完整流程：TCCLI 取 Token → docker login → docker tag/push 或 pull → TCCLI DescribeImages 验证。
 
 | 步骤 | 工具 | 作用 |
 |:-----|:-----|:-----|
-| 取访问凭证 | tccli | `CreateInstanceToken` 拿 Username + Token |
+| 取访问凭证 | TCCLI | `CreateInstanceToken` 拿 Username + Token |
 | 登录仓库 | docker | `docker login` 用凭证建立会话 |
 | 推送镜像 | docker | `docker tag` + `docker push` |
 | 拉取镜像 | docker | `docker pull` |
-| 验证 | tccli | `DescribeImages` 确认镜像版本存在 |
+| 验证 | TCCLI | `DescribeImages` 确认镜像版本存在 |
 
 > 镜像地址格式：`<REGISTRY_DOMAIN>/<NAMESPACE>/<REPO>:<TAG>`，其中 `REGISTRY_DOMAIN` 是实例的 `PublicDomain`（如 `xxx.tencentcloudcr.com`）。
 
@@ -54,9 +62,9 @@ tccli tcr DescribeNamespaces --region <REGION> --RegistryId "<REGISTRY_ID>" \
 
 ## 关键字段
 
-### tccli: CreateInstanceToken
+### TCCLI: CreateInstanceToken
 
-> 来源：`tccli tcr CreateInstanceToken --generate-cli-skeleton` + 响应。
+> 完整入参以 `tccli tcr CreateInstanceToken help --detail` 为准；响应字段见实际返回。
 
 | 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
 |:------|------|:--------:|------------|---------------|
@@ -64,7 +72,7 @@ tccli tcr DescribeNamespaces --region <REGION> --RegistryId "<REGISTRY_ID>" \
 | TokenType | string | 否 | `temp`（默认，临时 1 小时）/ `longterm`（长期，CI/CD）；
 | Desc | string | 否 | 凭证描述 | — |
 
-> 响应字段：`Username`（docker login 用户名）、`Token`（docker login 密码）、`ExpTime`（过期时间戳）、`TokenId`。临时 Token 1 小时过期，CI/CD 用长期凭证见 [访问控制](../access/manage.md)。
+> 响应字段：`Username`（docker login 用户名）、`Token`（docker login 密码）、`ExpTime`（过期时间戳）、`TokenId`。`temp` 时常 `TokenId: ""` 且通常不进 `DescribeInstanceToken` 列表；`longterm` 的 Create.`TokenId` = 列表项 `Tokens[].Id`（删除/禁用入参仍用 `--TokenId`）。临时 Token 约 1 小时过期，CI/CD 用长期凭证见 [访问管理](../instances/manage-access.md)。
 
 ### docker: login / tag / push / pull
 
@@ -95,6 +103,8 @@ tccli tcr CreateInstanceToken --region <REGION> \
 }
 ```
 
+> `temp` 示例：`TokenId` 常为空字符串，且通常不出现在 `DescribeInstanceToken` 的 `Tokens[]` 中。`longterm` 会返回非空 `TokenId`，列表侧对应 `Tokens[].Id`。
+
 | 占位符 | 含义 | 约束 | 如何获取 |
 |:------------|:-----|:-----|:---------|
 | `<REGISTRY_ID>` | 实例 ID | `tcr-xxxxxxxx` | `tccli tcr DescribeInstances` → `Registries[].RegistryId` |
@@ -113,7 +123,13 @@ docker login <REGISTRY_DOMAIN> -u "<USERNAME>" -p "<TOKEN>"
 
 > ⚠️ 凭证不应明文出现在脚本中。用环境变量或 docker credential store：`docker login <REGISTRY_DOMAIN> -u "$TCR_USER" -p "$TCR_TOKEN"`。
 
-### 步骤 3：push — 最小化
+### 步骤 3：推送镜像
+
+推送镜像到 TCR 仓库。按场景**二选一**：A 单架构推送（`docker push`）或 B 多架构推送（`docker buildx`，amd64+arm64）。
+
+> ⚠️ **A 与 B 是二选一变体，不是先做 A 再做 B**——两者推的是同一 `<REPOSITORY_NAME>:v1` tag，第二次会覆盖第一次的 manifest。改镜像架构重新推送用同一 tag 覆盖即可，非先 A 后 B 两次操作。
+
+#### 选项 A：单架构推送
 
 ```bash
 # 打标签
@@ -124,7 +140,9 @@ docker push <REGISTRY_DOMAIN>/<NAMESPACE_NAME>/<REPOSITORY_NAME>:v1
 # expected: digest: sha256:... 推送成功
 ```
 
-### 步骤 4：push — 增强：多架构镜像
+#### 选项 B：多架构推送（buildx）
+
+> **与 A 二选一，非在 A 之后执行**。用 buildx 构建多架构 manifest 后一次性推送。
 
 ```bash
 # 用 buildx 构建多架构镜像后推送
@@ -133,14 +151,14 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 # expected: 推送多架构 manifest
 ```
 
-### 步骤 5：pull
+### 步骤 4：拉取镜像
 
 ```bash
 docker pull <REGISTRY_DOMAIN>/<NAMESPACE_NAME>/<REPOSITORY_NAME>:v1
 # expected: Pull complete
 ```
 
-### 步骤 6：验证
+### 步骤 5：验证
 
 ```bash
 # tccli 侧验证镜像版本已上传
@@ -193,7 +211,7 @@ tccli tcr DescribeImages --region <REGION> \
 | `denied: requested access to the resource is denied` (docker push) | `DescribeNamespaces` 查权限 | 命名空间 Private 且 Token 无 push 权限 | 配置访问策略，见 [访问控制](../access/manage.md) |
 | `unknown: repository not found` (docker push) | `DescribeRepositories` 查仓库 | 仓库不存在 | 先 `CreateRepository` |
 | `unknown: repository not found` 或 `project not found` (docker push) | `DescribeNamespaces` 查命名空间 | 命名空间不存在 | 先 [创建命名空间](../repositories/manage.md)，命名空间不存在时 push 报 project not found |
-| `ResourceNotFound` (tccli) | 核对 RegistryId/命名空间/仓库 | ID 或名称错 | 确认参数值 |
+| `ResourceNotFound` (TCCLI) | 核对 RegistryId/命名空间/仓库 | ID 或名称错 | 确认参数值 |
 
 ### 命令成功但状态不对 (exit = 0)
 
@@ -204,7 +222,7 @@ tccli tcr DescribeImages --region <REGION> \
 | `docker login` 成功但 push 报 `denied` | `DescribeNamespaces` → `Public` | 命名空间可见性或 Token 权限不足 | Private 命名空间需 Token 有 push 权限 |
 | 多架构 push 部分架构缺失 | `docker manifest inspect <domain>/<ns>/<repo>:<tag>` | buildx 未推某架构 | 重新 `buildx build --platform` 指定缺失架构 |
 
-> docker 侧错误不是 JSON，是 stderr 文本，天然英文。tccli 侧错误用 `--language en-US` 锁定英文便于脚本匹配。
+> docker 侧错误不是 JSON，是 stderr 文本，天然英文。TCCLI 侧错误用 `--language en-US` 锁定英文便于脚本匹配。
 
 ## 镜像 Manifest 与复制
 
@@ -229,6 +247,24 @@ tccli tcr DuplicateImage --RegistryId "<REGISTRY_ID>" --region <REGION> \
 
 > `DuplicateImage` 是同实例内镜像复制（跨命名空间/仓库），区别于 [实例同步](../replication/manage.md)（跨实例/跨地域）。`SourceReference`/`DestinationTag` 是镜像 tag。
 
+## 收尾确认
+
+```bash
+# ③ 跨步骤汇总：digest 双向核对（push 返回的 digest 与 TCR 侧 DescribeImages 返回的 digest 一致 = 推送产物真落地）
+tccli tcr DescribeImages --region ap-guangzhou --RegistryId "<REGISTRY_ID>" \
+  --NamespaceName "<NS>" --RepositoryName "<REPO>" \
+  --filter "ImageInfoList[0].{tag:ImageVersion,digest:Digest}"
+# expected: tag=推送的 tag, digest 与 docker push 返回的 sha256:... 一致
+
+# ② 业务可用性端到端：docker pull 真正成功（push-pull 的终极证明，Verify 查 TCR 侧记录，这里查本地能拉下来）
+docker pull <REGISTRY_DOMAIN>/<NAMESPACE_NAME>/<REPOSITORY_NAME>:<TAG>
+# expected: Pull complete / Status: Image is up to date
+```
+
+> TCR 侧 digest 与 push 返回一致 + docker pull 成功 = 推送拉取镜像闭环完成。digest 不一致或 pull 失败说明 push 未真落地或网络/权限有问题。
+
+---
+
 ## 下一步
 
 - [管理命名空间和仓库](../repositories/manage.md) — push 前创建命名空间/仓库
@@ -236,7 +272,3 @@ tccli tcr DuplicateImage --RegistryId "<REGISTRY_ID>" --region <REGION> \
 - [访问管理](../instances/manage-access.md) — 公网/VPC 端点开启
 - [实例状态机](../reference/states.md) — push 前确认实例 `Running`
 - [故障排查](../troubleshooting.md) — docker login/push 失败诊断
-
-## 控制台替代方案
-
-[容器镜像服务控制台 - 镜像管理](https://console.cloud.tencent.com/tcr/image)

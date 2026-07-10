@@ -5,9 +5,17 @@ fused: false
 ---
 # 配置集群认证
 
+> 控制台: [容器服务控制台 - 集群认证](https://console.cloud.tencent.com/tke2/cluster)
 > 获取/轮转 kubeconfig、配置 OIDC 企业 SSO、授予 RBAC 权限。配置型操作（改变认证行为，不创建资源）。
 >
-> **凭证分层**: 本文讲的是 **kubeconfig**（kubectl 连集群的凭证，TKE 产品内）。让 tccli 能调用 API 的 **CAM 根凭证**（SecretId/SecretKey）是全局前置，见 [配置凭证](../../getting-started/credentials.md)。
+> **凭证分层**: 本文讲的是 **kubeconfig**（kubectl 连集群的凭证，TKE 产品内）。让 TCCLI 能调用 API 的 **CAM 根凭证**（SecretId/SecretKey）是全局前置，见 [配置凭证](../../getting-started/credentials.md)。
+
+## 触发条件
+
+- `DescribeClusterKubeconfig` 返回的 kubeconfig 用 `kubectl get nodes` 报 `certificate expired`，需轮转证书
+- 多团队需企业 SSO 登录集群，`DescribeClusterAuthenticationOptions` → `OIDCConfig` 为空，需配 OIDC
+- 子账号 `kubectl` 连集群报 `Unauthorized`，`DescribeUserPermissions` 返回空，需授予 RBAC 权限 — 看 [故障恢复]段
+
 
 ## 概述
 
@@ -46,9 +54,23 @@ tccli tke UpdateClusterKubeconfig --region <REGION> --ClusterId "<CLUSTER_ID>"
 
 > `DescribeClusterKubeconfig` 响应字段 `Kubeconfig` 含完整 YAML，重定向到文件即可用 `kubectl --kubeconfig kubeconfig.yaml get nodes`。
 
+### 集群访问 Token 轮转
+
+> 完整入参以 `tccli tke RotateClusterToken help --detail` 为准（2018-05-25 版）。
+
+```bash
+# 轮转集群访问 Token（凭证泄露或定期安全轮换时）
+tccli tke RotateClusterToken --region <REGION> --ClusterId "<CLUSTER_ID>"
+# expected: exit 0（仅返回 RequestId）；轮转后旧 Token 失效，须重新 DescribeClusterKubeconfig 获取新凭证
+```
+
+> ⚠️ **权限约束（经测试验证）**：该 Action 受 CAM 强约束，资源策略要求 `qcs:resource_tag` 含 `billing&kerwinwjyan`（或等同授权）才允许执行。对非自有/无授权集群调用返回 `AuthFailure.UnauthorizedOperation`（非 `ResourceNotFound`），属**授权缺失**而非资源不存在——排查时优先查 CAM 策略而非集群 ID。
+> 与 `UpdateClusterKubeconfig`（轮转 kubeconfig 证书）的区别：`RotateClusterToken` 轮转的是集群对外访问 Token（如 kube-apiserver 访问凭据），二者是不同凭证面，按需选用。
+
+
 ### OIDC 配置
 
-> 来源：`tccli tke ModifyClusterAuthenticationOptions --generate-cli-skeleton`。
+> 完整入参以 `tccli tke ModifyClusterAuthenticationOptions help --detail` 为准。
 
 ```bash
 tccli tke ModifyClusterAuthenticationOptions --region <REGION> \
@@ -72,10 +94,12 @@ tccli tke ModifyClusterAuthenticationOptions --region <REGION> \
 ```bash
 # 授予子账号集群权限
 tccli tke GrantUserPermissions --region <REGION> \
-  --ClusterId "<CLUSTER_ID>" --AccountUin "<UIN>" \
-  --Permissions '[{"Resource":"cluster","Action":"rw"}]'
+  --TargetUin "<UIN>" \
+  --Permissions '[{"ClusterId":"<CLUSTER_ID>","RoleName":"tke:dev","RoleType":"cluster","IsCustom":false,"Namespace":""}]'
 # expected: exit 0
 ```
+
+> ⚠️ **参数层级**: `GrantUserPermissions` 顶层参数是 `TargetUin`（非 `AccountUin`）+ `Permissions` 对象数组。`ClusterId`/`RoleName`/`RoleType`/`IsCustom`/`Namespace` 都在 `Permissions` 元素内（非顶层）。`RoleName` 取值见 [权限角色枚举](../index.md#核心概念)。Permission 结构见 [共享字段](../reference/shared-fields.md)。完整入参以 `tccli tke GrantUserPermissions help --detail` 为准。
 
 ## 应用
 
@@ -83,7 +107,7 @@ tccli tke GrantUserPermissions --region <REGION> \
 # 1. 获取 kubeconfig
 tccli tke DescribeClusterKubeconfig --region ap-guangzhou --ClusterId "<CLUSTER_ID>" > ~/.kube/tke-config
 
-# 2. 验证可用
+# 2. 验证可用 (kubectl 验证 kubeconfig 连通, K8s 原生命令, tccli 不提供集群连通验证)
 kubectl --kubeconfig ~/.kube/tke-config get nodes
 # expected: 节点列表返回
 ```
@@ -171,13 +195,32 @@ tccli tke DeleteUserPermissions --TargetUin "<SUB_UIN>" --region <REGION> \
 
 > 传非预置值（如自定义角色名）也可，但须是集群内已存在的 Role/ClusterRole。命名空间级角色（`tke:ns:*`）必须同时传 `Namespace`，否则报 `InvalidParameter`。
 
+## 收尾确认
+
+```bash
+# 跨步骤汇总三项合一：kubeconfig 可用 + OIDC 配置生效 + RBAC 权限授予
+# 1. kubeconfig 端到端可用（Verify 查 OIDC 配置，此处查 kubeconfig 真能连集群）
+kubectl --kubeconfig kubeconfig.yaml get nodes
+# expected: 节点列表返回
+
+# 2. OIDC 配置生效
+tccli tke DescribeClusterAuthenticationOptions --region <REGION> --ClusterId "<CLUSTER_ID>" \
+  --filter "{oidc:OIDCConfig}"
+# expected: OIDCConfig 与设置一致
+
+# 3. RBAC 权限授予生效（子账号可连集群）
+tccli tke DescribeUserPermissions --TargetUin "<SUB_UIN>" --region <REGION> \
+  --filter "Permissions[].{cluster:ClusterId,role:RoleName}"
+# expected: 含目标集群与角色 → 认证配置闭环完成
+```
+
+> kubeconfig 可连通 + OIDC 配置生效 + RBAC 权限授予 = 跨步骤闭环。Verify 段查各配置项字段存在，此处汇总三类认证方式（kubeconfig/OIDC/RBAC）端到端可用，是进下一阶段（部署应用/开启审计）的前置。
+
+---
+
 ## 下一步
 
 - [管理访问端点](../networking/endpoints.md) — kubeconfig 需配合端点
 - [审计日志](audit.md) — 认证后开启操作审计
 - [查询集群](../clusters/query.md) — `DescribeClusterSecurity` 取凭证
 - [故障排查](../troubleshooting.md) — kubeconfig 不可用诊断
-
-## 控制台替代方案
-
-[容器服务控制台 - 集群认证](https://console.cloud.tencent.com/tke2/cluster)

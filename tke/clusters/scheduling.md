@@ -23,14 +23,14 @@ fused: false
 
 | 选项 | 最佳场景 |
 |:-----|:---------|
-| 默认调度器（`default-scheduler`） | 大多数场景，TKE 默认 |
+| 默认调度器（`default-scheduler`） | 通用场景，TKE 默认 |
 | 自定义插件（如 `NodeResourcesFit`） | 需要资源适配/特定调度逻辑 |
 
 ## 准备工作
 
 ```bash
 tccli --version
-# expected: tccli 3.1.117.1 或更高
+# expected: tccli 3.1.124.1 或更高
 
 tccli tke DescribeClusters --region <REGION> --filter "Clusters[0].ClusterId"
 # expected: 集群 ID（凭证有效，见 [配置凭证](../../getting-started/credentials.md)）
@@ -53,11 +53,8 @@ tccli tke DescribeClusterSchedulerPolicy --ClusterId "<CLUSTER_ID>" --region <RE
 {
     "Policy": "",
     "SchedulerPolicyConfig": [
-        {"SchedulerName": "default-scheduler", "PluginConfigs": [{"Name": "NodeResourcesFit"}], "PluginSet": {}}
-    ],
-    "ClientConnection": {},
-    "Extenders": [],
-    "HighPerformance": false
+        {"SchedulerName": "default-scheduler", "PluginConfigs": [{"Name": "NodeResourcesFit", "Args": "<base64>"}], "PluginSet": {"Enabled": [{"Name": "DefaultPreemption", "Weight": 0}, {"Name": "NodeResourcesFit", "Weight": 1}]}}
+    ]
 }
 ```
 
@@ -71,15 +68,36 @@ tccli tke ModifyClusterSchedulerPolicy --ClusterId "<CLUSTER_ID>" --region <REGI
 # expected: exit 0
 ```
 
-> `--SchedulerPolicyConfig` 是对象数组，每项含 `SchedulerName` + `PluginConfigs`（插件配置）+ `PluginSet`（启用/禁用插件）。**`PluginConfigs[].Args` 必填**——缺 `Args` 报 `InvalidParameter.Param: PARAM_ERROR(pluginConfigs[0].args Unmarshal failed)`。`Args` 是 base64 编码的插件参数 JSON，先用 `DescribeClusterSchedulerPolicy` 取当前 `Args` 值再传入，勿凭空构造。完整结构见 `tccli tke ModifyClusterSchedulerPolicy --generate-cli-skeleton`。
+> `--SchedulerPolicyConfig` 是对象数组，每项含 `SchedulerName` + `PluginConfigs`（插件配置）+ `PluginSet`（启用/禁用插件）。**`PluginConfigs[].Args` 必填**——缺 `Args` 报 `InvalidParameter.Param: PARAM_ERROR(pluginConfigs[0].args Unmarshal failed)`。`Args` 是 base64 编码的插件参数 JSON，先用 `DescribeClusterSchedulerPolicy` 取当前 `Args` 值再传入，勿凭空构造。完整结构见 `tccli tke ModifyClusterSchedulerPolicy help --detail`。
+
+### 配置扩展调度器（Extenders）
+
+接自定义调度器扩展（如 GPU/NUMA/重调度器），通过 `Extenders` 对象数组传入：
+
+```bash
+tccli tke ModifyClusterSchedulerPolicy --ClusterId "<CLUSTER_ID>" --region <REGION> \
+  --Extenders '[{"ExtenderClientConfig":{"url":"http://<EXTENDER_SVC>:8080","cert":"","key":""},"ManagedResources":["*"]}]'
+# expected: exit 0
+```
+
+> `Extenders[]` 每项含 `ExtenderClientConfig`（扩展器连接配置 url/cert/key）+ `ManagedResources`（该扩展器管理的资源列表）。用于接入集群外的自定义调度扩展服务。`ClientConnection`（kubeconfig 连接配置）与 `HighPerformance`（高性能调度模式）是同层独立配置。
 
 ## 验证
 
+异步生效，检查 ≥4 个维度：
+
 ```bash
 tccli tke DescribeClusterSchedulerPolicy --ClusterId "<CLUSTER_ID>" --region <REGION> \
-  --filter "SchedulerPolicyConfig[0].SchedulerName"
-# expected: 修改后的 SchedulerName
+  --filter "SchedulerPolicyConfig[0].{name:SchedulerName,plugins:PluginConfigs,set:PluginSet}"
+# expected: 修改后的 SchedulerName + PluginConfigs 含目标插件 + PluginSet 启用列表
 ```
+
+| 维度 | 命令 | 预期 |
+|:-----|:-----|:-----|
+| SchedulerName | `DescribeClusterSchedulerPolicy` → `SchedulerPolicyConfig[0].SchedulerName` | 目标调度器名（如 `default-scheduler`） |
+| PluginConfigs | 同上 → `PluginConfigs[].Name`/`Args` | 含配置的插件（如 `NodeResourcesFit`）+ Args 非空 |
+| PluginSet | 同上 → `PluginSet.Enabled[]` | 启用插件列表含目标插件 |
+| Extenders | 同上 → `Extenders[]` | 若配了扩展调度器，含 url/ManagedResources |
 
 ## 故障恢复
 
@@ -101,11 +119,17 @@ tccli tke ModifyClusterSchedulerPolicy --ClusterId "<CLUSTER_ID>" --region <REGI
 ## 收尾确认
 
 ```bash
-# 一次性核对：调度策略已生效，目标 SchedulerName 出现在配置中
+# 跨步骤汇总：SchedulerName + PluginConfigs + Extenders 三项一次性核对（Verify 查字段存在，此处核对配置项协同生效）
 tccli tke DescribeClusterSchedulerPolicy --ClusterId "<CLUSTER_ID>" --region <REGION> \
-  --filter "SchedulerPolicyConfig[0].SchedulerName" --output text
-# expected: 返回目标 SchedulerName（如 default-scheduler）→ 调度策略配置闭环完成
+  --filter "SchedulerPolicyConfig[0].{name:SchedulerName,plugins:PluginConfigs[0].Name,extenders:Extenders[0].ExtenderClientConfig.url}"
+# expected: name=目标调度器 + plugins=目标插件 + extenders=扩展器 url（若未配 Extenders 则 null）
+
+# 业务可用性端到端：Pod 是否按新策略调度（Verify 查配置字段，此处查配置是否真影响 Pod 调度）
+kubectl get pods -A -o wide --kubeconfig <KUBECONFIG> | head -10
+# expected: Pod 列表返回，NODE 列显示已调度到节点（调度策略生效后新调度的 Pod 按策略分布）
 ```
+
+> SchedulerName + PluginConfigs + Extenders 三项合一 = 调度策略配置闭环完成。**业务可用性边界**：策略修改只影响**新调度**的 Pod，已运行 Pod 不重调度；若新策略与节点资源不匹配（如 `NodeResourcesFit` 请求超节点容量），新 Pod 会卡 `Pending`——用 `kubectl describe pod <POD>` 看 `FailedScheduling` 事件诊断。
 
 ## 下一步
 

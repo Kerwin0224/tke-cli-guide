@@ -5,13 +5,25 @@ fused: true
 ---
 # 升级集群版本
 
-> 升级集群 Master 的 Kubernetes 版本。异步操作，升级期间控制面不可管理但工作负载正常运行。**不可回滚**——只能继续升级到更高版本。
+> 控制台: [容器服务控制台 - 集群升级](https://console.cloud.tencent.com/tke2/cluster)
+> 升级集群 Master 的 Kubernetes 版本。异步操作，升级期间控制面不可变更但工作负载正常运行。**不可回滚**——只能继续升级到更高版本。
 
 > 本文档 Action 属 **TKE 2018-05-25**（`UpdateClusterVersion`/`DescribeAvailableClusterVersion`/`CancelUpgradePlan` 等均旧版独有）。注意 `CancelUpgradePlan` 用 `ClusterID`/`PlanID`（大写 ID），与多数集群接口的 `ClusterId`（小写 d）不同。`DescribeClusterInstances` 是两版同名且入参不兼容（旧 `InstanceIds`/`InstanceRole` vs 新 `SortBy`/`NeedTags`），本文走旧版，见 [节点实例操作](../nodes/instance-ops.md)。
 
 ## 概述
 
 升级分小版本（如 1.30.0 → 1.30.5）与大版本（如 1.30 → 1.34）。大版本升级风险高，建议逐版本升级而非跳版本。
+
+### K8s 1.34+ 节点初始化行为变更（升级前必读）
+
+升到 **TKE Kubernetes 1.34 及以上**时，节点初始化行为与旧版不同：
+
+| 项 | 旧行为（&lt;1.34） | 新行为（≥1.34） |
+|:---|:------------------|:----------------|
+| 节点注册凭证 | 控制面给 kubelet 下发**长期有效** kubeconfig 证书（早期约 20 年，后约 30 年） | 下发 **bootstrap token（24 小时有效）**；kubelet 启动后用 token 向 apiserver 换正式证书；证书目录 `/var/lib/kubelet/pki/` |
+| root 的 `/root/.kube/config` | 按 `TKE_ADMIN_KUBECONFIG` 白名单：白名单内长期 admin；非白名单 12 小时 admin（可访问集群内全部资源） | 白名单机制**失效**；改为软链接指向 kubelet 当前 kubeconfig，权限与 kubelet 一致，**仅能操作当前节点资源** |
+
+> 依赖「节点上 root admin kubeconfig 管全集群」的运维脚本，在 1.34+ **会失效**——改用集群 Endpoint + 合法凭证，或节点级权限内操作。完整说明见 [集群版本相关的节点变更说明](https://cloud.tencent.com/document/product/457/126536)。
 
 | 策略 | 适用 | 风险 | 耗时 |
 |:-----|:-----|:-----|:-----|
@@ -72,7 +84,7 @@ tccli tke DescribeClusterKubeconfig --region ap-guangzhou --ClusterId "<CLUSTER_
 
 > `DstVersion` 必须是 `DescribeAvailableClusterVersion` 返回的版本之一，不能用 `DescribeVersions` 的全量版本——后者含不可升级到的版本。
 
-> `UpgradeType` 三值代表三条独立升级路径（非可互换）：`reset` 重装节点系统盘（风险最高，但兼容性最强，大小版本都支持）；`hot` 原地滚动小版本（风险低，仅小版本）；`major` 原地滚动大版本（API 弃用风险，需先 `CheckInstancesUpgradeAble --UpgradeType major` 核兼容）。选错（如大版本传 `hot`）报 `InvalidParameterValue`。三条路径的决策见 [步骤 1](#步骤-1决策--选升级策略)。
+> `UpgradeType` 三值代表三条独立升级路径（非可互换）：`reset` 重装节点系统盘（风险最高，但兼容性最强，大小版本都支持）；`hot` 原地滚动小版本（风险低，仅小版本）；`major` 原地滚动大版本（API 弃用风险，需先 `CheckInstancesUpgradeAble --UpgradeType major` 核兼容）。选错（如大版本传 `hot`）报 `InvalidParameterValue`。三条路径的决策见 [步骤 1](#步骤-1决策-—-选升级策略)。
 
 ## 操作步骤
 
@@ -81,7 +93,7 @@ tccli tke DescribeClusterKubeconfig --region ap-guangzhou --ClusterId "<CLUSTER_
 #### 为什么逐版本升级
 
 - **逐版本 vs 跳版本**: 逐版本（1.30→1.32→1.34）每跳风险可控，API 弃用逐版本暴露；跳版本（1.30→1.34）一次性暴露多个版本的弃用，工作负载可能因 API 移除而崩溃
-- **默认推荐**: 逐版本升级，生产环境尤其如此
+- **默认推荐**: 逐版本升级（生产环境适用：每跳风险可控，API 弃用逐版本暴露）
 - **能回滚吗?**: 不能。集群版本升级不可回滚，只能继续升级到更高版本。节点版本可单独升级/降级，但 Master 不可
 
 #### 选哪个 UpgradeType（reset / hot / major）
@@ -122,9 +134,13 @@ tccli tke CheckInstancesUpgradeAble --region ap-guangzhou \
 # expected: UpgradeAbleInstances[] 兼容（reset 兼容性最强）
 ```
 
-### 步骤 3：升级 — 最小化
+### 步骤 3：升级 Master
 
-Master 升级（`UpdateClusterVersion` 不带 `UpgradeType`，它只升 Master 控制面；节点跟随升级用步骤 3a 的 `UpgradeClusterInstances`）：
+`UpdateClusterVersion` 必传 `ClusterId` + `DstVersion`（不带 `UpgradeType`，只升 Master 控制面；节点跟随升级见步骤 4 的 `UpgradeClusterInstances`）。按场景**二选一**：A 默认容忍度或 B 金丝雀（允许部分节点先升级）。
+
+> ⚠️ **A 与 B 是二选一变体，不是先做 A 再做 B**——两者各调一次 `UpdateClusterVersion` 升的是同一个 Master，第二次会报版本已在升级中。集群版本升级**不可回滚**，只能继续升级到更高版本。
+
+#### 选项 A：默认容忍度
 
 ```bash
 tccli tke UpdateClusterVersion --region ap-guangzhou \
@@ -137,7 +153,20 @@ tccli tke UpdateClusterVersion --region ap-guangzhou \
 | `<CLUSTER_ID>` | 目标集群 ID | `cls-xxxxxxxx` | `tccli tke DescribeClusters` → `Clusters[].ClusterId` |
 | `<TARGET_VERSION>` | 目标版本 | 须在可升级列表 | `tccli tke DescribeAvailableClusterVersion` → `Versions[]` |
 
-### 步骤 3a：节点跟随升级 — 按 UpgradeType 选路径
+#### 选项 B：金丝雀（允许部分节点 NotReady）
+
+> **与 A 二选一，非在 A 之后执行**。设置较高容忍度，允许部分节点先升级（适合大规模集群）：
+
+```bash
+tccli tke UpdateClusterVersion --region ap-guangzhou \
+  --ClusterId "<CLUSTER_ID>" --DstVersion "<TARGET_VERSION>" \
+  --MaxNotReadyPercent 30
+# expected: exit 0
+```
+
+> `MaxNotReadyPercent 30` 允许 30% 节点在升级期间 NotReady。值越大升级越快但风险越高，生产环境建议默认（低值）。
+
+### 步骤 4：节点跟随升级 — 按 UpgradeType 选路径
 
 Master 升级后节点未自动跟随时，用 `UpgradeClusterInstances` 按选定的 `UpgradeType` 升级节点。三值三条路径，命令结构相同，仅 `--UpgradeType` 不同：
 
@@ -163,27 +192,13 @@ tccli tke UpgradeClusterInstances --region ap-guangzhou \
 
 > 三路径的 `UpgradeType` 必须与步骤 2 `CheckInstancesUpgradeAble` 一致，否则兼容性检查结果不对应。`reset` 会重装节点系统盘（Pod 重调度），`hot`/`major` 原地滚动重启（Pod 漂移少）。
 
-### 步骤 4：升级 — 增强：金丝雀
-
-设置较高容忍度，允许部分节点先升级（适合大规模集群）：
-
-```bash
-tccli tke UpdateClusterVersion --region ap-guangzhou \
-  --ClusterId "<CLUSTER_ID>" --DstVersion "<TARGET_VERSION>" \
-  --MaxNotReadyPercent 30
-# expected: exit 0
-```
-
-> `MaxNotReadyPercent 30` 允许 30% 节点在升级期间 NotReady。值越大升级越快但风险越高，生产环境建议默认（低值）。
-
 ### 步骤 5：验证
 
 异步操作，检查 ≥4 个维度：
 
 ```bash
 # 轮询集群状态（升级中为 Upgrading，完成后回 Running）
-tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]' \
-  --filter "ClusterStatusSet[0].ClusterState"
+tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet[?ClusterId=='<CLUSTER_ID>'] | [0].ClusterState"
 # expected: 升级中 "Upgrading" → 完成后 "Running"
 ```
 
@@ -213,9 +228,9 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_I
 |:--------|:----------|:------------|:-----|
 | `Versions` 为空 `[]` | `DescribeAvailableClusterVersion` | 已是最新版本，无更高版本可升级 | 无需升级 |
 | `FailedOperation` | `CheckInstancesUpgradeAble` 看不兼容节点 | 节点版本/组件不兼容目标版本 | 先升级节点或移除不兼容节点 |
-| `ResourceInUse` | `DescribeUpgradeTasks --Offset 0 --Limit 20` 看是否有任务，有则 `DescribeUpgradeTaskDetail --ID "<ID>"` 查 `UpgradePlans[].Status` | 已有升级任务在跑 | 等待或 `CancelUpgradePlan --ClusterID "<ID>" --PlanID "<PLAN_ID>"` 后重试 |
+| `ResourceInUse` | `DescribeUpgradeTasks --Offset 0 --Limit 20` 看是否有任务，有则 `DescribeUpgradeTaskDetail --ID "<ID>"` 查 `UpgradePlans[].Status` | 已有升级任务在执行中 | 等待或 `CancelUpgradePlan --ClusterID "<ID>" --PlanID "<PLAN_ID>"` 后重试 |
 | `InvalidParameterValue.DstVersion` | 核对 `DstVersion` | 版本号不在可升级列表 | 用 `DescribeAvailableClusterVersion` 返回的版本 |
-| `UnsupportedOperation` | `DescribeClusterStatus` 看状态 | 集群非 `Running`（升级中/异常） | 等集群 `Running` 后重试 |
+| `UnsupportedOperation` | `DescribeClusterStatus` 查看状态 | 集群非 `Running`（升级中/异常） | 等集群 `Running` 后重试 |
 
 ### 命令成功但状态不对 (exit = 0)
 
@@ -241,10 +256,10 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_I
 | `resume` | 继续已暂停的任务 |
 | `abort` | 终止任务 |
 
-`Operation=create` 的三值命令演示见 [步骤 3a](#步骤-3a节点跟随升级--按-upgradetype-选路径)（hot/major/reset 三路径）。本段补 `MaxNotReadyPercent` 金丝雀变体：
+`Operation=create` 的三值命令演示见 [步骤 4](#步骤-4节点跟随升级-—-按-upgradetype-选路径)（hot/major/reset 三路径）。本段补 `MaxNotReadyPercent` 金丝雀变体：
 
 ```bash
-# 金丝雀升级指定节点（UpgradeType 同步骤 3a，加 MaxNotReadyPercent 容忍度）
+# 金丝雀升级指定节点（UpgradeType 同步骤 4，加 MaxNotReadyPercent 容忍度）
 tccli tke UpgradeClusterInstances --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" \
   --Operation create \
@@ -293,11 +308,21 @@ tccli tke CancelUpgradePlan --region ap-guangzhou \
 ## 收尾确认
 
 ```bash
-# 一次性核对：集群已回到 Running + 版本已提升到目标版本
+# 跨步骤汇总：Master 版本 + 全节点版本 + 升级任务 Succeed 三项合一（Verify 分维度查，此处一次性核对三者协同达成）
 tccli tke DescribeClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]' \
   --filter "Clusters[0].{state:ClusterStatus,version:ClusterVersion}"
-# expected: state=Running, version=目标版本（如 1.34.1）→ Master 升级闭环完成；节点版本另用 CheckInstancesUpgradeAble 核对
+# expected: state=Running, version=目标版本（如 1.34.1）
+
+tccli tke CheckInstancesUpgradeAble --region ap-guangzhou --ClusterId "<CLUSTER_ID>" --UpgradeType reset \
+  --filter "ClusterVersion"
+# expected: 节点版本与 Master 一致（ClusterVersion=目标版本）→ Master+节点版本一致
+
+tccli tke DescribeUpgradeTasks --region ap-guangzhou --Offset 0 --Limit 20 \
+  --filter "UpgradeTasks[0].ID"
+# expected: 取最新任务 ID，再 DescribeUpgradeTaskDetail --ID "<ID>" 核 UpgradePlans[].Status=Succeed
 ```
+
+> Master 版本=目标 + 全节点版本=目标 + 升级任务 `Succeed` 三项合一 = 升级闭环完成。Verify 已分维度查集群状态/版本号/任务/节点版本，此处汇总核对三项协同达成（单查任一项不足以证明升级闭环——Master 升级而节点未跟随，或任务未 Succeed，均非闭环）。**升级不可回滚**，失败只能 `DeleteCluster` 重建（见 [§清理](#清理)）。
 
 ## 下一步
 
@@ -306,7 +331,3 @@ tccli tke DescribeClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]'
 - [创建集群](create.md) — 升级失败需重建时参考
 - [故障排查](../troubleshooting.md) — 升级卡住的诊断路径
 - [独立集群 Master 运维](master-ops.md) — 独立集群扩缩容 Master/etcd 节点
-
-## 控制台替代方案
-
-[容器服务控制台 - 集群升级](https://console.cloud.tencent.com/tke2/cluster)

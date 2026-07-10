@@ -6,6 +6,14 @@ fused: true
 # 管理应用发布
 
 > 用 Helm Release 在集群内部署应用。创建、升级、回滚、卸载。异步操作。
+> 控制台: [容器服务 - 应用管理](https://console.cloud.tencent.com/tke2/helm)
+
+## 触发条件
+
+- `DescribeClusterReleases` → 目标命名空间无应用 Release，需 `CreateClusterRelease` 部署 Chart
+- `DescribeClusterReleases` → `Status=failed` 或长时间 `pending-upgrade`，Release 创建/升级后状态异常
+- `DescribeClusterReleaseHistory` 显示需回滚到历史版本，`RollbackClusterRelease` 后版本未生效 — 看 [故障恢复]段
+
 
 ## 概述
 
@@ -16,8 +24,8 @@ Release 是 TKE 封装的 Helm Release，管理应用生命周期。一个 Relea
 | 创建 | `CreateClusterRelease` | 部署 Chart 到集群 |
 | 升级 | `UpgradeClusterRelease` | 升级 Chart 版本或改 Values |
 | 回滚 | `RollbackClusterRelease` | 回滚到历史版本 |
-| 查询 | `DescribeClusterReleases` | 看 Release 列表与状态 |
-| 历史 | `DescribeClusterReleaseHistory` | 看 Release 修订历史 |
+| 查询 | `DescribeClusterReleases` | 查看 Release 列表与状态 |
+| 历史 | `DescribeClusterReleaseHistory` | 查看 Release 修订历史 |
 | 卸载 | `UninstallClusterRelease` | 移除 Release |
 
 操作是**异步**的：接口返回即提交，Release 就绪需轮询 `DescribeClusterReleases` 直到 `Status=deployed`。
@@ -30,8 +38,7 @@ Release 是 TKE 封装的 Helm Release，管理应用生命周期。一个 Relea
 tccli --version
 # expected: tccli 版本号
 
-tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]' \
-  --filter "ClusterStatusSet[0].ClusterState"
+tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet[?ClusterId=='<CLUSTER_ID>'] | [0].ClusterState"
 # expected: "Running"
 ```
 
@@ -59,7 +66,7 @@ tccli tke GetTkeAppChartList --region ap-guangzhou \
 
 ## 关键字段
 
-> 来源：`tccli tke CreateClusterRelease --generate-cli-skeleton`。
+> 完整入参以 `tccli tke CreateClusterRelease help --detail` 为准。
 
 | 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
 |:------|------|:--------:|------------|---------------|
@@ -88,7 +95,13 @@ tccli tke GetTkeAppChartList --region ap-guangzhou \
 - **默认推荐**: 官方应用用 `tke`；自定义应用用 `repo`
 - **能换源吗?**: 能，`UpgradeClusterRelease` 改 Chart 来源
 
-### 步骤 2：创建 — 最小化
+### 步骤 2：创建 Release
+
+`CreateClusterRelease` 必传 `ClusterId`/`Name`/`Namespace`/`Chart`/`ChartFrom`。按场景**二选一**：A 最小化（官方 tke 仓库）或 B 增强（外部仓库+自定义 Values）。
+
+> ⚠️ **A 与 B 是二选一变体，不是先做 A 再做 B**——两者各调一次 `CreateClusterRelease` 会装**两个同名 Release（命名空间内冲突）或两份 Release**。Release 创建后改配置（版本/Values）用 `UpgradeClusterRelease`，**禁用第二次 `CreateClusterRelease` 改配置**。
+
+#### 选项 A：最小化（官方 tke 仓库）
 
 ```bash
 tccli tke CreateClusterRelease --region ap-guangzhou \
@@ -104,7 +117,9 @@ tccli tke CreateClusterRelease --region ap-guangzhou \
 | `<NAMESPACE>` | 命名空间 | K8s 命名空间 | 自定义，如 `default` |
 | `<CHART_NAME>` | Chart 名 | 须存在 | `tccli tke GetTkeAppChartList` |
 
-### 步骤 3：创建 — 增强：外部仓库 + 自定义 Values
+#### 选项 B：增强（外部仓库 + 自定义 Values）
+
+> **与 A 二选一，非在 A 之后执行**。用 `ChartFrom repo` 指外部仓库，配 URL/版本/Values/认证。
 
 ```bash
 tccli tke CreateClusterRelease --region ap-guangzhou \
@@ -116,7 +131,7 @@ tccli tke CreateClusterRelease --region ap-guangzhou \
 # expected: exit 0
 ```
 
-### 步骤 4：升级 — 升级版本
+### 步骤 3：升级 — 升级版本
 
 ```bash
 tccli tke UpgradeClusterRelease --region ap-guangzhou \
@@ -125,7 +140,7 @@ tccli tke UpgradeClusterRelease --region ap-guangzhou \
 # expected: exit 0
 ```
 
-### 步骤 5：回滚 — 回滚
+### 步骤 4：回滚 — 回滚
 
 ```bash
 # 查历史版本
@@ -139,7 +154,7 @@ tccli tke RollbackClusterRelease --region ap-guangzhou \
 # expected: exit 0
 ```
 
-### 步骤 6：验证
+### 步骤 5：验证
 
 ```bash
 tccli tke DescribeClusterReleases --region ap-guangzhou --ClusterId "<CLUSTER_ID>" \
@@ -183,7 +198,7 @@ tccli tke DescribeClusterReleases --region ap-guangzhou --ClusterId "<CLUSTER_ID
 | `ResourceNotFound` | `DescribeClusters` 核对 ID | ClusterId 错 | 确认集群 ID |
 | `UnauthorizedOperation` | 查仓库凭证 | 私有仓库用户名/密码错 | 核对 `Username`/`Password` |
 | `ResourceInUse` | `DescribeClusterReleases` 看是否已存在 | Release 名已占用 | 换名或先卸载 |
-| `FailedOperation` | `DescribeClusterStatus` 看状态 | 集群非 Running | 等集群 Running |
+| `FailedOperation` | `DescribeClusterStatus` 查看状态 | 集群非 Running | 等集群 Running |
 
 ### 命令成功但状态不对 (exit = 0)
 
@@ -260,14 +275,35 @@ tccli tke ModifyClusterRollOutSequenceTags --region ap-guangzhou \
 # expected: CAM 拦截 UnauthorizedOperation.CamNoAuth（参数已验证）；授权后 exit 0
 ```
 
-> ⚠️ `ModifyClusterRollOutSequenceTags` 用大写 `ClusterID`（区别于多数 TKE 接口的小写 `ClusterId`），`Tags[]` 是覆盖式整体更新。`DescribeClusterRollOutSequenceTags` 不需 ClusterId，按 Offset/Limit 翻页。两者参数以 `--generate-cli-skeleton` 为准。灰度序列用这些标签按节点 `Tags` 分批发布。
+> ⚠️ `ModifyClusterRollOutSequenceTags` 用大写 `ClusterID`（区别于多数 TKE 接口的小写 `ClusterId`），`Tags[]` 是覆盖式整体更新。`DescribeClusterRollOutSequenceTags` 不需 ClusterId，按 Offset/Limit 翻页。两者参数见各 Action 的 `help --detail`。灰度序列用这些标签按节点 `Tags` 分批发布。
+
+## 收尾确认
+
+```bash
+# 跨步骤汇总三项合一：Release Status=deployed + 历史版本数 + 关联资源 Ready
+# 1. Release 已部署（Verify 查 Status/版本/Revision，此处汇总）
+tccli tke DescribeClusterReleases --region ap-guangzhou --ClusterId "<CLUSTER_ID>" \
+  --filter "ReleaseSet[?Name=='<RELEASE_NAME>'].{name:Name,status:Status,rev:Revision}"
+# expected: status=deployed
+
+# 2. 历史版本数（回滚/升级后核对修订号递增）
+tccli tke DescribeClusterReleaseHistory --region ap-guangzhou \
+  --ClusterId "<CLUSTER_ID>" --Name "<RELEASE_NAME>" --Namespace "<NAMESPACE>" \
+  --filter "Total"
+# expected: Total ≥1（创建=1，升级/回滚后递增）
+
+# 3. 关联资源 Ready（业务可用性端到端：Release 管理的 K8s 资源真就绪）
+kubectl get all -n <NAMESPACE> -l app.kubernetes.io/instance=<RELEASE_NAME> \
+  --no-headers | awk '{print $1, $2}' | head -10
+# expected: 资源列表非空且 STATUS 无 Failed → 应用发布闭环完成
+```
+
+> Release deployed + 历史版本数 ≥1 + 关联资源 Ready = 跨步骤闭环。Verify 段查 Release 字段，此处汇总 Release 状态 + 修订历史 + 部署资源就绪三项，确认应用真可用（业务可用性端到端）。
+
+---
 
 ## 下一步
 
 - [插件管理](../addons/manage.md) — 插件本质是 Release
 - [创建集群](../clusters/create.md) — 建集群后部署应用
 - [故障排查](../troubleshooting.md) — Release 失败诊断
-
-## 控制台替代方案
-
-[容器服务控制台 - 应用管理](https://console.cloud.tencent.com/tke2/helm)

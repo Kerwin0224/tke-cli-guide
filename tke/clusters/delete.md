@@ -5,15 +5,18 @@ fused: true
 ---
 # 删除集群
 
+> 控制台: [容器服务控制台 - 集群列表](https://console.cloud.tencent.com/tke2/cluster)
 > ⚠️ **不可逆操作。** 删除集群会销毁所有工作节点 (CVM)，数据无法恢复。
+>
+> **删除前勿做**（高危，部分不可恢复）：在节点上重装 OS、删 `/etc/kubernetes`、自行换 Master 证书、改 Master 节点 IP、在 LB 控制台改 TKE 管理的监听器/后端——详见 [故障排查 — 高危操作后果速查](../troubleshooting.md#高危操作后果速查)。删集群本身不恢复已误毁的 Master 数据；CBS/EIP/CLB 默认**保留并持续计费**，须按本文副作用表清理。
 
-> 本文档 Action 属 **TKE 2018-05-25**（`DeleteCluster`/`Enable/DisableClusterDeletionProtection` 均旧版独有）。文中 `DescribeClusters`/`DescribeClusterStatus` 为辅助查询，走默认旧版；`DescribeClusters` 是两版同名 Action，见 [查询集群](query.md#两版同名-action-describeclusters)。
+> 本文档 Action 属 **TKE 2018-05-25**（`DeleteCluster`/`Enable/DisableClusterDeletionProtection` 均旧版独有）。文中 `DescribeClusters`/`DescribeClusterStatus` 为辅助查询，走默认旧版；`DescribeClusters` 是两版同名 Action，见 [查询集群](query.md#两版同名-actiondescribeclusters)。
 
 ## 触发条件
 
 - 集群已废弃/迁移完毕，确认不再需要（`DescribeClusters` 核对无业务 Pod）— 用本文销毁
 - 集群创建失败卡 `Creating` > 30 分钟，需删除重建 — 先删再建（见 [创建集群](create.md)）
-- 测试集群用完即毁，避免空集群持续计管理费 — 用本文清理
+- 测试集群用毕即删，避免空集群持续计管理费 — 用本文清理
 
 ## 副作用
 
@@ -23,7 +26,7 @@ fused: true
 |------|:----------:|------|
 | 工作节点 (CVM) | ✅ 自动销毁 | — |
 | 托管 Master | ✅ 自动回收 | — |
-| CBS 云硬盘 | ❌ **保留** | `tccli cbs DeleteDisks` |
+| CBS 云硬盘 | ❌ **保留** | `tccli cbs TerminateDisks` |
 | 弹性公网 IP (EIP) | ❌ **保留** | `tccli vpc ReleaseAddresses` |
 | CLB 负载均衡 | ❌ **保留** | 控制台或 CLB API |
 | 集群内创建的 VPC 子网 | ❌ **保留** | `tccli vpc DeleteSubnet` |
@@ -52,7 +55,7 @@ fused: true
 | CLB 负载均衡 | 保留 | 可级联删（`ResourceType:CLB`） | 级联删避免残留计费 |
 | 弹性公网 IP | 保留 | **不可级联删**（EIP 非合法 ResourceType） | 必须用 `vpc:ReleaseAddresses` 单独清理 |
 
-> **生产清理推荐 Enhanced**：`InstanceDeleteMode=terminate` + `ResourceDeleteOptions` 级联删 CBS/CLB，再手动 `vpc:ReleaseAddresses` 清 EIP，确保零残留计费。`ResourceType` 合法值仅 `CBS`/`CLB`/`CVM`（传 `EIP` 报 `FailedOperation.Param`）。
+> **生产清理用 Enhanced**：`InstanceDeleteMode=terminate` + `ResourceDeleteOptions` 级联删 CBS/CLB，再手动 `vpc:ReleaseAddresses` 清 EIP，确保零残留计费。`ResourceType` 合法值仅 `CBS`/`CLB`/`CVM`（传 `EIP` 报 `FailedOperation.Param`）。
 
 ## 准备工作
 
@@ -62,8 +65,7 @@ tccli tke DescribeClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]'
 # expected: 确认 ClusterName 与预期一致
 
 # 检查删除保护状态
-tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]' \
-  --filter "ClusterStatusSet[0].ClusterDeletionProtection" --output text
+tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet[?ClusterId=='<CLUSTER_ID>'] | [0].ClusterDeletionProtection" --output text
 # expected: True（已开启删除保护，需先关闭）或 False（已关闭，可直接删）
 ```
 
@@ -80,9 +82,13 @@ tccli tke DisableClusterDeletionProtection \
 # expected: { "RequestId": "..." }
 ```
 
-### 步骤 2：删除 — 最小化
+### 步骤 2：删除集群
 
-`InstanceDeleteMode` 必填（决策见 [§决策依据](#决策依据)）。最小化用 `terminate` 销毁节点，CBS/CLB/EIP 默认保留（手动清理，见步骤 5）。
+`DeleteCluster` 必传 `ClusterId` + `InstanceDeleteMode`（决策见 [§决策依据](#决策依据)）。按场景**二选一**：A 最小化（销毁节点，CBS/CLB/EIP 保留手动清理）或 B 级联删除（连 CBS/CLB 一起删，一键清理）。
+
+> ⚠️ **A 与 B 是二选一变体，不是先做 A 再做 B**——两者各调一次 `DeleteCluster` 删的是同一个集群，第二次调用报集群已不存在。CBS/CLB 残留清理见 [§步骤 4](#步骤-4清理残留资源)。
+
+#### 选项 A：最小化（销毁节点，CBS/CLB/EIP 保留）
 
 ```bash
 tccli tke DeleteCluster \
@@ -92,9 +98,9 @@ tccli tke DeleteCluster \
 # expected: exit 0
 ```
 
-### 步骤 3：删除 — 增强：级联删除所有关联资源
+#### 选项 B：级联删除（连 CBS/CLB 一起删）
 
-连 CBS 盘、CLB 一起删（真正的一键清理）:
+> **与 A 二选一，非在 A 之后执行**。连 CBS 盘、CLB 一起删（真正的一键清理）:
 
 ```bash
 tccli tke DeleteCluster \
@@ -108,18 +114,18 @@ tccli tke DeleteCluster \
 # expected: exit 0
 ```
 
-> `ResourceType` 合法枚举：`CBS`（云硬盘）/ `CLB`（负载均衡）/ `CVM`（节点实例）。**`EIP` 不是合法值**——传 `EIP` 报 `FailedOperation.Param`，弹性公网 IP 需用 `vpc:ReleaseAddresses` 单独清理（见 [§步骤 5](#步骤-5清理残留资源)）。
+> `ResourceType` 合法枚举：`CBS`（云硬盘）/ `CLB`（负载均衡）/ `CVM`（节点实例）。**`EIP` 不是合法值**——传 `EIP` 报 `FailedOperation.Param`，弹性公网 IP 需用 `vpc:ReleaseAddresses` 单独清理（见 [§步骤 4](#步骤-4清理残留资源)）。
 >
 > ⚠️ `SkipDeletionProtection: false` 表示不跳过资源的删除保护。`true` 时跳过开启了删除保护的资源（含 CLB 有终端节点的情况，亦视为开了删除保护）。如果 CBS 盘也开启了删除保护且 `SkipDeletionProtection=false`，删除会失败——需先手动关闭保护或改用 `true`。
 
-### 步骤 4：验证
+### 步骤 3：验证
 
 ```bash
 tccli tke DescribeClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]'
 # expected: { "TotalCount": 0, "Clusters": [] }
 ```
 
-### 步骤 5：清理残留资源
+### 步骤 4：清理残留资源
 
 即使用了 Enhanced 模式，也建议检查残留:
 
@@ -140,9 +146,11 @@ tccli clb DescribeLoadBalancers --region ap-guangzhou --Forward 1
 > - **CLB**：`tccli clb DeleteLoadBalancer --region <REGION> --LoadBalancerIds '["<LBC_ID>"]'`
 > - **VPC 子网**（集群内创建的，若不再用）：先 `tccli vpc DescribeSubnets --region <REGION> --Filters '[{"Name":"vpc-id","Values":["<VPC_ID>"]}]'` 确认无依赖，再 `tccli vpc DeleteSubnet --region <REGION> --SubnetId "<SUBNET_ID>"`（删子网前须无实例占用）
 
-> ⚠️ VPC 子网本身不直接计费，但占用 VPC 配额且可能含计费 NAT/路由表；CLB 持续计费，务必清理。删子网前确认无 CVM/CLB/NAT 占用，否则报 `ResourceInUse`。
+> ⚠️ VPC 子网本身不直接计费，但占用 VPC 配额且可能含计费 NAT/路由表；CLB 持续计费，须清理。删子网前确认无 CVM/CLB/NAT 占用，否则报 `ResourceInUse`。
 
 ## 故障恢复
+
+> 删除相关错误码速查见 [错误码速查](../reference/error-codes.md)；集群状态机见 [状态机](../reference/states.md)。
 
 ### 命令返回错误（exit ≠ 0）
 
@@ -165,7 +173,7 @@ tccli clb DescribeLoadBalancers --region ap-guangzhou --Forward 1
 
 ## 开启删除保护（反操作）
 
-> 删除保护的开启是 `DeleteCluster` 的逆操作——给已创建集群补开保护以防误删。与 [§步骤 1](#步骤-1关闭删除保护) 的关闭对称，入参同为 `ClusterId`。
+> 删除保护的开启是 `DeleteCluster` 的逆操作——给已创建集群补开保护以防误删。与 [§步骤 1 关闭删除保护](#步骤-1关闭删除保护) 对称，入参同为 `ClusterId`。
 
 ```bash
 tccli tke EnableClusterDeletionProtection \
@@ -188,16 +196,23 @@ tccli tke DescribeClusterStatus --region ap-guangzhou \
 ## 收尾确认
 
 ```bash
-# 一次性核对：集群已从列表消失 + 无残留 CBS/EIP 计费资源
-tccli tke DescribeClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]' --filter "TotalCount" --output text
-# expected: 0 → 集群已销毁；再核对残留资源（见清理段）：CBS/EIP 为 0 即删除闭环完成，无持续计费
+# 残留资源核查：CBS/EIP/CLB 是否真清零（删除闭环真正标志——Verify 只查集群 TotalCount=0，不查关联计费资源）
+tccli cbs DescribeDisks --region ap-guangzhou \
+  --filter "DiskSet[?DiskState=='UNATTACHED'].{id:DiskId,name:DiskName}" --output text
+# expected: 核对未挂载的 CBS 盘（集群销毁后节点 CVM 已终止，DeleteWithInstance=false 的盘变为 UNATTACHED，须清理；TKE 创建的盘 DiskName 含集群 ID 前缀如 cls-xxx/pvc-...）
+
+tccli vpc DescribeAddresses --region ap-guangzhou \
+  --filter "AddressSet[?InstanceId==null].{id:AddressId,eip:AddressIp}" --output text
+# expected: 核对未绑定的 EIP（集群销毁后节点 CVM 已终止，原绑定 EIP 变为未绑定状态，须释放）
+
+tccli clb DescribeLoadBalancers --region ap-guangzhou --Forward 1 \
+  --filter "TotalCount" --output text
+# expected: 核对 CLB 数量，结合集群标签确认无该集群残留 CLB
 ```
+
+> 集群 `TotalCount=0`（步骤 3 已核）+ CBS/EIP/CLB 残留为 0 = 删除闭环完成，无持续计费。**残留资源是删除闭环的真正标志**——集群销毁不自动清理 CBS/EIP/CLB，这些资源会持续扣费（见 [§副作用](#副作用) 表）。非 0 残留须回到 [§步骤 4](#步骤-4清理残留资源) 逐个清理。
 
 ## 下一步
 
 - [创建集群](create.md) — 重新创建一个新集群
 - [查询集群](query.md) — 确认其他集群状态
-
-## 控制台替代方案
-
-[容器服务控制台 - 集群列表](https://console.cloud.tencent.com/tke2/cluster)
