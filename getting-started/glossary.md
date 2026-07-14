@@ -44,19 +44,6 @@ fused: false
 | L5 | L5 | 腾讯云软负载组件（旧名 CLB-L5）。部分 TKE 网络场景提及，新场景用 CLB 替代。 |
 | kubectl | kubectl | Kubernetes 命令行工具。操作集群资源（Pod/Service/Deployment）用，与 TCCLI（操作腾讯云资源）不同。安装见 [Kubernetes 官方文档](https://kubernetes.io/docs/tasks/tools/)。 |
 
-## TCR（容器镜像服务）
-
-| 术语 | 英文 | 释义 |
-|:-----|:-----|:-----|
-| TCR | Tencent Container Registry | 腾讯云容器镜像服务。有企业版（实例）和个人版。 |
-| 实例 | Instance | TCR 企业版的独立镜像仓库实例，独立域名+独立配额。 |
-| 命名空间 | Namespace | 实例内的隔离单元，如 `team-a`。仓库属于命名空间。 |
-| 仓库 | Repository | 存放一个镜像各版本的单元，格式 `namespace/repo`。 |
-| 镜像 | Image | 容器镜像，通过 `docker push/pull` 推送拉取。 |
-| Token | — | TCR 临时访问凭证。`docker login` 用 Username + Token 登录仓库。 |
-| imagePullSecret | — | K8s 中存镜像仓库凭证的 Secret。TKE 集群拉 TCR 镜像时配置。 |
-| 个人版 | Personal | TCR 免费版，功能受限，无独立实例。 |
-
 ## tccli
 
 | 术语 | 释义 |
@@ -74,4 +61,3 @@ fused: false
 - [安装 TCCLI](install.md) — 若尚未安装
 - [配置凭证](credentials.md) — 获取 CAM 密钥并配置 TCCLI
 - [TKE 概览](../tke/index.md) — 了解 TKE 对象模型
-- [TCR 概览](../tcr/index.md) — 了解 TCR 对象模型

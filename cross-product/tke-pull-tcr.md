@@ -49,7 +49,7 @@ tccli tcr DescribeInstanceStatus --region ap-guangzhou --RegistryIds '["<REGISTR
 # 4. TCR 内网端点已接入（VPC 内网拉取前提）
 tccli tcr DescribeInternalEndpoints --region ap-guangzhou --RegistryId "<REGISTRY_ID>" \
   --filter "TotalCount"
-# expected: ≥ 1（未接入见 [访问控制](../tcr/access/manage.md)）
+# expected: ≥ 1（未接入见 [TCR 访问控制官方文档](https://cloud.tencent.com/document/product/1141)）
 ```
 
 ## 步骤 1：创建 TCR 访问凭证
@@ -70,7 +70,7 @@ tccli tcr CreateInstanceToken --region ap-guangzhou \
 }
 ```
 
-> 临时 Token 1 小时过期。生产环境用长期凭证（服务账号），见 [访问控制](../tcr/access/manage.md)。
+> 临时 Token 1 小时过期。生产环境用长期凭证（服务账号），见 [TCR 访问控制官方文档](https://cloud.tencent.com/document/product/1141)。
 
 ## 步骤 2：TKE 集群配置 imagePullSecret
 
@@ -176,7 +176,5 @@ kubectl delete deployment verify-app
 
 ## 下一步
 
-- [TCR 访问控制](../tcr/access/manage.md) — 长期凭证与 VPC 内网配置
-- [推送拉取镜像](../tcr/images/push-pull.md) — docker CLI 推送镜像到 TCR
 - [TKE 快速入门](../quickstart/tke-first-cluster.md) — 创建 TKE 集群
 - [故障排查](../tke/troubleshooting.md) — `ImagePullBackOff` 诊断

@@ -1,7 +1,7 @@
 # Summary
 
 ## 总览
-* [TCCLI: TKE + TCR 命令行指南](README.md)
+* [TCCLI: TKE 命令行指南](README.md)
 
 ## 准备工作
 * [安装 TCCLI](getting-started/install.md)
@@ -11,7 +11,6 @@
 
 ## 快速入门
 * [TKE: 5 分钟创建第一个集群](quickstart/tke-first-cluster.md)
-* [TCR: 5 分钟推送第一份镜像](quickstart/tcr-first-registry.md)
 
 ## TKE — 容器服务
 * [TKE 概览](tke/index.md)
@@ -66,34 +65,6 @@
 * [错误码速查](tke/reference/error-codes.md)
 * [共享字段参考](tke/reference/shared-fields.md)
 * [故障排查](tke/troubleshooting.md)
-
-## TCR — 容器镜像服务
-* [TCR 概览](tcr/index.md)
-* [实例](tcr/instances/index.md)
-    * [创建实例](tcr/instances/create.md)
-    * [访问管理](tcr/instances/manage-access.md)
-    * [自定义域名](tcr/instances/custom-domain.md)
-* [仓库](tcr/repositories/manage.md)
-* [镜像](tcr/images/push-pull.md)
-    * [镜像加速](tcr/images/acceleration.md)
-    * [AI 模型与 Skill](tcr/ai/index.md)
-        * [查询 AI 模型](tcr/ai/models.md)
-        * [查询 AI Skill](tcr/ai/skills.md)
-* [访问控制](tcr/access/manage.md)
-* [生命周期](tcr/lifecycle/index.md)
-    * [版本保留](tcr/lifecycle/tag-retention.md)
-    * [不可变标签](tcr/lifecycle/immutable-tags.md)
-* [实例同步](tcr/replication/manage.md)
-* [镜像安全](tcr/security/signing.md)
-    * [漏洞扫描与阻断白名单](tcr/security/cve-whitelist.md)
-* [个人版](tcr/personal/index.md)
-    * [个人版全功能](tcr/personal/manage.md)
-    * [个人版高级管理](tcr/personal/advanced.md)
-* [实例状态](tcr/reference/states.md)
-* [配额和限制](tcr/reference/quotas.md)
-* [错误码速查](tcr/reference/error-codes.md)
-* [共享字段参考](tcr/reference/shared-fields.md)
-* [故障排查](tcr/troubleshooting.md)
 
 ## 附录
 * [Agent 优化模式](appendix/agent-optimization.md)

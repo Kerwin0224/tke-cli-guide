@@ -20,7 +20,6 @@ TCCLI 调用腾讯云 API 需要凭证。三类凭证作用域不同，本文只
 |:---------|:-----|:-------|:---------|
 | **CAM 根凭证**（SecretId/SecretKey） | 让 TCCLI 能调用腾讯云 API | 全局前置（产品之上） | 本文 |
 | kubeconfig | kubectl 连 TKE 集群 | TKE 产品内 | [TKE 集群认证](../tke/security/auth.md) |
-| TCR Token | docker login TCR 仓库 | TCR 产品内 | [TCR 访问控制](../tcr/access/manage.md) |
 
 > 本文解决"TCCLI 怎么配凭证"。配好后所有 `tccli tke ...` / `tccli tcr ...` 命令才能工作。
 
@@ -198,5 +197,4 @@ tccli configure list | grep -E "^region|^output"
 
 - [安装 TCCLI](install.md) — 若尚未安装
 - [TKE 快速入门](../quickstart/tke-first-cluster.md) — 凭证配好后创建第一个集群
-- [TCR 快速入门](../quickstart/tcr-first-registry.md) — 凭证配好后推送第一份镜像
 - [术语表](glossary.md) — VPC/CIDR/CAM 等术语释义

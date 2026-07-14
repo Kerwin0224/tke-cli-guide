@@ -145,6 +145,5 @@ tccli cvm RunInstances \
 ## 下一步
 
 - [TKE 快速入门](../quickstart/tke-first-cluster.md) — 实战中用这些模式创建集群
-- [TCR 快速入门](../quickstart/tcr-first-registry.md) — 推送镜像用模板与等待
 - [查询和过滤集群](../tke/clusters/query.md) — `--filter` JMESPath 实战
 - [创建集群](../tke/clusters/create.md) — `--cli-input-json` 模板驱动实战
