@@ -63,6 +63,24 @@ tccli tke DescribeAddon --region ap-guangzhou --ClusterId "<CLUSTER_ID>" --Addon
 # expected: 列表字段为 Addons[]（非 AddonSet）；空数组（未安装）或 Phase=Succeeded（已装）。不传 AddonName 返回集群全部插件
 ```
 
+### CFS 服务授权
+
+> 首次安装 **CFS** 扩展组件时，官方要求为 `TKE_QCSRole` 关联策略 `QcloudAccessForTKERoleInCreatingCFSStorageclass`（43416）。未授权时组件/文件系统相关操作失败。
+
+```bash
+# 探测策略是否已挂
+tccli cam ListAttachedRolePolicies --Page 1 --Rp 50 --RoleName TKE_QCSRole \
+  --filter "List[].PolicyName" --output text
+# expected: 含 QcloudAccessForTKERoleInCreatingCFSStorageclass 再装 CFS；无则补挂
+
+tccli cam AttachRolePolicy \
+  --AttachRoleName TKE_QCSRole \
+  --PolicyName QcloudAccessForTKERoleInCreatingCFSStorageclass
+# expected: RequestId；Role not exist → 先补 [TKE_QCSRole](../../getting-started/credentials.md#补-tke_qcsrole主服务角色)
+```
+
+> 总表：[配置凭证 — 服务角色](../../getting-started/credentials.md#服务角色tke--ipamd--as--tcr--可观测)。包年包月云盘另需 `QcloudCVMFinanceAccess`（同页「功能策略补挂」）。
+
 ## 关键字段
 
 ### InstallAddon

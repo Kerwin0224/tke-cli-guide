@@ -31,6 +31,35 @@ VPC-CNI 是 TKE 的三种 Pod 网络模型之一（另两种：Global Router / C
 > 配额：VPC 子网可用 IP 数决定 VPC-CNI Pod 上限；容器网段 CIDR 创建时自定义暂不支持变更。[配额限制](https://cloud.tencent.com/document/product/457/9087)
 > ⚠️ **高危操作**：开启 VPC-CNI 后不可回退至 GlobalRouter（关闭前须先迁移已有 VPC-CNI Pod）；子网 IP 耗尽致新 Pod 无法调度。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
 
+### IPAMD 服务角色
+
+> **服务角色** `IPAMDofTKE_QCSRole` 与集群内 **eniipamd 组件** 是两层：前者是 CAM 授权 TKE IPAMD 访问 CVM/VPC/ENI；后者是集群里跑的 DaemonSet/Deploy。缺角色时控制台/API 侧无法正常完成 VPC-CNI 授权路径，与 `DescribeIPAMD` 的 `EnableIPAMD=false`（组件未开）不同。官方： [43416 — IPAMDofTKE_QCSRole](https://cloud.tencent.com/document/product/457/43416)。
+
+```bash
+# 探测
+tccli cam DescribeRoleList --Page 1 --Rp 100 \
+  --filter "List[?RoleName=='IPAMDofTKE_QCSRole'].RoleName" --output text
+# expected: IPAMDofTKE_QCSRole；空 → 补齐
+
+# 补齐（Principal = ccs.qcloud.com；策略名以 ListPolicies 为准）
+tccli cam CreateRole \
+  --RoleName IPAMDofTKE_QCSRole \
+  --Description "TKE IPAMD service role for ENI and VPC resources" \
+  --PolicyDocument '{"version":"2.0","statement":[{"effect":"allow","action":"sts:AssumeRole","principal":{"service":"ccs.qcloud.com"}}]}'
+# expected: RoleId；已存在则跳过
+
+tccli cam AttachRolePolicy \
+  --AttachRoleName IPAMDofTKE_QCSRole \
+  --PolicyName QcloudAccessForIPAMDofTKERole
+# expected: RequestId
+```
+
+| 项 | 说明 |
+|:---|:-----|
+| 何时必查 | 创建时 `NetworkType=VPC-CNI`、或事后 `EnableVpcCniNetworkType` |
+| 与 TKE_QCSRole | **另一条**角色，不能互相替代；见 [配置凭证 — 服务角色](../../getting-started/credentials.md#服务角色tke--ipamd--as--tcr--可观测) |
+| 创建时 VPC-CNI | [创建集群](../clusters/create.md) 资源检查第 6 步；[quickstart](../../quickstart/tke-first-cluster.md) 准备工作第 6 行 |
+
 >
 > **eniipamd 组件**：VPC-CNI 依赖集群内 `tke-eni-agent` / `tke-eni-ipamd` / `tke-eni-ip-scheduler`（Addon 名常为 `eniipamd`）。三组件版本一般相同，`tke-eni-ip-scheduler` 可能略旧。排障或升级前用镜像 Tag 核对版本；变更记录见 [VPC-CNI（eniipamd）组件变更记录](https://cloud.tencent.com/document/product/457/64920)。安装/升级走 [插件管理](../addons/manage.md)。
 
@@ -213,6 +242,8 @@ tccli tke DisableVpcCniNetworkType --region ap-guangzhou --ClusterId "<CLUSTER_I
 | `ResourceNotFound.SubnetId` | `tccli vpc DescribeSubnets` | 子网不在集群 VPC | 用集群 VPC 内子网 |
 | `InvalidParameterValue.VpcCniType` | 查枚举 | VpcCniType 拼错 | 用 `tke-route-eni` 或 `tke-direct-route-eni` |
 | `UnsupportedOperation` | `DescribeClusters` → `NetworkType` | 已开启 VPC-CNI 或集群非 Running | 先 Disable 或等 Running |
+| 创建/开启 VPC-CNI 失败且消息含授权/IPAMD/ENI | `tccli cam DescribeRoleList --Page 1 --Rp 100 --filter "List[?RoleName=='IPAMDofTKE_QCSRole'].RoleName" --output text` | 缺 `IPAMDofTKE_QCSRole` 或未挂 `QcloudAccessForIPAMDofTKERole` | 见 [IPAMD 服务角色](#ipamd-服务角色)；总表 [配置凭证](../../getting-started/credentials.md#补-ipamdoftke_qcsrolevpc-cni-前置) |
+| `UnauthorizedOperation` / CAM 拒绝（用户侧） | 查子账号策略 | 用户无 `tke:EnableVpcCniNetworkType` | 给用户挂 TKE 策略，与服务角色无关 |
 
 ### 命令成功但状态不对 (exit = 0)
 

@@ -34,7 +34,9 @@ fused: true
 | 2 | 凭证已配置 | `tccli tke DescribeRegions` | 返回 `"RequestId"`，无 `Error` |
 | 3 | 目标地域可用 | `tccli tke DescribeRegions` | 输出含 `ap-guangzhou`、`Status` 非空 |
 | 4 | VPC 和子网已就绪 | `tccli vpc DescribeSubnets --region <REGION>` | 某子网 `AvailableIpAddressCount ≥ 10` |
-| 5 | kubectl 已安装（验证集群用） | `kubectl version --client` | Client Version 显示版本号 |
+| 5 | 服务角色 `TKE_QCSRole` | `tccli cam DescribeRoleList --Page 1 --Rp 100 --filter "List[?RoleName=='TKE_QCSRole'].RoleName" --output text` | 输出含 `TKE_QCSRole` |
+| 6 | 服务角色 `IPAMDofTKE_QCSRole`（本篇默认 VPC-CNI） | `tccli cam DescribeRoleList --Page 1 --Rp 100 --filter "List[?RoleName=='IPAMDofTKE_QCSRole'].RoleName" --output text` | 输出含 `IPAMDofTKE_QCSRole` |
+| 7 | kubectl 已安装（验证集群用） | `kubectl version --client` | Client Version 显示版本号 |
 
 ```bash
 tccli --version
@@ -43,9 +45,15 @@ tccli --version
 tccli tke DescribeRegions \
     --filter "RegionInstanceSet[0].{name:RegionName,status:Status}" --output text
 # expected: ap-guangzhou    alluser
+
+# 服务角色（缺则创建会中途失败 / VPC-CNI 不可用）
+tccli cam DescribeRoleList --Page 1 --Rp 100 \
+  --filter "List[?RoleName=='TKE_QCSRole' || RoleName=='IPAMDofTKE_QCSRole'].RoleName" \
+  --output text
+# expected: 两行 TKE_QCSRole 与 IPAMDofTKE_QCSRole（顺序以 API 为准）
 ```
 
-> 未安装 TCCLI → [安装 TCCLI](../getting-started/install.md)。凭证未配置 → [配置凭证](../getting-started/credentials.md)（`tccli configure` 或 `tccli auth login`）。缺少 VPC/子网 → [准备 VPC 与子网](../getting-started/prepare-vpc.md)。未装 kubectl → [kubectl 安装](https://kubernetes.io/docs/tasks/tools/)（验证集群用，非创建集群必需）。
+> 未安装 TCCLI → [安装 TCCLI](../getting-started/install.md)。凭证未配置 → [配置凭证](../getting-started/credentials.md)（`tccli configure` 或 `tccli auth login`）。**缺服务角色** → [配置凭证 — 服务角色](../getting-started/credentials.md#服务角色tke--ipamd--as--tcr--可观测)（补 `TKE_QCSRole` + `IPAMDofTKE_QCSRole`）。缺少 VPC/子网 → [准备 VPC 与子网](../getting-started/prepare-vpc.md)。未装 kubectl → [kubectl 安装](https://kubernetes.io/docs/tasks/tools/)（验证集群用，非创建集群必需）。
 
 ---
 

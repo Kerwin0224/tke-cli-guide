@@ -131,6 +131,47 @@ tccli vpc CreateSubnet --region <REGION> \
 }
 ```
 
+### 3. 创建安全组并写规则（节点/端点常用）
+
+> 新建安全组默认入站/出站全拒绝。写规则时 **`CreateSecurityGroupPolicies` 一次调用不能同时传 `Egress` 与 `Ingress`**，否则 `InvalidParameter.Coexist`（消息：请求中不支持同时传入参数 `Egress and Ingress`）。**分两次**调用：先 Egress，再 Ingress（或反过来）。
+
+```bash
+# 3a. 创建安全组
+tccli vpc CreateSecurityGroup --region <REGION> \
+  --GroupName "<SG_NAME>" --GroupDescription "tke nodes"
+# expected: SecurityGroup.SecurityGroupId
+
+# 3b. 出站（单独一次）
+tccli vpc CreateSecurityGroupPolicies --region <REGION> \
+  --SecurityGroupId "<SECURITY_GROUP_ID>" \
+  --SecurityGroupPolicySet '{
+    "Egress":[
+      {"Protocol":"ALL","Port":"ALL","CidrBlock":"0.0.0.0/0","Action":"ACCEPT","PolicyDescription":"all-out"}
+    ]
+  }'
+# expected: RequestId
+
+# 3c. 入站（单独一次；按需收紧源 CIDR，勿长期 0.0.0.0/0 开管理面）
+tccli vpc CreateSecurityGroupPolicies --region <REGION> \
+  --SecurityGroupId "<SECURITY_GROUP_ID>" \
+  --SecurityGroupPolicySet '{
+    "Ingress":[
+      {"Protocol":"ALL","Port":"ALL","CidrBlock":"<VPC_CIDR>","Action":"ACCEPT","PolicyDescription":"vpc-all"},
+      {"Protocol":"TCP","Port":"30000-32767","CidrBlock":"0.0.0.0/0","Action":"ACCEPT","PolicyDescription":"nodeport"},
+      {"Protocol":"TCP","Port":"80","CidrBlock":"0.0.0.0/0","Action":"ACCEPT","PolicyDescription":"http"}
+    ]
+  }'
+# expected: RequestId
+```
+
+| 占位符 | 含义 |
+|:-------|:-----|
+| `<SG_NAME>` | 安全组名 |
+| `<SECURITY_GROUP_ID>` | `sg-xxxxxxxx` |
+| `<VPC_CIDR>` | 与 VPC 一致，如 `10.0.0.0/16` |
+
+节点安全组放通要点见 [创建节点池 — 安全组](../tke/nodes/nodepool-create.md#安全组节点加入前)；完整默认表见 [容器服务安全组设置](https://cloud.tencent.com/document/product/457/9084)。
+
 ## 验证
 
 从四个维度确认 VPC + 子网就绪：
@@ -172,6 +213,7 @@ tccli vpc DescribeSubnets --region <REGION> \
 |:-----|:---------|:-----|:-----|
 | `InvalidParameter.VpcCidrConflict` | `tccli vpc DescribeVpcs` 看已有 CIDR | VPC CIDR 与已有重叠 | 换 CIDR（如 `10.1.0.0/16`） |
 | `InvalidParameter.SubnetConflict` | `tccli vpc DescribeSubnets --region <REGION>` | 子网 CIDR 与同 VPC 子网重叠 | 换子网段（如 `10.0.2.0/24`） |
+| `InvalidParameter.Coexist`（Egress and Ingress） | 查 `CreateSecurityGroupPolicies` 入参 | 同一次请求同时传了出站与入站 | **拆成两次**调用：先只 `Egress`，再只 `Ingress` |
 | `InvalidZone.ZoneNotAvailable` | `tccli cvm DescribeZones --region <REGION> --filter "ZoneSet[?ZoneState=='AVAILABLE'].Zone" --output text` | Zone 不存在或不支持 | 用返回的可用 Zone |
 | `UnauthorizedOperation.CamNoAuth` | 查子账号权限 | 无 vpc 权限 | CAM 授权 `QcloudVPCFullAccess` |
 

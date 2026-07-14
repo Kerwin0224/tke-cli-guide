@@ -57,7 +57,34 @@ tccli vpc DescribeSubnets --region <REGION> --Filters '[{"Name":"vpc-id","Values
 # expected: 子网 ID 列表
 ```
 
-> ⚠️ **CAM 前置**：`DescribePrometheusInstancesOverview` / `DescribePrometheusOverviews` / `DescribePrometheusTemp` 等在未授权账号返回 `UnauthorizedOperation`（消息含 Operation denied by Cloud API）。仅有 TKE 集群权限不够；须单独开通 Prometheus/TMP 相关 CAM 策略。未授权时本篇后续 Create/Run 命令同样会被拒，勿将 CAM 拒绝误判为参数错误。
+> ⚠️ **CAM 前置（两层）**：  
+> 1. **用户策略**：`DescribePrometheusInstancesOverview` 等在未授权账号返回 `UnauthorizedOperation`（消息含 Operation denied by Cloud API）。仅有 TKE 集群用户权限不够；须单独开通 Prometheus/TMP 相关用户 CAM 策略。  
+> 2. **服务相关角色**：官方创建监控实例前需授权 **`TKE_QCSLinkedRoleInPrometheusService`**（名称以控制台/当前账号为准），见下节。  
+> 未授权时本篇后续 Create/Run 同样会被拒，勿将 CAM 拒绝误判为参数错误。
+
+### 服务相关角色
+
+> 官方 [创建监控实例](https://cloud.tencent.com/document/product/457/71897)：**服务授权** 创建 LinkedRole，授权 Prometheus 访问相关云产品。与用户 `QcloudTKEFullAccess` 不是同一层。
+
+```bash
+# 探测
+tccli cam DescribeRoleList --Page 1 --Rp 100 \
+  --filter "List[?contains(RoleName,'Prometheus')].RoleName" --output text
+# expected: 含 TKE_QCSLinkedRoleInPrometheusService 或官方当前 Linked 角色名；空 → 补齐
+
+# 服务相关角色创建（QCSServiceName 须与角色载体文档一致；不确定时用控制台 Prometheus 首次「服务授权」）
+tccli cam CreateServiceLinkedRole help --detail
+# expected: 入参含 QCSServiceName[]
+
+# 控制台主路径：容器服务 → 云原生服务 → Prometheus → 新建 → 按弹窗同意授权
+# CLI：tccli cam CreateServiceLinkedRole --QCSServiceName '["<QCS_SERVICE_NAME>"]'
+# expected: 角色出现在 DescribeRoleList；载体名见 https://cloud.tencent.com/document/product/598/85165
+```
+
+| 项 | 说明 |
+|:---|:-----|
+| 用户 CAM vs LinkedRole | 用户策略决定**你**能否调 API；LinkedRole 决定**监控服务**能否访问云资源 |
+| 总表 | [配置凭证 — 服务角色](../../getting-started/credentials.md#服务角色tke--ipamd--as--tcr--可观测) |
 
 ## 关键字段
 

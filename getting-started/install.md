@@ -129,7 +129,7 @@ tccli tke help 2>&1 | head -3
 | 序 | 意图 | 文档 |
 |:--:|:-----|:-----|
 | 1 | 装 TCCLI | 本文 |
-| 2 | 配凭证 + 首次 TKE 服务授权 | [配置凭证](credentials.md) · [服务授权](https://cloud.tencent.com/document/product/457/43416) |
+| 2 | 配凭证 + 首次 TKE 服务授权（`TKE_QCSRole`；VPC-CNI 另需 `IPAMDofTKE_QCSRole`） | [配置凭证](credentials.md) · [服务角色总表](credentials.md#服务角色tke--ipamd--as--tcr--可观测) · [服务授权 43416](https://cloud.tencent.com/document/product/457/43416) |
 | 3 | 备 VPC/子网 | [准备 VPC](prepare-vpc.md) |
 | 4 | 建托管标准集群 | [TKE Quickstart](../quickstart/tke-first-cluster.md) · [创建集群](../tke/clusters/create.md) |
 | 5 | 上线前检查 | [Quickstart — 上线前检查](../quickstart/tke-first-cluster.md#上线前检查弱校验) |

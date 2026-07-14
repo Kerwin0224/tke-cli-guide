@@ -49,7 +49,50 @@ tccli tke DescribeZoneInstanceConfigInfos \
 tccli cvm DescribeZoneInstanceConfigInfos --region ap-guangzhou \
   --Filters '[{"Name":"zone","Values":["ap-guangzhou-3"]}]'
 # expected: InstanceType 列表
+
+# 机型无货：按 Cpu/Memory 升序取 Status=SELL 的最小可售（1C2G 常无货，改用 2C2G 如 SA2.MEDIUM2）
+tccli cvm DescribeZoneInstanceConfigInfos --region ap-guangzhou \
+  --Filters '[{"Name":"zone","Values":["ap-guangzhou-7"]},{"Name":"instance-charge-type","Values":["POSTPAID_BY_HOUR"]}]' \
+  --filter "InstanceTypeQuotaSet[?Status=='SELL'] | sort_by(@, &Cpu) | [0:5].{type:InstanceType,cpu:Cpu,mem:Memory,price:Price.UnitPrice}" \
+  --output text
+# expected: 多行机型；取 cpu/mem 最小且可售的 InstanceType 填入节点池
 ```
+
+### AS 服务角色（节点池创建前）
+
+> 节点池（含旧版 `CreateClusterNodePool` 透传 AS、以及依赖弹性伸缩建 CVM 的路径）需要账号已授权服务角色 **`AS_QCSRole`**。未授权时 API 返回 `UnauthorizedOperation.AutoScalingRoleUnauthorized`（消息含「未授权服务角色 AS_QCSRole」）——**不是**节点池 JSON 写错，也**不是**改 `LaunchConfigurePara` 能修好。
+
+```bash
+# 1) 探测是否已有 AS_QCSRole
+tccli cam DescribeRoleList --Page 1 --Rp 100 \
+  --filter "List[?RoleName=='AS_QCSRole'].{name:RoleName,id:RoleId}" --output text
+# expected: 有一行 name=AS_QCSRole → 已建；空输出 → 执行创建
+
+# 2) 创建服务角色（Principal 必须是 as.cloud.tencent.com）
+tccli cam CreateRole \
+  --RoleName AS_QCSRole \
+  --Description "Auto Scaling service role for TKE node pools" \
+  --PolicyDocument '{"version":"2.0","statement":[{"action":"name/sts:AssumeRole","effect":"allow","principal":{"service":"as.cloud.tencent.com"}}]}'
+# expected: 返回 RoleId；若角色已存在则跳过本步
+
+# 3) 挂策略（服务角色专用；精控场景可再挂 QcloudASFullAccess）
+tccli cam AttachRolePolicy \
+  --AttachRoleName AS_QCSRole \
+  --PolicyName QcloudAccessForASRole
+# expected: exit 0，返回 RequestId
+
+# 4) 复验角色存在后再 CreateNodePool / CreateClusterNodePool
+tccli cam DescribeRoleList --Page 1 --Rp 100 \
+  --filter "List[?RoleName=='AS_QCSRole'].RoleName" --output text
+# expected: AS_QCSRole
+```
+
+| 项 | 说明 |
+|:---|:-----|
+| `AS_QCSRole` | 弹性伸缩服务扮演的角色；TKE 节点池代建 CVM 时由 AS 使用 |
+| `QcloudAccessForASRole` | 系统策略名；`AttachRolePolicy` 用 `--AttachRoleName` + `--PolicyName`（不是 `--RoleName`） |
+| 与 TKE 服务授权关系 | `TKE_QCSRole` 管 TKE 调 CVM/CLB/CBS；**AS 角色是另一条前置**。两者都可能缺，见 [配置凭证 — 服务角色](../../getting-started/credentials.md#服务角色tkeas) |
+| 绕过 AS | 只要 1 台普通节点、不建节点池 → [节点实例运维 — CreateClusterInstances](instance-ops.md#新建-cvm-作节点createclusterinstances) |
 
 ### 安全组（节点加入前）
 
@@ -239,25 +282,28 @@ tccli tke DescribeNodePoolsElasticityStrength \
 
 ```bash
 # 旧版创建节点池（透传 AS JSON 字符串：AutoScalingGroupPara + LaunchConfigurePara）
+# 前置：AS_QCSRole 已就绪（见上文「AS 服务角色」）；否则 AutoScalingRoleUnauthorized
 # tccli 强制要求 --InstanceAdvancedSettings（即使空对象 {}），缺失报 "the following arguments are required: --InstanceAdvancedSettings"
 tccli tke CreateClusterNodePool \
   --version 2018-05-25 \
   --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" \
   --Name "<POOL_NAME>" \
-  --AutoScalingGroupPara '<AS_GROUP_JSON>' \
-  --LaunchConfigurePara '<AS_LAUNCH_CONFIG_JSON>' \
-  --InstanceAdvancedSettings '{}' \
+  --AutoScalingGroupPara '{"MaxSize":1,"MinSize":0,"DesiredCapacity":1,"VpcId":"<VPC_ID>","SubnetIds":["<SUBNET_ID>"],"RetryPolicy":"IMMEDIATE_RETRY","ServiceSettings":{"ScalingMode":"CLASSIC_SCALING"}}' \
+  --LaunchConfigurePara '{"InstanceType":"<INSTANCE_TYPE>","InstanceChargeType":"POSTPAID_BY_HOUR","SystemDisk":{"DiskType":"CLOUD_PREMIUM","DiskSize":50},"InternetAccessible":{"InternetChargeType":"TRAFFIC_POSTPAID_BY_HOUR","InternetMaxBandwidthOut":1,"PublicIpAssigned":true},"SecurityGroupIds":["<SECURITY_GROUP_ID>"]}' \
+  --InstanceAdvancedSettings '{"Unschedulable":0}' \
   --EnableAutoscale false
 # expected: exit 0, 返回 NodePoolId
 ```
 
 | 占位符 | 含义 | 约束 |
 |:-------|:-----|:-----|
-| `<AS_GROUP_JSON>` | AS 弹性伸缩组配置 | JSON 字符串，含 MinSize/MaxSize/VpcId/SubnetId 等，需先 `tccli as CreateAutoScalingGroup` 拼 |
-| `<AS_LAUNCH_CONFIG_JSON>` | AS 启动配置 | JSON 字符串，含 InstanceType/ImageId/SecurityGroupIds 等 |
-| `InstanceAdvancedSettings` | 节点高级设置 | **TCCLI 强制必填**，无自定义传 `{}` |
+| `<AS_GROUP_JSON>` 字段 | AS 弹性伸缩组 | 最小集：`MaxSize`/`MinSize`/`DesiredCapacity`/`VpcId`/`SubnetIds`；完整以 AS 文档 + 真机错误为准 |
+| `<AS_LAUNCH_CONFIG_JSON>` 字段 | AS 启动配置 | 最小集：`InstanceType`/`InstanceChargeType`/`SystemDisk`/`SecurityGroupIds`；**不要**塞 CVM 专有键 |
+| `InstanceAdvancedSettings` | 节点高级设置 | **TCCLI 强制必填**，无自定义传 `{}` 或 `{"Unschedulable":0}` |
 | `EnableAutoscale` | 是否启用弹性扩缩容 | `false`=固定节点数，`true`=按 AS 规则弹性 |
+
+> **Launch 配置字段陷阱（真机）**：`LaunchConfigurePara` 是 **AS 启动配置** 契约，不是完整 `cvm RunInstances`。传入 `HostName`、`InstanceName` 等 CVM 键 → `FailedOperation.AsCommon` / `UnknownParameter`。用 `tccli as CreateLaunchConfiguration --generate-cli-skeleton` 或真机报错字段名收敛，勿凭 CVM 习惯填。
 
 > 旧版与新版契约不同：旧版 `CreateClusterNodePool` 透传 AS 字符串（`AutoScalingGroupPara`/`LaunchConfigurePara`），新版 `CreateNodePool` 用结构化 `Native` 对象（`SubnetIds`/`InstanceTypes`）。两版查询 Action 命名也不同（旧 `DescribeClusterNodePools` vs 新 `DescribeNodePools`），跨版本切换前用 `--generate-cli-skeleton` 逐字段核契约。
 
@@ -283,11 +329,14 @@ tccli tke DescribeNodePools --version 2022-05-01 --ClusterId "<CLUSTER_ID>"
 
 | 现象 | 诊断 | 根因 | 修复 |
 |---------|----------|------------|-----|
-| `InvalidParameterValue.InstanceTypes` | `tccli cvm DescribeZoneInstanceConfigInfos` | 指定机型在该可用区不存在 | 查询可用机型，换一个实际存在的机型 |
+| `UnauthorizedOperation.AutoScalingRoleUnauthorized`（消息含 `AS_QCSRole`） | `tccli cam DescribeRoleList --Page 1 --Rp 100 --filter "List[?RoleName=='AS_QCSRole'].RoleName" --output text` | 未创建/未授权弹性伸缩服务角色 | 见 [AS 服务角色](#as-服务角色节点池创建前)：`CreateRole` + `AttachRolePolicy QcloudAccessForASRole`；**不要**只改节点池 JSON |
+| `FailedOperation.AsCommon` + `UnknownParameter`（`HostName`/`InstanceName` 等） | 对照 `LaunchConfigurePara` 键名 | 把 CVM `RunInstances` 字段塞进 AS 启动配置 | 去掉非法键；只保留 AS Launch 契约字段 |
+| `InvalidParameterValue.InstanceTypes` | `tccli cvm DescribeZoneInstanceConfigInfos` | 指定机型在该可用区不存在或售罄 | 查 `Status=SELL` 最小可售机型后替换 |
 | `ResourceNotFound.SubnetId` | `tccli vpc DescribeSubnets --SubnetIds '["<ID>"]'` | 子网 ID 错误或不属于集群 VPC | 使用集群 VPC 内的子网 ID |
 | `LimitExceeded.NodePoolQuota` | `tccli tke DescribeNodePools --version 2022-05-01 --ClusterId "<ID>"` | 节点池数量达上限 | 删除闲置节点池或提工单 |
 | `ResourceNotFound.ClusterId` | `tccli tke DescribeClusters` | 集群 ID 错误 | 确认集群 ID 格式为 `cls-xxxxxxxx` |
-| `UnknownParameter` | `tccli tke CreateNodePool --version 2022-05-01 --generate-cli-skeleton` 核契约 | 误用旧版参数名到新版 Action | 改用新版 `CreateNodePool` 的参数名 |
+| `UnknownParameter`（新版路径） | `tccli tke CreateNodePool --version 2022-05-01 --generate-cli-skeleton` 核契约 | 误用旧版参数名到新版 Action | 改用新版 `CreateNodePool` 的参数名 |
+| 只要 1 节点且 AS 角色长期不可补 | — | 账号 CAM 禁止建服务角色 | 改走 [CreateClusterInstances](instance-ops.md#新建-cvm-作节点createclusterinstances) 直加 Worker |
 
 ### 命令成功但状态不对（exit = 0）
 

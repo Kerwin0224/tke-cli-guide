@@ -202,21 +202,64 @@ tccli tke AddExistedInstances --version 2018-05-25 \
 # expected: exit 0
 ```
 
-> `CreateClusterInstances` 是新建 CVM 作节点（`RunInstancePara` 透传 CVM RunInstances JSON），与 `AddExistedInstances`（接入已有实例）区别。ECM/Edge 实例属专用场景，见 [边缘集群](../specialized/edge-cluster.md)。
+### 新建 CVM 作节点（CreateClusterInstances）
+
+> `CreateClusterInstances` 是新建 CVM 作节点（`RunInstancePara` 透传 CVM `RunInstances` JSON），与 `AddExistedInstances`（接入已有实例）区别。**不依赖 AS 节点池**，适合「只要 1 台普通 Worker 跑通」；缺 `AS_QCSRole` 时可用本路径绕过节点池。ECM/Edge 见 [边缘集群](../specialized/edge-cluster.md)。
 
 ```bash
-# 新建 CVM 作节点（RunInstancePara 透传 CVM RunInstances JSON 字符串）
+# 最小可跑：1 台 POSTPAID + 指定子网/安全组/机型（字段以 cvm RunInstances 契约为准）
+# 机型无货时先 DescribeZoneInstanceConfigInfos 取 Status=SELL 最小规格
 tccli tke CreateClusterInstances --version 2018-05-25 \
   --ClusterId "<CLUSTER_ID>" --region ap-guangzhou \
-  --RunInstancePara '<CVM_RUNINSTANCES_JSON>'
-# expected: CAM 拦截 AuthFailure.UnauthorizedOperation；授权后返回 InstanceIdSet[]
+  --RunInstancePara '{
+    "Placement":{"Zone":"<ZONE>","ProjectId":0},
+    "InstanceType":"<INSTANCE_TYPE>",
+    "ImageId":"<IMAGE_ID>",
+    "SystemDisk":{"DiskType":"CLOUD_PREMIUM","DiskSize":50},
+    "VirtualPrivateCloud":{"VpcId":"<VPC_ID>","SubnetId":"<SUBNET_ID>"},
+    "InternetAccessible":{"InternetChargeType":"TRAFFIC_POSTPAID_BY_HOUR","InternetMaxBandwidthOut":1,"PublicIpAssigned":true},
+    "InstanceCount":1,
+    "InstanceName":"<INSTANCE_NAME>",
+    "LoginSettings":{"Password":"<PASSWORD>"},
+    "SecurityGroupIds":["<SECURITY_GROUP_ID>"],
+    "InstanceChargeType":"POSTPAID_BY_HOUR"
+  }' \
+  --InstanceAdvancedSettings '{"Unschedulable":0}'
+# expected: {"InstanceIdSet":["ins-xxxxxxxx"],"RequestId":"..."}
 ```
 
 | 占位符 | 含义 | 如何获取 |
 |:-------|:-----|:---------|
-| `<CVM_RUNINSTANCES_JSON>` | CVM RunInstances 入参 JSON | 含 InstanceType/ImageId/Placement/InstanceCount 等，可先用 `tccli cvm RunInstances --generate-cli-skeleton` 生成模板 |
+| `<ZONE>` | 可用区 | 与子网同区，如 `ap-guangzhou-7` |
+| `<INSTANCE_TYPE>` | 机型 | `tccli cvm DescribeZoneInstanceConfigInfos` → `Status=SELL`（常见最小 2C2G 如 `SA2.MEDIUM2`） |
+| `<IMAGE_ID>` | 公共镜像 | `tccli cvm DescribeImages`（如 TencentOS Server 3.1） |
+| `<VPC_ID>` / `<SUBNET_ID>` | 集群 VPC/子网 | 须与集群同 VPC |
+| `<SECURITY_GROUP_ID>` | 节点安全组 | 见 [创建节点池 — 安全组](nodepool-create.md#安全组节点加入前) |
+| `<PASSWORD>` | 登录密码 | 符合 CVM 复杂度；勿提交 git |
+| `<INSTANCE_NAME>` | 实例名 | 可含业务前缀 |
 
-> `CreateClusterInstances`（新建 CVM）vs `AddExistedInstances`（接入已有 CVM）：前者透传 CVM `RunInstances` JSON 让 TKE 代为创建，后者把已存在实例加入集群。参数 `RunInstancePara` 是 JSON 字符串，`SkipValidateOptions[]` 可跳过指定校验项。
+```bash
+# 等待节点加入集群（ClusterRunningNodeNum ≥ 1）
+tccli tke DescribeClusterStatus --region ap-guangzhou \
+  --ClusterIds '["<CLUSTER_ID>"]' \
+  --waiter '{"expr":"ClusterStatusSet[0].ClusterRunningNodeNum","to":1,"timeout":600,"interval":15}'
+# expected: running 节点数 ≥ 1
+
+tccli tke DescribeClusterInstances --version 2018-05-25 \
+  --ClusterId "<CLUSTER_ID>" \
+  --filter "InstanceSet[].{id:InstanceId,state:InstanceState,lan:LanIP}" --output text
+# expected: 新节点 InstanceState=running
+```
+
+> **Tag 陷阱**：`RunInstancePara` 内 **不要**再塞 `TagSpecification`（含 `billing` 等）——TKE 可能自动打标，重复 key → `FailedOperation.CvmCommon` / `InvalidParameterValue.DuplicateTags`。标签改在集群/账号侧统一打，或创建后再 `cvm` 打标。
+
+> `CreateClusterInstances`（新建 CVM）vs `AddExistedInstances`（接入已有 CVM）：前者透传 `RunInstances` 让 TKE 代建，后者把已存在实例加入集群。`SkipValidateOptions[]` 可跳过指定校验项。
+
+| 现象 | 诊断 | 修复 |
+|:-----|:-----|:-----|
+| `AuthFailure` / `UnauthorizedOperation` | 用户 CAM 无 `cvm:RunInstances` 等 | 给子账号补 CVM 权限（与 AS 服务角色无关） |
+| `InvalidParameterValue.DuplicateTags` | RunInstancePara 含 TagSpecification | 去掉透传 Tags 后重试 |
+| 实例已建但 `ClusterRunningNodeNum` 长期 0 | `DescribeClusterInstances` → `InstanceState` | 查安全组/镜像/初始化；节点 `failed` 则删后重建 |
 
 ### 多块数据盘节点
 

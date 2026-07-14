@@ -33,7 +33,7 @@ fused: false
 > **前提半常量**：
 > - KMS 密钥用途须为 **非对称签名验签**，算法 **RSA_2048**（其他用途/算法不可用于本功能）
 > - 建议 KMS 密钥与 TCR 实例**同地域**（可跨地域，跨地域有额外开销）
-> - 服务角色 `TCR_QCSRole` 须关联 **QcloudKMSFullAccess**（或等价 KMS 权限），否则签名失败
+> - 服务角色 `TCR_QCSRole` 须关联 **QcloudKMSFullAccess**（或等价 KMS 权限），否则签名失败——见下 [服务角色（TCR/KMS）](#服务角色tcrkms)
 > - **单个命名空间仅一条**签名策略
 
 ## 准备工作
@@ -57,6 +57,30 @@ tccli tcr DescribeInstances --region <REGION> --Registryids '["<REGISTRY_ID>"]' 
 tccli kms ListKeys --region <REGION> --filter "Keys[].{id:KeyId,alias:Alias}" --output text
 # expected: 含目标 KMS 密钥 ID
 ```
+
+### 服务角色（TCR/KMS）
+
+> 官方要求：授权容器镜像服务使用 KMS 时，在 `TCR_QCSRole` 上关联 **QcloudKMSFullAccess**（控制台角色详情页操作）。下列为 CLI 探测与补挂。
+
+```bash
+# 探测角色
+tccli cam DescribeRoleList --Page 1 --Rp 100 \
+  --filter "List[?contains(RoleName,'TCR')].RoleName" --output text
+# expected: 含 TCR_QCSRole；空 → 先走控制台 TCR 服务授权或 CreateRole（载体以官方/控制台为准）
+
+# 查是否已挂 KMS 策略
+tccli cam ListAttachedRolePolicies --Page 1 --Rp 50 --RoleName TCR_QCSRole \
+  --filter "List[].PolicyName" --output text
+# expected: 含 QcloudKMSFullAccess（或等价 KMS 策略名）
+
+# 补挂 KMS 全读写（角色已存在时）
+tccli cam AttachRolePolicy \
+  --AttachRoleName TCR_QCSRole \
+  --PolicyName QcloudKMSFullAccess
+# expected: RequestId；Role not exist → 先控制台开通 TCR 服务角色
+```
+
+> 总表见 [配置凭证 — 服务角色](../../getting-started/credentials.md#服务角色tke--ipamd--as--tcr--可观测)。用户侧还须有 `kms:SignByAsymmetricKey` 等权限时，与服务角色分开处理。
 
 ## 关键字段
 
@@ -153,7 +177,7 @@ tccli tcr DeleteSignaturePolicy --region <REGION> \
 | `UnsupportedOperation` | `DescribeInstances` 看规格 | 实例非 premium | 升级到 premium 或换实例 |
 | `ResourceNotFound` (Namespace) | `DescribeNamespaces` 核对 | 命名空间不存在 | 先 `CreateNamespace` |
 | `InvalidParameterValue.KmsRegion` | 核对地域 | KmsRegion 与密钥实际地域不符 | 用密钥所在地域 |
-| `UnauthorizedOperation` | 查 CAM 策略 | 无 KMS 使用权限 | 授予 `kms:SignByAsymmetricKey` |
+| `UnauthorizedOperation` | 查用户 CAM + `ListAttachedRolePolicies --RoleName TCR_QCSRole` | 用户无 KMS 权限，或服务角色未挂 KMS 策略 | 用户侧授予 `kms:SignByAsymmetricKey`；服务侧见 [服务角色（TCR/KMS）](#服务角色tcrkms) |
 
 ### 命令成功但状态不对 (exit = 0)
 

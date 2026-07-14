@@ -78,6 +78,16 @@ tccli vpc DescribeSubnets --region ap-guangzhou \
 # 4. 确认集群配额未满
 tccli tke DescribeClusters --region ap-guangzhou
 # expected: TotalCount < 配额上限（单地域默认 20，见 [配额](../reference/quotas.md)）
+
+# 5. 服务角色：TKE 主角色（任意建集群）
+tccli cam DescribeRoleList --Page 1 --Rp 100 \
+  --filter "List[?RoleName=='TKE_QCSRole'].RoleName" --output text
+# expected: TKE_QCSRole；空 → [配置凭证 — 补 TKE_QCSRole](../../getting-started/credentials.md#补-tke_qcsrole主服务角色)
+
+# 6. 服务角色：IPAMD（仅 NetworkType=VPC-CNI 时必查；本仓库 quickstart 默认 VPC-CNI）
+tccli cam DescribeRoleList --Page 1 --Rp 100 \
+  --filter "List[?RoleName=='IPAMDofTKE_QCSRole'].RoleName" --output text
+# expected: IPAMDofTKE_QCSRole；空 → [配置凭证 — 补 IPAMD](../../getting-started/credentials.md#补-ipamdoftke_qcsrolevpc-cni-前置) 或 [VPC-CNI](../networking/vpc-cni.md#ipamd-服务角色)
 ```
 
 ### 创建前必读（创建后改不了）
@@ -91,7 +101,7 @@ tccli tke DescribeClusters --region ap-guangzhou
 | **IPVS** | 仅新建时可开；**开启后不可关闭**；勿与 iptables 混用 | 重建集群 |
 | **Kube-proxy / Dataplane v2** | iptables↔ipvs **一经选择不支持更改**；`DataPlaneV2=true` 不再装 kube-proxy | 重建集群 |
 | **安全组** | 节点/Master 须按推荐放通（含容器 CIDR 的 DNS 53/udp 等） | 改错可能导致节点/Master 不可用，见 [安全组](https://cloud.tencent.com/document/product/457/9084) |
-| **服务授权** | 首次用 TKE 须授权操作 CVM/CLB/CBS 等 | 未授权则创建中途失败，见 [服务授权](https://cloud.tencent.com/document/product/457/43416) |
+| **服务授权** | 须有 `TKE_QCSRole`（+ 默认策略）；**VPC-CNI 另须 `IPAMDofTKE_QCSRole`**；节点池另须 `AS_QCSRole` | 探测与 CLI 补齐见 [配置凭证 — 服务角色](../../getting-started/credentials.md#服务角色tke--ipamd--as--tcr--可观测)；官方说明 [43416](https://cloud.tencent.com/document/product/457/43416) |
 
 ## 关键字段
 
