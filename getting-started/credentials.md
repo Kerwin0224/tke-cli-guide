@@ -153,6 +153,154 @@ tccli configure list
 
 > ⚠️ **安全红线**：`tccli configure list` **明文打印 secretId/secretKey**（源码 `configure.py` 的 `ConfigureListCommand._run_main` 直接输出 `cred[config]` 原值，未做脱敏；命令 `--help` 示例里的 `****` 仅为文档演示，非实际行为）。禁止在共享环境、截图、工单、会话记录中运行该命令；共享测试账号下严禁运行任何可能暴露凭证的命令。仅在自己的隔离终端核查 profile 配置时使用。
 
+## 服务角色（TKE / IPAMD / AS / 可观测）
+
+> CAM **用户密钥**（SecretId/SecretKey）让 **你** 调 API；**服务角色**让 **云产品** 代你访问其他产品（TKE→CVM/CLB/CBS，IPAMD→ENI，节点池→AS）。密钥配好后仍可能因缺服务角色失败——错误码与用户侧 `CamNoAuth` 不同。
+> 官方角色/策略语义以 [服务授权相关角色权限说明](https://cloud.tencent.com/document/product/457/43416) 为准；下列 CLI 为 agent 可执行探测与补齐路径。
+
+### 角色总表（按任务触发）
+
+| 角色 | 服务载体（Principal） | 典型触发 | 缺了的表现 | 详文 |
+|:-----|:----------------------|:---------|:-----------|:-----|
+| `TKE_QCSRole` | `ccs.qcloud.com` | 首次建集群 / 代管 CVM·CLB·CBS | 创建中途失败 | 下节 + [创建集群](../tke/clusters/create.md) |
+| `IPAMDofTKE_QCSRole` | `ccs.qcloud.com` | **VPC-CNI** 建集群 / 开 IPAMD | ENI/Pod IP 分配失败 | [VPC-CNI](../tke/networking/vpc-cni.md#ipamd-服务角色) |
+| `AS_QCSRole` | `as.cloud.tencent.com` | `CreateClusterNodePool` / AS 节点池 | `UnauthorizedOperation.AutoScalingRoleUnauthorized` | [创建节点池](../tke/nodes/nodepool-create.md#as-服务角色节点池创建前) |
+| `TKE_QCSLinkedRoleInPrometheusService` | 服务相关角色 | 首次 Prometheus 监控 | 建/关联监控失败 | [Prometheus](../tke/observability/prometheus.md#服务相关角色) |
+
+`TKE_QCSRole` 上常挂的**策略**（功能级，角色已在仍可能缺策略）：
+
+| 预设策略 | 触发功能 | 官方/说明 |
+|:---------|:---------|:----------|
+| `QcloudAccessForTKERole` | 默认：操作 CVM/CLB/CBS 等 | 43416 默认关联 |
+| `QcloudAccessForTKERoleInOpsManagement` | 日志等运维 | 43416，常与主策略同开 |
+| `QcloudAccessForTKERoleInCreatingCFSStorageclass` | CFS 扩展组件 | 首次装 CFS；[插件管理](../tke/addons/manage.md#cfs-服务授权) |
+| `QcloudCVMFinanceAccess` | 包年包月云盘 PVC | 预付费盘支付权限 |
+| `QcloudAccessFortkeRoleInMetricsbyLog` 等 | 成本洞察等扩展 | 功能页要求时再挂 |
+
+> **不要**把用户策略 `QcloudTKEFullAccess` 与服务角色 `TKE_QCSRole` 混为一谈：前者授权给**用户**，后者授权给**服务**。
+
+### 统一探测
+
+```bash
+# 列出 TKE / IPAMD / AS / Prometheus 相关角色
+tccli cam DescribeRoleList --Page 1 --Rp 100 \
+  --filter "List[?contains(RoleName,'TKE') || contains(RoleName,'IPAMD') || RoleName=='AS_QCSRole' || contains(RoleName,'Prometheus')].RoleName" \
+  --output text
+# expected: 已用过 TKE 时常含 TKE_QCSRole；VPC-CNI 前须含 IPAMDofTKE_QCSRole；节点池前须含 AS_QCSRole
+
+# 查某角色已挂策略（例：TKE 主角色）
+tccli cam ListAttachedRolePolicies --Page 1 --Rp 50 --RoleName TKE_QCSRole \
+  --filter "List[].PolicyName" --output text
+# expected: 至少含 QcloudAccessForTKERole（名称以实际返回为准）
+```
+
+| 任务 | 探测期望（角色名须在列表中） |
+|:-----|:---------------------------|
+| 任意建集群 | `TKE_QCSRole` |
+| VPC-CNI / quickstart 默认网络 | `TKE_QCSRole` + `IPAMDofTKE_QCSRole` |
+| 节点池 | 上列 + `AS_QCSRole` |
+| Prometheus | `TKE_QCSLinkedRoleInPrometheusService` 或官方当前 Linked 角色名 |
+
+### 补 TKE_QCSRole（主服务角色）
+
+> **推荐主路径**：首次登录 [容器服务控制台](https://console.cloud.tencent.com/tke2) 弹窗 **同意授权**（官方 43416）。
+> **CLI 等价**（子账号须有 `cam:CreateRole` / `cam:AttachRolePolicy`；无 CAM 写权限则只能控制台主账号授权）：
+
+```bash
+# 1) 创建角色（Principal 必须是 ccs.qcloud.com）
+tccli cam CreateRole \
+  --RoleName TKE_QCSRole \
+  --Description "TKE service role for accessing CVM CLB CBS and related resources" \
+  --PolicyDocument '{"version":"2.0","statement":[{"effect":"allow","action":"sts:AssumeRole","principal":{"service":"ccs.qcloud.com"}}]}'
+# expected: RoleId；角色已存在则跳过（Error 含已存在/Role 相关则复验 List）
+
+# 2) 挂默认访问策略（建集群最低）
+tccli cam AttachRolePolicy \
+  --AttachRoleName TKE_QCSRole \
+  --PolicyName QcloudAccessForTKERole
+# expected: RequestId
+
+# 3) 运维/日志（与控制台默认同批时常需要）
+tccli cam AttachRolePolicy \
+  --AttachRoleName TKE_QCSRole \
+  --PolicyName QcloudAccessForTKERoleInOpsManagement
+# expected: RequestId
+```
+
+### 补 IPAMDofTKE_QCSRole（VPC-CNI 前置）
+
+> 首次使用 **VPC-CNI** 时官方要求授权 IPAMD，见 43416「IPAMDofTKE_QCSRole」。quickstart 默认 VPC-CNI，**建集群前应探测**。
+
+```bash
+tccli cam CreateRole \
+  --RoleName IPAMDofTKE_QCSRole \
+  --Description "TKE IPAMD service role for ENI and VPC resources" \
+  --PolicyDocument '{"version":"2.0","statement":[{"effect":"allow","action":"sts:AssumeRole","principal":{"service":"ccs.qcloud.com"}}]}'
+# expected: RoleId；已存在则跳过
+
+tccli cam AttachRolePolicy \
+  --AttachRoleName IPAMDofTKE_QCSRole \
+  --PolicyName QcloudAccessForIPAMDofTKERole
+# expected: RequestId
+
+# 可选：弹性 IP 相关（部分账号控制台会挂）
+# tccli cam AttachRolePolicy --AttachRoleName IPAMDofTKE_QCSRole --PolicyName QcloudAccessForIPAMDRoleInQcloudAllocateEIP
+```
+
+### 补 AS_QCSRole（节点池前置）
+
+> 完整步骤见 [创建节点池 — AS 服务角色](../tke/nodes/nodepool-create.md#as-服务角色节点池创建前)。最短：
+
+```bash
+tccli cam CreateRole \
+  --RoleName AS_QCSRole \
+  --Description "Auto Scaling service role for TKE node pools" \
+  --PolicyDocument '{"version":"2.0","statement":[{"action":"name/sts:AssumeRole","effect":"allow","principal":{"service":"as.cloud.tencent.com"}}]}'
+# expected: RoleId；已存在则跳过
+
+tccli cam AttachRolePolicy \
+  --AttachRoleName AS_QCSRole \
+  --PolicyName QcloudAccessForASRole
+# expected: RequestId
+```
+
+### 服务相关角色（LinkedRole，如 Prometheus）
+
+部分功能用 **服务相关角色**（非手写 `PolicyDocument`），用 `CreateServiceLinkedRole`：
+
+```bash
+# QCSServiceName 以官方产品页 / cam 角色载体文档为准；Prometheus 示例载体名以控制台授权页为准
+tccli cam CreateServiceLinkedRole help --detail
+# expected: 入参含 QCSServiceName[]
+
+# 探测是否已有 Prometheus 相关 Linked 角色
+tccli cam DescribeRoleList --Page 1 --Rp 100 \
+  --filter "List[?contains(RoleName,'Prometheus')].RoleName" --output text
+# expected: 含 TKE_QCSLinkedRoleInPrometheusService 或官方当前名；空则走控制台 Prometheus 首次授权或 CreateServiceLinkedRole
+```
+
+> `CreateServiceLinkedRole` 的 `QCSServiceName` 必须与 [角色载体](https://cloud.tencent.com/document/product/598/85165) 一致；不确定时用控制台该功能首次「服务授权」更稳。
+
+### 功能策略补挂（角色已在、功能仍失败）
+
+```bash
+# CFS 组件
+tccli cam AttachRolePolicy --AttachRoleName TKE_QCSRole \
+  --PolicyName QcloudAccessForTKERoleInCreatingCFSStorageclass
+# expected: RequestId
+
+# 包年包月云盘支付
+tccli cam AttachRolePolicy --AttachRoleName TKE_QCSRole \
+  --PolicyName QcloudCVMFinanceAccess
+# expected: RequestId
+```
+
+### 边界
+
+- **控制台一次授权**：首次进 TKE 控制台「同意授权」仍是官方主路径（尤其主账号引导创建多策略）。
+- **子账号**：可能无 `cam:CreateRole`，CLI 补角色会失败 → 主账号控制台授权或提升 CAM 权限。
+- **策略名大小写**：以 `ListPolicies` / 控制台为准；真机曾见 `QcloudAccessFortkeRoleInMetricsbyLog` 与 `QcloudAccessForTKERole` 混用大小写，挂载失败时用 `tccli cam ListPolicies` 搜精确名。
+
 ## 故障恢复
 
 | 现象 | 诊断命令 | 根因 | 修复 |
