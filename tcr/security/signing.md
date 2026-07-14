@@ -6,6 +6,7 @@ fused: false
 # 镜像签名
 
 > 控制台: [容器镜像服务控制台 - 镜像签名](https://console.cloud.tencent.com/tcr/signature)
+> 官方文档: [容器镜像签名](https://cloud.tencent.com/document/product/1141/80862)（仅 premium 支持）
 > 配置镜像签名策略，用 KMS 托管密钥对镜像签名，确保镜像不被篡改。仅企业版 premium 支持。
 
 ## 触发条件
@@ -21,11 +22,11 @@ fused: false
 
 | 能力 | 作用 | 规格 |
 |:-----|:-----|:-----|
-| 手动签名 | 用 KMS 密钥对已存在镜像签名 | premium 专属，tcli `CreateSignature` |
-| 签名策略 | 绑定 KMS 密钥+命名空间，push 时自动签名 | premium 专属，tcli `CreateSignaturePolicy` |
-| 验签 | 拉取时验证签名 | TKE 集成（非 tcli，见下） |
+| 手动签名 | 用 KMS 密钥对已存在镜像签名 | premium 专属，tccli `CreateSignature` |
+| 签名策略 | 绑定 KMS 密钥+命名空间，push 时自动签名 | premium 专属，tccli `CreateSignaturePolicy` |
+| 验签 | 拉取时验证签名 | TKE 集成（非 tccli，见下） |
 
-> **产品边界**：tcr API 落地签名策略与手动签名；**自动签名**由策略触发（push 时 TCR 服务侧执行，无需 tcli 调用）；**验签**在 TKE 侧部署签名准入控制器（K8s 准入 webhook，非 tcli）。tcr 文档覆盖签名侧闭环，验签侧见 TKE 集成文档。
+> **产品边界**：tcr API 落地签名策略与手动签名；**自动签名**由策略触发（push 时 TCR 服务侧执行，无需 tccli 调用）；**验签**在 TKE 侧部署签名准入控制器（K8s 准入 webhook，非 tccli）。tcr 文档覆盖签名侧闭环，验签侧见 TKE 集成文档。
 
 > 签名是 **premium（高级版）** 专属；basic/standard 不支持。
 >
@@ -82,7 +83,7 @@ tccli kms ListKeys --region <REGION> --filter "Keys[].{id:KeyId,alias:Alias}" --
 - **KMS 托管（推荐）**: 密钥在 KMS 服务管理，自动轮转，权限可控
 - **自带证书**: 手动管理证书，易泄露，不推荐
 - **默认推荐**: KMS 托管 SM2（国密）或 RSA 密钥
-- **能改吗?**: 策略创建后可 `ModifySignaturePolicy`（如存在）改密钥，已签名镜像不受影响
+- **可修改**： 策略创建后可 `ModifySignaturePolicy`（如存在）改密钥，已签名镜像不受影响
 
 ### 步骤 2：创建签名策略
 
@@ -136,9 +137,9 @@ tccli tcr CreateSignature --region <REGION> \
 > **副作用警告**：删除签名策略不影响已签名镜像的签名（签名是镜像的附属数据）。但新镜像无法再按该策略签名。
 
 ```bash
-# 删除签名策略
+# 删除签名策略（按命名空间，单命名空间仅一条策略；无 --PolicyName 参数）
 tccli tcr DeleteSignaturePolicy --region <REGION> \
-  --RegistryId "<REGISTRY_ID>" --NamespaceName "<NAMESPACE_NAME>" --PolicyName "<POLICY_NAME>"
+  --RegistryId "<REGISTRY_ID>" --NamespaceName "<NAMESPACE_NAME>"
 # expected: exit 0
 ```
 

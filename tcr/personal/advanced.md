@@ -7,6 +7,8 @@ fused: false
 
 > 个人版仓库查询过滤、镜像复制、生命周期策略、应用触发器。核心 CRUD 见 [个人版全功能](manage.md)。
 
+> 官方文档: [容器镜像服务个人版](https://cloud.tencent.com/document/product/1141/57780) · [个人版迁移至企业版完全指南](https://cloud.tencent.com/document/product/1141/52292)
+
 > 个人版 API 形态与企业版不同——所有 Action 带 `Personal` 后缀。`RepoName` 格式是 `<namespace>/<repo>`（含斜杠）。
 
 ## 触发条件

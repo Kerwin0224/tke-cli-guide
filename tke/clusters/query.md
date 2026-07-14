@@ -8,6 +8,8 @@ fused: true
 > 控制台: [容器服务控制台 - 集群列表](https://console.cloud.tencent.com/tke2/cluster)
 > 查询集群列表与详情。只读操作，无副作用。支持两种粒度：列表查询（`DescribeClusters`）与单集群全貌（`DescribeClusterStatus` + `DescribeClusterEndpoints`）。
 
+> 官方文档：[基本概念](https://cloud.tencent.com/document/product/457/45598) · [连接集群](https://cloud.tencent.com/document/product/457/32191)
+
 ## 概述
 
 查询集群有两种入口，用途不同：
@@ -19,6 +21,8 @@ fused: true
 | 单集群访问 | `DescribeClusterEndpoints` / `DescribeClusterSecurity` | 看访问地址与凭证 | 端点 + kubeconfig + 密码 |
 
 操作是**同步**的，命令返回即完成。
+
+> 配额：单地域集群默认上限 **20**，查询可核对当前用量。[配额说明](https://cloud.tencent.com/document/product/457/9087)
 
 ## 触发条件
 
@@ -99,6 +103,8 @@ tccli tke DescribeClusters --region ap-guangzhou --version 2022-05-01 --Limit 1 
 
 ## 操作步骤
 
+> ⚠️ **高危操作**：查询无写副作用，但 `--ClusterIds` 暴露集群 ID 需保密；`--filter` 字段名拼错静默返回 `None` 而非报错，可能误导判断。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
+
 ### 最小化 — 列表查询（新版，官方当前版）
 
 ```bash
@@ -156,7 +162,7 @@ tccli tke DescribeClusters --region ap-guangzhou --version 2022-05-01 --Limit 10
 
 ### 取丰富字段（旧版独有）
 
-> 需要网络配置、节点数、容器运行时、删除保护等字段时走旧版——这些字段新版 `Clusters[]` 已精简（19 个旧版独有字段在新版丢失）。旧版是 TCCLI 默认版，可省略 `--version`，但为自证意图建议显式标注。
+> 需要网络配置、节点数、容器运行时、删除保护等字段时走旧版——这些字段新版 `Clusters[]` 已精简（19 个旧版独有字段在新版丢失）。旧版是 TCCLI 默认版，可省略 `--version`；为明确意图建议显式标注。
 
 ```bash
 tccli tke DescribeClusters --region ap-guangzhou --version 2018-05-25 \
@@ -203,7 +209,7 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_I
 }
 ```
 
-> 实跑字段（2018 默认版）：上表键齐全。`ClusterInstanceState` 为 `-` 表示空集群（`ClusterRunningNodeNum=0`）；有节点且健康为 `AllNormal`。新建托管空集群默认 `ClusterDeletionProtection=false`、`ClusterAuditEnabled=false`（需显式 `Enable*` 才为 `true`）。
+> 字段说明（2018 默认版）：上表键齐全。`ClusterInstanceState` 为 `-` 表示空集群（`ClusterRunningNodeNum=0`）；有节点且健康为 `AllNormal`。新建托管空集群默认 `ClusterDeletionProtection=false`、`ClusterAuditEnabled=false`（需显式 `Enable*` 才为 `true`）。
 
 ### 单集群访问地址与凭证
 
@@ -305,7 +311,7 @@ tccli tke DescribeClusterLevelChangeRecords --ClusterID "<CLUSTER_ID>" --region 
 
 > 集群等级价格、子账号 RBAC 关系、标签批量修改状态查询。
 
-> `GetClusterLevelPrice`（集群等级价格查询，按 `ClusterLevel` 真实枚举 L20/L50/L100/L200/L500/L1000/L3000/L5000；**L5 不参与询价**（L5 仅供 `DescribeClusterLevelAttribute` 查询），传 L5 或 L10 等非询价枚举触发 `FailedOperation.TradeCommon`）属计费查询，主命令见 [配置集群属性 — 选等级决策](configure.md#为什么选这个等级)，本文不再重复。Pod 计费/预留实例查询见 [配额和限制](../reference/quotas.md)。
+> `GetClusterLevelPrice`（集群等级价格查询，按 `ClusterLevel` 真实枚举 L5/L20/L50/L100/L200/L500/L1000/L3000/L5000；L5 可询价（实际返回 Cost=13），传不存在的等级（如 L10）触发 `FailedOperation.TradeCommon`）属计费查询，主命令见 [配置集群属性 — 选等级决策](configure.md#为什么选这个等级)，本文不再重复。Pod 计费/预留实例查询见 [配额和限制](../reference/quotas.md)。
 
 ```bash
 # 查询集群 CommonName (RBAC 子账号/角色关系)

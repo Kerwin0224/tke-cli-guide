@@ -24,7 +24,7 @@ tccli tke DescribeClusterInstances --region <REGION> --ClusterId "<CLUSTER_ID>"
 
 ## 集群状态 (ClusterState)
 
-> 来源：`DescribeClusterStatus` 响应的 `ClusterState` 字段。常驻值为 `Running`；完整枚举来自腾讯云官方数据结构文档。
+> `ClusterState` 字段取自 `DescribeClusterStatus` 响应。常驻值为 `Running`；完整枚举见腾讯云官方数据结构文档。
 
 | 状态 | 含义 | 触发条件 | 用户可执行操作 | 终态 |
 |:-----|:-----|:---------|:--------------|:----:|
@@ -56,7 +56,7 @@ tccli tke DescribeClusterInstances --region <REGION> --ClusterId "<CLUSTER_ID>"
 
 ## 集群节点健康 (ClusterInstanceState)
 
-> 来源：`DescribeClusterStatus` 响应的 `ClusterInstanceState` 字段，汇总集群下所有**工作节点**的健康度。有工作节点时为 `AllNormal`。**空集群（无工作节点，如托管空集群或仅 Master 的独立集群）该字段为空**（返回 `-`/空字符串），非异常——有工作节点后才返回 `AllNormal`/`PartialAbnormal`/`AllAbnormal`。
+> `ClusterInstanceState` 字段取自 `DescribeClusterStatus` 响应，汇总集群下所有**工作节点**的健康度。有工作节点时为 `AllNormal`。**空集群（无工作节点，如托管空集群或仅 Master 的独立集群）该字段为空**（返回 `-`/空字符串），非异常——有工作节点后才返回 `AllNormal`/`PartialAbnormal`/`AllAbnormal`。
 
 | 状态 | 含义 | 用户可执行操作 |
 |:-----|:-----|:--------------|
@@ -66,7 +66,7 @@ tccli tke DescribeClusterInstances --region <REGION> --ClusterId "<CLUSTER_ID>"
 
 ## 节点池状态 (LifeState)
 
-> 来源：`DescribeClusterNodePools` 响应的 `LifeState` 字段。枚举来自腾讯云官方数据结构文档（小写）。
+> `LifeState` 字段取自 `DescribeClusterNodePools` 响应。枚举见腾讯云官方数据结构文档（小写）。
 
 | 状态 | 含义 | 触发条件 | 用户可执行操作 | 终态 |
 |:-----|:-----|:---------|:--------------|:----:|
@@ -80,7 +80,7 @@ tccli tke DescribeClusterInstances --region <REGION> --ClusterId "<CLUSTER_ID>"
 
 ## 节点状态 (InstanceState)
 
-> 来源：`DescribeClusterInstances` 响应的 `InstanceState` 字段。正常运行时为 `running`。
+> `InstanceState` 字段取自 `DescribeClusterInstances` 响应。正常运行时为 `running`。
 
 | 状态 | 含义 | 触发条件 | 用户可执行操作 |
 |:-----|:-----|:---------|:--------------|

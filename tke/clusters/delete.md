@@ -12,6 +12,10 @@ fused: true
 
 > 本文档 Action 属 **TKE 2018-05-25**（`DeleteCluster`/`Enable/DisableClusterDeletionProtection` 均旧版独有）。文中 `DescribeClusters`/`DescribeClusterStatus` 为辅助查询，走默认旧版；`DescribeClusters` 是两版同名 Action，见 [查询集群](query.md#两版同名-actiondescribeclusters)。
 
+> 官方文档：[删除集群](https://cloud.tencent.com/document/product/457/44808) · [集群生命周期](https://cloud.tencent.com/document/product/457/32188) · [常见高危操作](https://cloud.tencent.com/document/product/457/39539)
+
+> 配额：删除集群无额外配额限制，但删除后会释放集群配额占用。[配额说明](https://cloud.tencent.com/document/product/457/9087)
+
 ## 触发条件
 
 - 集群已废弃/迁移完毕，确认不再需要（`DescribeClusters` 核对无业务 Pod）— 用本文销毁
@@ -70,6 +74,8 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet
 ```
 
 ## 操作步骤
+
+> ⚠️ **高危操作**：集群删除**不可逆**！`InstanceDeleteMode` 决定是否连带删除 CVM/CBS/CLB；`retain` 模式下 CVM 保留但持续计费。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
 
 ### 步骤 1：关闭删除保护
 

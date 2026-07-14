@@ -6,6 +6,7 @@ fused: true
 # 访问控制
 
 > 控制台: [公网访问](https://console.cloud.tencent.com/tcr/publicaccess) · [内网访问](https://console.cloud.tencent.com/tcr/privateaccess) · [用户级账号](https://console.cloud.tencent.com/tcr/token) · [服务级账号](https://console.cloud.tencent.com/tcr/serviceaccount)
+> 官方文档: [配置访问权限](https://cloud.tencent.com/document/product/1141) · [VPC 内网访问](https://cloud.tencent.com/document/product/1141/50733) · [产品服务层级与容量限制](https://cloud.tencent.com/document/product/1141/104731)
 > 配置谁能访问 TCR 实例：用户级账号（Token）、VPC 内网、公网白名单、服务级账号。**推送/拉取优先走 VPC 内网**，公网作补充。
 
 ## 触发条件
@@ -20,6 +21,8 @@ fused: true
 推荐决策顺序：**先内网（VPC）→ 再按需开公网白名单 → 再选凭证类型**。
 
 > ⚠️ **创建后默认拒绝全部公网及内网访问**。未配置 VPC 内网或公网白名单前，`docker login`/`push`/`pull` 会失败——须先完成本文访问策略，再推镜像。公网入口开启后尽快配白名单并优先改走内网（公网产生 COS 公网流量费；内网不计该费）。`unauthorized: authentication required`：核对 `docker login` 凭证是否正确、临时 Token 是否过期。
+
+> **VPC 接入配额（按实例规格）**：basic=5 / standard=10 / premium=20（详见 [产品服务层级与容量限制](https://cloud.tencent.com/document/product/1141/104731)）。`CreateSecurityPolicy` 白名单数量受规格限制（basic=5）。
 
 | 访问方式 | 控制台入口 | 适用场景 | 创建方式 | 凭证类型 |
 |:--------|:--------|:--------|:--------|:--------|
@@ -70,9 +73,9 @@ tccli tcr DescribeInternalEndpoints --region <REGION> --RegistryId "<REGISTRY_ID
 | 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
 |:------|------|:--------:|------------|---------------|
 | RegistryId | string | 是 | `tcr-xxxxxxxx` | `ResourceNotFound` |
-| Operation | string | 是 | `Open`/`Close` | `InvalidParameterValue` |
-| VpcId | string | Open 必填 | VPC ID | `ResourceNotFound` |
-| SubnetId | string | Open 必填 | 子网 ID | `ResourceNotFound` |
+| Operation | string | 是 | `Create`/`Delete` | `InvalidParameterValue` |
+| VpcId | string | Create 必填 | VPC ID | `ResourceNotFound` |
+| SubnetId | string | Create 必填 | 子网 ID | `ResourceNotFound` |
 | RegionId | int | 否 | 地域 ID | — |
 | RegionName | string | 否 | 地域名 | — |
 
@@ -154,7 +157,7 @@ tccli tcr DescribeInternalEndpoints --region <REGION> --RegistryId "<REGISTRY_ID
   --filter "AccessVpcSet[].{vpc:VpcId,subnet:SubnetId}"
 # expected: 含刚接入的 VPC
 
-# 白名单列表（公网端点须 Opened；Closed 时真机 ResourceNotFound: Failed to get security group id from registry）
+# 白名单列表（公网端点须 Opened；Closed 时报 ResourceNotFound: Failed to get security group id from registry）
 tccli tcr DescribeSecurityPolicies --region <REGION> --RegistryId "<REGISTRY_ID>" \
   --filter "SecurityPolicySet[].{cidr:CidrBlock,desc:Description}"
 # expected: Status=Opened 时含白名单；Closed → ResourceNotFound（先 ManageExternalEndpoint Open）
@@ -197,7 +200,7 @@ tccli tcr DeleteSecurityPolicy --region <REGION> \
 | `ResourceNotFound.VpcId` | `tccli vpc DescribeVpcs` | VPC 不存在或跨账号 | 确认 VPC ID 与账号 |
 | `ResourceNotFound.SubnetId` | `tccli vpc DescribeSubnets` | 子网不在指定 VPC | 用 VPC 内子网 |
 | `InvalidParameterValue.CidrBlock` | 检查 CIDR 格式 | CIDR 格式错 | 用 `IP/掩码` 格式，如 `1.2.3.4/32` |
-| `ResourceNotFound`（消息含 `Failed to get security group id from registry`） | `DescribeExternalEndpointStatus` | 公网端点 `Closed` 或实例无安全组绑定（basic 常见） | 先 `ManageExternalEndpoint --Operation Open`；仍失败则查规格是否支持公网白名单 |
+| `ResourceNotFound`（消息含 `Failed to get security group id from registry`） | `DescribeExternalEndpointStatus` | 公网端点 `Closed` 或实例无安全组绑定（basic 常见） | 先 `ManageExternalEndpoint --Operation Create`；仍失败则查规格是否支持公网白名单 |
 | `LimitExceeded` | `DescribeSecurityPolicies` 看数量 | 白名单达上限（basic=5） | 删除闲置白名单或升规格 |
 | `FailedOperation` | `DescribeInstanceStatus` 查看状态 | 实例非 Running | 等实例 Running |
 
@@ -206,7 +209,7 @@ tccli tcr DeleteSecurityPolicy --region <REGION> \
 | 现象 | 诊断 | 根因 | 修复 |
 |:--------|:----------|:------------|:-----|
 | VPC 内网开通但 DNS 不解析 | `DescribeInternalEndpoints` | DNS 生成延迟 | 等 1-2 分钟；查 PrivateDNS |
-| 白名单添加但 docker push 仍 `denied` | `DescribeExternalEndpointStatus` | 公网端点未开启 | 先 `ManageExternalEndpoint --Operation Open` |
+| 白名单添加但 docker push 仍 `denied` | `DescribeExternalEndpointStatus` | 公网端点未开启 | 先 `ManageExternalEndpoint --Operation Create` |
 | 服务账号创建但拉取失败 | `DescribeServiceAccounts` 看权限 | 权限不含目标命名空间 | 补 `Permissions` 命名空间 |
 
 ## 内网 DNS 与多策略白名单
@@ -285,6 +288,7 @@ tccli tcr DeleteServiceAccount --RegistryId "<REGISTRY_ID>" --Name "<SA_NAME>" -
 
 ## 收尾确认
 
+> docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）
 ```bash
 # ③ 跨步骤汇总：白名单 + 服务账号 + VPC 内网 三步产物一次性核对（字段名 SecurityPolicySet 非 Policies；Verify 逐项查，这里汇总）
 tccli tcr DescribeSecurityPolicies --region <REGION> --RegistryId "<REGISTRY_ID>" \

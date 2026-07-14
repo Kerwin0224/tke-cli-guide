@@ -6,6 +6,7 @@ fused: false
 # 管理命名空间和仓库
 
 > 控制台: [容器镜像服务控制台 - 仓库管理](https://console.cloud.tencent.com/tcr/repository)
+> 官方文档: [管理命名空间](https://cloud.tencent.com/document/product/1141/41803) · [管理镜像仓库](https://cloud.tencent.com/document/product/1141/41811) · [产品服务层级与容量限制](https://cloud.tencent.com/document/product/1141/104731)
 > 在 TCR 企业版实例下创建/查询/删除命名空间与仓库。命名空间是仓库的分组，仓库是镜像的存放单元。
 
 ## 触发条件
@@ -19,10 +20,10 @@ fused: false
 
 TCR 的两级结构：实例 → 命名空间 → 仓库 → 镜像版本。
 
-| 资源 | 作用 | 唯一性 | 配额（basic） |
+| 资源 | 作用 | 唯一性 | 配额（basic / standard / premium） |
 |:-----|:-----|:-----|:-------------|
-| 命名空间 | 仓库分组，控制可见性（Public/Private） | 实例内唯一 | 50/实例 |
-| 仓库 | 镜像存放单元 | 命名空间内唯一 | 1000/实例 |
+| 命名空间 | 仓库分组，控制可见性（Public/Private） | 实例内唯一 | 50 / 100 / 500 |
+| 仓库 | 镜像存放单元 | 命名空间内唯一 | 1000 / 3000 / 5000 |
 | 镜像版本 | 具体镜像 tag | 仓库内唯一 | 无限制 |
 
 > 命名空间名直接用于镜像地址：`<domain>/<namespace>/<repo>:<tag>`。命名空间创建后**不可改名**，只能删除重建。
@@ -86,14 +87,14 @@ tccli tcr DescribeNamespaces --region <REGION> --RegistryId "<REGISTRY_ID>" \
 - **Private（推荐）**: 需凭证才能 push/pull，适合生产镜像。安全默认
 - **Public**: 任何人可 `docker pull`（不可 push），适合开源镜像分发
 - **默认推荐**: Private——除非确需公开分发，否则保持私有
-- **能改吗?**: 命名空间可见性可后续 `ModifyNamespace`（如存在）修改，但镜像若已被公开拉取无法撤回
+- **可修改**： 命名空间可见性可后续 `ModifyNamespace`（如存在）修改，但镜像若已被公开拉取无法撤回
 
 ### 步骤 2：创建命名空间
 
 ```bash
 tccli tcr CreateNamespace --region <REGION> \
   --RegistryId "<REGISTRY_ID>" --NamespaceName "<NAMESPACE_NAME>" --IsPublic false
-# expected: exit 0, 返回 NamespaceId + RequestId
+# expected: exit 0, 返回 RequestId
 ```
 
 | 占位符 | 含义 | 约束 | 如何获取 |
@@ -155,7 +156,7 @@ tccli tcr ModifyNamespace --region <REGION> \
 
 ## 清理
 
-> **副作用警告**：删除命名空间会级联删除其下所有仓库与镜像版本，不可恢复。删除仓库会删除该仓库所有镜像版本。
+> **副作用警告**：删除命名空间会级联删除其下所有仓库与镜像版本，不可恢复。删除仓库会删除该仓库所有镜像版本，不可恢复。命名空间创建后不可改名，只能删除重建。
 
 ```bash
 # 1. 删除仓库（先删仓库再删命名空间）
@@ -211,7 +212,7 @@ tccli tcr DeleteRepositoryTags --RegistryId "<REGISTRY_ID>" --region <REGION> \
 # expected: exit 0
 ```
 
-> `ModifyRepository` 用 `NamespaceName`+`RepositoryName` 定位（非 ID）。`DeleteRepositoryTags` 批量删 tag（区别于删整个仓库 `DeleteRepository`）。
+> `ModifyRepository` 用 `NamespaceName`+`RepositoryName` 定位（非 ID）。`BriefDescription` 和 `Description` 均为必填（与 `CreateRepository` 不同，Create 时两者可选）。`DeleteRepositoryTags` 批量删 tag（区别于删整个仓库 `DeleteRepository`）。
 
 ### Helm Chart 下载
 
@@ -231,6 +232,7 @@ tccli tcr DownloadHelmChart --RegistryId "<REGISTRY_ID>" --region <REGION> \
 
 ## 收尾确认
 
+> docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）
 ```bash
 # ③ 跨步骤汇总：命名空间 + 仓库 一次性核对（Verify 逐项查，这里汇总两步产物）
 tccli tcr DescribeNamespaces --region ap-guangzhou --RegistryId "<REGISTRY_ID>" \

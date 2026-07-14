@@ -17,6 +17,14 @@ Release 把 Helm Chart 部署成一个集群内可管理的实例：创建（部
 
 > Release 属 **TKE 2018-05-25**（新版无应用发布 Action）。
 
+## 触发条件
+
+- 你要把某个 Helm Chart 部署成集群内可管理的实例（带版本历史）— `CreateClusterRelease`，见 [管理应用发布](manage.md)
+- 你要升级已部署 Release 的 Chart 版本或改 Values，或退回历史版本 — `UpgradeClusterRelease`/`RollbackClusterRelease`，见 [管理应用发布](manage.md)
+- 你要查 Release 部署状态或修订历史（创建/升级后轮询是否 `deployed`）— `DescribeClusterReleases`/`DescribeClusterReleaseHistory`
+- 你要按节点标签分批次灰度发布（控制升级节奏）— `RollOutSequence` 系列，见 [管理应用发布 — 灰度发布序列](manage.md#灰度发布序列rolloutsequence)
+- 你不确定 Chart 来源选 TKE 内置还是外部仓库 — 看 [管理应用发布 — Chart 来源决策](manage.md#chart-来源决策)
+
 ## 何时用
 
 | 场景 | 用 Release？ |

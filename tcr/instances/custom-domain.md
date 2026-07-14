@@ -7,6 +7,7 @@ fused: false
 
 > 为 TCR 企业版实例绑定自定义域名，用公司自有域名访问镜像仓库。
 > 控制台: [容器镜像服务 - 实例 - 自定义域名](https://console.cloud.tencent.com/tcr/repository)
+> 官方文档: [创建自定义域名](https://cloud.tencent.com/document/product/1141/79579) · [使用自定义域名及云联网实现跨地域内网访问](https://cloud.tencent.com/document/product/1141/76084)
 
 ## 触发条件
 
@@ -49,7 +50,7 @@ fused: false
 |:-----|:-----------|:----:|:-----|
 | `RegistryId` | 全部 | 是 | TCR 实例 ID |
 | `DomainName` | Create/Delete | 是 | 自定义域名（已备案） |
-| `CertificateId` | Create/Delete | 是 | SSL 证书 ID（SSL 服务） |
+| `CertificateId` | Create | 是 | SSL 证书 ID（SSL 服务）；Delete 可选 |
 | `Limit`/`Offset` | Describe | 否 | 分页 |
 
 ## 操作步骤
@@ -122,7 +123,7 @@ tccli tcr DeleteInstanceCustomizedDomain --region <REGION> \
 # expected: exit 0
 ```
 
-> `DeleteInstanceCustomizedDomain` 需同时传 `DomainName` 和 `CertificateId`（与 Create 同参）。
+> `DeleteInstanceCustomizedDomain` 需传 `DomainName`，`CertificateId` 可选（与 Create 不同，Create 的 `CertificateId` 必填）。
 
 ## 故障恢复
 
@@ -138,6 +139,7 @@ tccli tcr DeleteInstanceCustomizedDomain --region <REGION> \
 
 ## 收尾确认
 
+> docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）
 ```bash
 # 域名绑定记录已生效
 tccli tcr DescribeInstanceCustomizedDomain --region ap-guangzhou --RegistryId "<REGISTRY_ID>" \

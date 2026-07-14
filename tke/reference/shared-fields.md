@@ -9,7 +9,7 @@ subtype: 8B
 ## 何时查本页
 
 - 写 `CreateCluster` / `AddExistedInstances` / `CreateClusterNodePool` / `ScaleOutClusterMaster` 等命令时，遇到 `InstanceAdvancedSettings` / `EnhancedService` / `LoginSettings` / `Label` / `Taint` / `TagSpecification` / `Filter` 等参数
-- 想知道某字段是顶层传还是嵌套传、用 `--cli-unfold-argument` 还是 JSON
+- 需确认某字段是顶层传还是嵌套传、用 `--cli-unfold-argument` 还是 JSON
 
 > 完整字段结构以 `tccli tke <Action> help --detail` 为准；本页只列跨 Action 通用的语义与传参模式。
 

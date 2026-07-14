@@ -11,6 +11,13 @@ TKE 集群加固分五个维度：认证（谁能连）、审计（操作可追�
 
 > 调度策略（SchedulerPolicy）控制 Pod 放置，属集群配置非安全，见 [调度策略](../clusters/scheduling.md)。
 
+## 触发条件
+
+- 子账号 `kubectl` 连集群报 `Unauthorized`，或 `DescribeClusterKubeconfig` 证书过期需轮转 — 去 [认证配置](auth.md)（`GrantUserPermissions` / `DescribeClusterAuthenticationOptions`）
+- 多团队要企业 SSO 登录集群，`OIDCConfig` 为空需配 OIDC — 去 [认证配置](auth.md)（`ModifyClusterAuthenticationOptions`）
+- 合规审计需把集群 API 操作落 CLS，`ClusterAuditEnabled=false` — 去 [审计日志](audit.md)（`EnableClusterAudit`）
+- 防误删集群、加密 etcd 敏感数据，或要 OPA 准入强制合规规则 — 去 [集群保护策略](protection.md)（`EnableClusterDeletionProtection` / `EnableEncryptionProtection` / `ModifyOpenPolicyList`）
+
 ## 核心概念
 
 | 概念 | 含义 | 为什么重要 |

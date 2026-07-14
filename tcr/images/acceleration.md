@@ -7,6 +7,7 @@ fused: true
 
 > 为 TCR 企业版实例开启镜像加速服务，加速镜像拉取。
 > 控制台: [容器镜像服务 - 镜像加速](https://console.cloud.tencent.com/tcr/acceleration)
+> 官方文档: [产品服务层级与容量限制](https://cloud.tencent.com/document/product/1141/104731)（按需加载容器镜像仅 premium 支持，镜像加速 CFS 挂载见操作指南）
 
 ## 触发条件
 
@@ -23,6 +24,8 @@ fused: true
 ## 概述
 
 镜像加速服务为 TCR 实例创建一个 CFS（云文件存储）加速后端，镜像层缓存在 CFS 中，拉取时从 CFS 就近读取，降低大镜像拉取延迟。`CFSVIP` 是加速后端访问入口。
+
+> **规格支持**：按需加载容器镜像仅 premium 支持。镜像加速服务（CFS 挂载）各企业版规格均可使用，但需在指定 VPC/子网创建 CFS 文件系统，产生 CFS 存储费用。
 
 ## 决策依据
 

@@ -9,6 +9,8 @@ fused: true
 
 > 本文档 Action 均属 **TKE 2018-05-25**（旧版独有，新版无对应 Action）。只读查询见 [查询集群](query.md)。注意 `DescribeClusterLevelAttribute`/`DescribeClusterLevelChangeRecords` 用 `--ClusterID`（大写 ID），与其他集群接口的 `--ClusterId`（小写 d）不同。
 
+> 官方文档：[基本概念](https://cloud.tencent.com/document/product/457/45598) · [集群生命周期](https://cloud.tencent.com/document/product/457/32188)
+
 ## 概述
 
 集群创建后，常需调整配置：升等级扩容配额、改运行时版本、调组件参数、绑 admin 角色。这些是**写操作**，改集群行为或计费，与 [查询集群](query.md)（只读）严格分离。
@@ -23,6 +25,8 @@ fused: true
 | 绑 admin 角色 | `AcquireClusterAdminRole` | RBAC 授权 |
 | 改运行时 | `ModifyClusterRuntimeConfig` | 滚动重建节点 |
 | 改 Master 组件 | `ModifyMasterComponent` | 启停控制面组件 |
+
+> 配额：无额外配额限制，但需验证当前集群规格支持目标配置（如等级配额）。[配额说明](https://cloud.tencent.com/document/product/457/9087)
 
 ## 触发条件
 
@@ -56,9 +60,9 @@ tccli tke DescribeClusterLevelAttribute --ClusterID "<CLUSTER_ID>" --region <REG
 > ⚠️ `DescribeClusterLevelAttribute`/`DescribeClusterLevelChangeRecords` 用 `--ClusterID`（大写 ID），与其他集群接口的 `--ClusterId`（小写 d）不同——大小写写错报 `Unknown options`。
 
 ```bash
-# 查等级价格 (不绑集群, 按 ClusterLevel; 用真实枚举 L5/L20/L50/L100/L200/L500)
+# 查等级价格 (不绑集群, 按 ClusterLevel; 询价枚举 L5/L20/L50/L100/L200/L500/L1000/L3000/L5000——传不存在的等级如 L10 触发 FailedOperation.TradeCommon)
 tccli tke GetClusterLevelPrice --ClusterLevel L20 --region <REGION>
-# expected: exit 0, 返回 Cost/TotalCost/Policy（实测 L20：Cost=37, TotalCost=40, Policy≈93.38；价目随计费策略变）
+# expected: exit 0, 返回 Cost/TotalCost/Policy（价目随计费策略与地域变，以实际返回为准）
 ```
 
 #### 为什么选这个等级
@@ -112,6 +116,7 @@ tccli tke DescribeClusterAvailableExtraArgs --ClusterVersion "<VERSION>" --Clust
 | `ClusterLevel` | ModifyClusterAttribute | 否 | 真实枚举 L5/L20/L50/L100/L200/L500（无 L10），影响计费 |
 | `Tags[]` | ModifyClusterTags | 是 | Key/Value 对（API 层选填，业务必需——覆盖式更新，不传会清空标签） |
 | `SyncSubresource` | ModifyClusterTags | 否 | true 同步标签到子资源 |
+| `SyncNodePoolTags` | ModifyClusterTags | 否 | true 同步标签到节点池，仅当 `SyncSubresource=true` 时生效 |
 | `ImageId` | ModifyClusterImage | 是 | 目标镜像 ID |
 | `ClusterExtraArgs` | ModifyClusterExtraArgs | 否 | 嵌套四组件参数（覆盖式；API 非必填，但传空会清空原参数，业务上必须传完整值） |
 | `Operation` | ModifyClusterExtraArgsTaskState | 否 | 任务状态操作，枚举 `abort`（取消并回退任务） |
@@ -123,6 +128,8 @@ tccli tke DescribeClusterAvailableExtraArgs --ClusterVersion "<VERSION>" --Clust
 | `SubAccounts` | UpdateClusterKubeconfig | 否 | 子账户 Uin 列表，不传默认为调用者本人 |
 
 ## 操作步骤
+
+> ⚠️ **高危操作**：`AddClusterCIDR` 扩容不可逆（扩后无法缩小）；IPVS 开启后不可关闭；`ModifyClusterImage` 滚动重建全集群节点影响全局。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
 
 ### 步骤 1：修改集群属性（名称/描述/等级）
 
@@ -138,7 +145,7 @@ tccli tke ModifyClusterAttribute --ClusterId "<CLUSTER_ID>" --region <REGION> \
 
 ```bash
 tccli tke ModifyClusterTags --ClusterId "<CLUSTER_ID>" --region <REGION> \
-  --Tags '[{"Key":"billing","Value":"kerwinwjyan"},{"Key":"env","Value":"prod"}]' --SyncSubresource true
+  --Tags '[{"Key":"billing","Value":"<TAG_VALUE>"},{"Key":"env","Value":"prod"}]' --SyncSubresource true
 # expected: exit 0；异步任务用 DescribeBatchModifyTagsStatus 等到 Status=done 后再做后续写操作
 # expected: exit 0
 ```
@@ -149,7 +156,7 @@ tccli tke ModifyClusterTags --ClusterId "<CLUSTER_ID>" --region <REGION> \
 >
 > ⚠️ **标签策略约束**：账号的 CAM/标签策略可能限制允许的标签 Key/Value 对。传策略不允许的标签对报 `InvalidParameter.Param`（消息 `PARAM_ERROR(<key>:<value> is a pair of invalid tags)`）——策略可能允许某 Key 但限制其 Value（如同账号 `env:prod` 通过、`env:audit` 被拒）。修改前用 `DescribeClusters` 看集群现有合规标签，沿用策略允许的 Key/Value。
 >
-> ⚠️ **异步任务冲突**：`ModifyClusterTags` 是异步任务，连续调用（前一个任务仍在后台跑时）报 `FailedOperation.TradeCommon`（消息 `modify task ready running background, please wait until the task done`）。需等待前一次修改完成（约数十秒）后再调，或轮询 `DescribeClusters` 确认标签已稳定。
+> ⚠️ **异步任务冲突**：`ModifyClusterTags` 是异步任务，连续调用（前一个任务仍在后台执行时）报 `FailedOperation.TradeCommon`（消息 `modify task ready running background, please wait until the task done`）。需等待前一次修改完成（约数十秒）后再调，或轮询 `DescribeClusters` 确认标签已稳定。
 
 ### 步骤 3：修改集群镜像
 
@@ -202,11 +209,12 @@ tccli tke AddClusterCIDR --ClusterId "<CLUSTER_ID>" --region <REGION> \
 >
 > ⚠️ **多层前置约束**（按拦截顺序）：
 > 1. **CAM 标签授权**（首个拦截点）：与 [维护窗口](maintenance-window.md)/[Master 扩缩容](master-ops.md) 相同，要求目标集群带 `billing` 标签才放行。不带标签返回 `UnauthorizedOperation.CamNoAuth`（消息含 `qcs:resource_tag` `billing` 条件），到不了业务校验层。错误样本：`code:UnauthorizedOperation.CamNoAuth ... you are not authorized to perform operation (tke:AddClusterCIDR) ... has no permission`。
-> 2. **GR 集群约束**（CAM 放行后）：`AddClusterCIDR` 仅给 **GR 集群**增加 ClusterCIDR。CiliumOverlay 真机 **exit≠0**：`UnsupportedOperation.ClusterNotSuitAddClusterCIDR`（消息含 `CLUSTER NOT SUIT ADD CLUSTER CIDR` / `failed to get tke-bridge-agent`），**不会**静默成功；见 [CiliumOverlay](../networking/cilium-overlay.md)。集群网络类型由创建时 `ClusterAdvancedSettings.NetworkType` 决定（见 [创建集群](create.md)）。
+> 2. **GR 集群约束**（CAM 放行后）：`AddClusterCIDR` 仅给 **GR 集群**增加 ClusterCIDR。CiliumOverlay 实际调用 **exit≠0**：`UnsupportedOperation.ClusterNotSuitAddClusterCIDR`（消息含 `CLUSTER NOT SUIT ADD CLUSTER CIDR` / `failed to get tke-bridge-agent`），**不会**静默成功；见 [CiliumOverlay](../networking/cilium-overlay.md)。集群网络类型由创建时 `ClusterAdvancedSettings.NetworkType` 决定（见 [创建集群](create.md)）。
 > 3. **集群状态约束**：集群 Master 处于升级/变更中时调用亦报 `UnsupportedOperation.ClusterNotSuitAddClusterCIDR`（消息含 `master of cluster <ID> is updating, can't add clusterCIDR now`），须等集群稳定后重试——与「非 GR」同码不同消息，用消息区分。
 
 ### 步骤 6：获取集群 admin 角色（RBAC 授权前置）
 
+<!-- kubectl管理K8s原生资源(Pod/Service/Deployment)，tccli无K8s资源管理能力，非tccli边界 -->
 ```bash
 tccli tke AcquireClusterAdminRole --ClusterId "<CLUSTER_ID>" --region <REGION>
 # expected: exit 0, RequestId
@@ -304,13 +312,13 @@ tccli tke UpdateClusterKubeconfig --ClusterId "<CLUSTER_ID>" --region <REGION> \
 |:--------|:----------|:------------|:-----|
 | `Unknown options: --ClusterID` | 核对接口 | Level 系列用大写 `ClusterID`，其他用 `ClusterId` | 按接口要求用正确大小写 |
 | `InvalidParameterValue` (ClusterLevel) | `DescribeClusterLevelAttribute` | 等级不存在或不可用 | 用 `Enable=true` 的等级 |
-| `FailedOperation.TradeCommon` | GetClusterLevelPrice | `ClusterLevel` 值非真实枚举（传 `L10` 稳定触发，因 L10 不存在 → 计费中心 "all price code not match"） | 改用真实等级 `L5`/`L20`/`L50`/`L100`/`L200`/`L500`（`DescribeClusterLevelAttribute` 返回的 `Enable=true` 项）；非临时错误，重试无效 |
+| `FailedOperation.TradeCommon` | GetClusterLevelPrice | `ClusterLevel` 值非真实枚举（传 `L10` 稳定触发，因 L10 不存在 → 计费中心 "all price code not match"） | 改用真实等级 `L5`/`L20`/`L50`/`L100`/`L200`/`L500`/`L1000`/`L3000`/`L5000`（`DescribeClusterLevelAttribute` 返回的 `Enable=true` 项，L5 可询价）；非临时错误，重试无效 |
 | `ResourceNotFound` (ImageId) | `DescribeOSImages` | 镜像 ID 不存在 | 用真实镜像 ID |
 | `AuthFailure.UnauthorizedOperation` (ModifyMasterComponent，消息含 `has no permission` + `qcs:resource_tag` `billing` 条件) | `tccli tke DescribeClusters --ClusterIds '["<ID>"]' --filter "Clusters[0].TagSpecification[*].Tags[*]"` | 目标集群未带 CAM 要求的 `billing` 标签（首个拦截点） | 给集群加 `billing` 标签，或申请 `tke:ModifyMasterComponent` 权限。环境限制，非命令错误 |
 | `FailedOperation.OperationForbidden` (ModifyMasterComponent，消息含 `Chaos Experiment`/`混沌演练`) | 确认集群是否标记为混沌演练目标 | CAM 已放行，但 Master 组件停机演练仅对混沌演练集群放行（第二层业务约束） | 在控制台/CAM 标记集群为混沌演练目标；非演练场景勿用此接口 |
 | `InvalidParameter.Param` (ModifyClusterExtraArgs，消息含 `Args not found ... not in --feature-gates available args list`) | `DescribeClusterAvailableExtraArgs` 查该版本支持的参数 | 传了目标 K8s 版本不支持的 feature-gates 参数 | 用 `DescribeClusterAvailableExtraArgs` 返回的真实参数名 |
 | `InvalidParameter.Param` (ModifyClusterTags，消息含 `PARAM_ERROR(<key>:<value> is a pair of invalid tags)`) | `DescribeClusters` 看集群现有合规标签 | 账号 CAM/标签策略不允许该标签 Key/Value 对（策略可能允许 Key 但限制 Value） | 换用策略允许的 Key/Value 对（如 `env:audit` 被拒时改 `env:prod`） |
-| `FailedOperation.TradeCommon` (ModifyClusterTags，消息含 `modify task ready running background`) | 等待数十秒后重试 | 前一次 `ModifyClusterTags` 异步任务仍在后台跑，连续调用冲突 | 轮询 `DescribeClusters` 确认标签稳定后再调 |
+| `FailedOperation.TradeCommon` (ModifyClusterTags，消息含 `modify task ready running background`) | 等待数十秒后重试 | 前一次 `ModifyClusterTags` 异步任务仍在后台执行，连续调用冲突 | 轮询 `DescribeClusters` 确认标签稳定后再调 |
 | `UnauthorizedOperation.CamNoAuth` (AddClusterCIDR，消息含 `qcs:resource_tag` `billing` 条件) | `tccli tke DescribeClusters --ClusterIds '["<ID>"]' --filter "Clusters[0].TagSpecification[*].Tags[*]"` | 目标集群未带 CAM 要求的 `billing` 标签（首个拦截点，到不了业务校验） | 给集群加 `billing` 标签，或申请 `tke:AddClusterCIDR` 权限。环境限制 |
 | `UnsupportedOperation.ClusterNotSuitAddClusterCIDR` (AddClusterCIDR；消息含 `tke-bridge-agent` 或 `master ... is updating`) | `DescribeClusters` → `Property.NetworkType`；`DescribeClusterStatus` | 非 GR（如 CiliumOverlay）不适合扩网段；或 Master 升级中（同码不同消息） | Overlay/VPC-CNI：勿调；GR 且升级中：等 Running 后重试 |
 | `InternalError.UnexpectedInternal` (AddClusterCIDR，消息含 `eniipamd ... UpgradFailed, can't add cluster cidr`) | `DescribeClusters` 看 `Property`/`ClusterNetworkSettings`；查集群组件/升级态 | GR 集群但 eniipamd 升级失败等内部组件异常，扩网段被拒 | 先恢复/重建异常组件或换健康 GR 集群；勿与 Overlay 的 `ClusterNotSuitAddClusterCIDR` 混淆 |
@@ -323,7 +331,7 @@ tccli tke UpdateClusterKubeconfig --ClusterId "<CLUSTER_ID>" --region <REGION> \
 | ExtraArgs 修改后参数丢失 | `DescribeClusterExtraArgs` 对比备份 | 覆盖式未保留原参数 | 用备份值重新覆盖 |
 | 运行时变更后节点 NotReady | `DescribeClusterInstances` | 滚动重建未完成 | 等待滚动完成 |
 | 集群长时间非 Running | `DescribeClusterStatus` → `ClusterInstanceState` | 配置变更触发异常 | 查节点状态，必要时回退 |
-| `AddClusterCIDR` exit 0 但 `ClusterCIDR`/`MultiClusterCIDR` 未变 | `DescribeClusters` 复核网段字段 | 异步未落盘，或账号/白名单边界（CiliumOverlay 真机为 exit≠0，见上表） | 轮询复核；确认 `NetworkType=GR` |
+| `AddClusterCIDR` exit 0 但 `ClusterCIDR`/`MultiClusterCIDR` 未变 | `DescribeClusters` 复核网段字段 | 异步未生效，或账号/白名单边界（CiliumOverlay 实际调用 exit≠0，见上表） | 轮询复核；确认 `NetworkType=GR` |
 
 ## 收尾确认
 

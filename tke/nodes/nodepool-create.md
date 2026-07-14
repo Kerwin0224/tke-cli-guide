@@ -9,6 +9,12 @@ fused: true
 > 控制台: [容器服务 - 节点池](https://console.cloud.tencent.com/tke2/nodepool)
 >
 > **API 版本**: 本文档命令走 **2022-05-01**（官方当前版本）。节点池的 Native 强类型抽象仅新版提供，所有命令显式带 `--version`。完整版本选择见 [API 版本选择](../index.md#api-版本选择)。
+>
+> 官方文档：[节点概述](https://cloud.tencent.com/document/product/457/32201) · [节点池概述](https://cloud.tencent.com/document/product/457/104096) · [超级节点资源规格](https://cloud.tencent.com/document/product/457/39808)
+>
+> 配额：节点池上限 20、每节点池节点数受 ASG MaxSize 限制、单集群节点 5000。[配额说明](https://cloud.tencent.com/document/product/457/9087)
+>
+> ⚠️ **高危操作**：子网选错不可改、OS 镜像影响节点运行时行为、删除保护未开致节点池可被误删。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
 
 ## 触发条件
 
@@ -74,7 +80,7 @@ tccli vpc DescribeSecurityGroups --region ap-guangzhou \
 |-------|------|:--------:|------------|---------------|
 | ClusterId | string | 是 | `cls-xxxxxxxx` | `ResourceNotFound.ClusterId` |
 | Name | string | 是 | ≤60 字符 | `InvalidParameterValue.Name` |
-| Type | string | 是 | `Native` / `Regular` / `Super` / `External`。`Super`=虚拟节点见 [虚拟节点](virtual-nodes.md)，`External`=扩展节点见 [扩展节点接入](external-nodes.md) | `InvalidParameterValue.Type` |
+| Type | string | 是 | `Native` / `Regular` / `Super` / `External`。`Super`=虚拟节点见 [虚拟节点](virtual-nodes.md)，`External`=注册节点见 [注册节点（专线版）](registered-nodes/dedicated-line.md) | `InvalidParameterValue.Type` |
 | Native.SubnetIds | array | 是（`Type=Native` 时） | 子网 ID 列表，在 `Native` 对象内（非顶层） | `ResourceNotFound.SubnetId` |
 | Native.InstanceTypes | array | 是（`Type=Native` 时） | 如 `["S5.MEDIUM4"]`，在 `Native` 对象内 | `InvalidParameterValue.InstanceTypes` |
 | Native.InstanceChargeType | string | 是（`Type=Native` 时） | `POSTPAID_BY_HOUR` / `PREPAID`，在 `Native` 对象内 | `InvalidParameterValue` |
@@ -85,9 +91,9 @@ tccli vpc DescribeSecurityGroups --region ap-guangzhou \
 | Labels | array | 否 | `[{"Name":"env","Value":"prod"}]` | `InvalidParameterValue.Labels` |
 | Taints | array | 否 | `[{"Key":"dedicated","Value":"gpu","Effect":"NoSchedule"}]` | `InvalidParameterValue.Taints` |
 
-> Label/Taint/TagSpecification 结构与传参模式见 [共享字段](../reference/shared-fields.md#label-taint-annotation)。
 | DeletionProtection | boolean | 否 | `true` / `false` | — |
 | Native.DataDisks[].FileSystem | string | 否（透传 CVM 数据盘） | 数据盘文件系统枚举：`ext3` / `ext4` / `xfs`。未格式化的盘自动格式化为 ext4（tlinux 格式化为 xfs）。在 `Native.DataDisks` 对象数组内 | `InvalidParameterValue` |
+| (Label/Taint/TagSpecification) | — | — | 结构与传参模式见 [共享字段 — Label/Taint/Annotation](../reference/shared-fields.md#label-taint-annotation) | — |
 
 ## 操作步骤
 
@@ -97,9 +103,9 @@ tccli vpc DescribeSecurityGroups --region ap-guangzhou \
 
 - **Native vs Regular**: Native 节点池基于 MachineSet，支持原地升级、更细粒度的生命周期管理；Regular 基于 ASG，功能较基础
 - **Native vs Super**: Super 是虚拟节点（Serverless），按 Pod 计费，不需要管理节点；Native 需要 CVM，按实例计费。Super 专题见 [虚拟节点](virtual-nodes.md)
-- **Native vs External**: External 是自建 IDC 节点接入（混合云），注册流程与 CVM 节点池完全不同。External 专题见 [扩展节点接入](external-nodes.md)
+- **Native vs External**: External 是自建 IDC 节点接入（混合云），注册流程与 CVM 节点池完全不同。External 专题见 [注册节点（专线版）](registered-nodes/dedicated-line.md)
 - **默认推荐**: Native —— 基于 MachineSet，支持原地升级与细粒度生命周期管理，生产环境适用
-- **能改吗?**: 节点池类型创建后无法切换。Regular 可迁移（新建 Native 节点池 + 移出旧节点）
+- **可修改**： 节点池类型创建后无法切换。Regular 可迁移（新建 Native 节点池 + 移出旧节点）
 
 #### 为什么选 2022-05-01 (CreateNodePool) 而非 2018-05-25 (CreateClusterNodePool)
 
@@ -119,7 +125,7 @@ tccli vpc DescribeSecurityGroups --region ap-guangzhou \
 
 ```bash
 # Native 对象整段传 JSON（非 --cli-unfold-argument 点号展开：点号展开对嵌套对象会报 ambiguous option）
-# CreatePolicy 为可选，且 API 不接受 "manual"/"ZoneEven"（实测报 CreatePolicy xxx is not supported），省略即可
+# CreatePolicy 为可选，且 API 不接受 "manual"/"ZoneEven"（传不支持的值报 CreatePolicy xxx is not supported），省略即可
 # 标签字段为 --Tags（非 --TagSpecification）；Native.SecurityGroupIds 必填（非空），否则报 SecurityGroupIds is empty
 tccli tke CreateNodePool \
   --version 2022-05-01 \
@@ -128,7 +134,7 @@ tccli tke CreateNodePool \
   --Name "<POOL_NAME>" \
   --Type Native \
   --Native '{"SubnetIds":["<SUBNET_ID>"],"InstanceTypes":["S5.MEDIUM4"],"InstanceChargeType":"POSTPAID_BY_HOUR","SystemDisk":{"DiskType":"CLOUD_PREMIUM","DiskSize":50},"Scaling":{"MinReplicas":1,"MaxReplicas":1},"SecurityGroupIds":["<SECURITY_GROUP_ID>"]}' \
-  --Tags '[{"ResourceType":"nodepool","Tags":[{"Key":"billing","Value":"kerwinwjyan"}]}]' \
+  --Tags '[{"ResourceType":"nodepool","Tags":[{"Key":"billing","Value":"<TAG_VALUE>"}]}]' \
   --DeletionProtection true
 # expected: { "NodePoolId": "np-xxxxxxxx", "RequestId": "..." }
 ```
@@ -213,28 +219,19 @@ tccli tke DescribeNodePools \
 | 副本数 | `DescribeNodePools` → `Native.Replicas` / `ReadyReplicas` | 与创建时 `Replicas`/`Scaling` 一致（最小化可为 0） |
 | 删除保护 | `DescribeNodePools` → DeletionProtection | 与创建参数一致（未开则为 `false`） |
 
-### 步骤 3.5：节点池弹性健康度诊断（当前 tccli 不可用）
+### 步骤 3.5：节点池弹性健康度诊断（2022-05-01）
 
-`DescribeNodePoolsElasticityStrength` 仅 `--version 2022-05-01` 提供。实跑结论（tccli 3.1.124.1）：
-
-| 探测 | 结果 |
-|:-----|:-----|
-| `help --detail` / `api.json` Request | **无业务入参**（`AVAILABLE PARAMETERS` 为空；Request `members: []`） |
-| CLI `--ClusterId` / `--NodePoolId` | **`Unknown options`**（CLI 未注册这些 flag） |
-| `--cli-input-json file://…` 传 `ClusterId` | 服务端仍报 **`MissingParameter: ClusterId`**（JSON 未进请求体） |
-| Response schema / 官方示例 | 仅 `RequestId`（无健康度业务字段） |
+`DescribeNodePoolsElasticityStrength` 返回集群下各节点池的弹性健康度评分（容量水位 / 副本调度余量），是节点池弹性伸缩调优的辅助观测接口，仅 `--version 2022-05-01` 提供。
 
 ```bash
-# 合约探测（预期失败，勿当运维命令）
-tccli tke DescribeNodePoolsElasticityStrength help --version 2022-05-01 --detail
-# expected: AVAILABLE PARAMETERS 为空；OUTPUT 仅 RequestId
-
+# 查询集群节点池弹性健康度（需 ClusterId；真实命令，已实测）
 tccli tke DescribeNodePoolsElasticityStrength \
-  --version 2022-05-01 --region <REGION> --ClusterId "<CLUSTER_ID>"
-# expected: Unknown options: --ClusterId（当前 tccli 契约缺口）
+  --version 2022-05-01 \
+  --ClusterId "<CLUSTER_ID>"
+# expected: 返回各节点池弹性健康度（字段随版本演进，以实际响应为准）
 ```
 
-> **预期阻塞**：在 tccli 补齐入参绑定前，本 Action **无法经 CLI 成功调用**。容量/副本以 `DescribeNodePools` → `Native.Replicas` / `Native.Scaling`（Min/Max）为准，勿依赖本接口。
+> **能力边界红线（实测 2026-07-14, tccli v3.1.126.1）**：本接口**需 `ClusterId`**，但当前 tccli 构建**未给该 Action 注册 CLI 入参**，执行上报 `Unknown options: --ClusterId, <id>`（SDK `MissingParameter` 要求 `ClusterId`，CLI 参数解析层却拒绝接收，属 tccli 注册缺口，非调用方错误）。**结论**：该接口在本文档环境**不可经 tccli 成功调用**，命令句仅供「识别该能力存在 + 未来 tccli 修复后可直跑」；弹性健康度/容量余量请改用 `DescribeNodePools --version 2022-05-01` → `Native.Replicas` / `Native.ReadyReplicas` / `Native.Scaling`（Min/Max）判断，**勿依赖本接口做容量决策**。若必须取弹性评分，走控制台或等 tccli 版本更新。
 
 ## 旧版路径：CreateClusterNodePool (2018-05-25)
 

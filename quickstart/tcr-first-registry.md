@@ -6,9 +6,9 @@ fused: true
 # TCR: 5 分钟推送第一份镜像
 
 > 控制台: [TCR 控制台](https://console.cloud.tencent.com/tcr)
-> **Traceability**: [TCR 产品文档](https://cloud.tencent.com/document/product/1141)
+> 官方文档: [企业版快速入门](https://cloud.tencent.com/document/product/1141/39287) · [产品服务层级与容量限制](https://cloud.tencent.com/document/product/1141/104731) · [创建企业版实例](https://cloud.tencent.com/document/product/1141/51110)
 >
-> ⚠️ **计费警告**: 创建企业版实例即开始计费。`basic` 为按量计费最低规格，
+> ⚠️ **计费警告**: 创建企业版实例即开始计费。`basic` 为按量计费最低规格。
 > 在 [Step 4: 删除实例](#step-4-删除实例清理) 中销毁可停止计费。用完即删。
 >
 > **目标读者**: DevOps / SRE — 用 TCCLI + docker 管理 TCR 镜像仓库。
@@ -33,7 +33,7 @@ fused: true
 
 | # | 条件 | 验证命令 | 预期结果 |
 |:--|:-----|:--------|:---------|
-| 1 | TCCLI 已安装 (>= 3.0) | `tccli --version` | `3.1.124.1` 或更高 |
+| 1 | TCCLI 已安装 (>= 3.0) | `tccli --version` | 最新版本或更高 |
 | 2 | 凭证已配置 | `tccli tcr DescribeRegions` | 返回 `"RequestId"`，无 Error |
 | 3 | 目标地域可用 | `tccli tcr DescribeRegions` | `ap-guangzhou` 的 `Status` 为 `alluser` |
 | 4 | Docker 已安装 (>= v24) | `docker --version` | `Docker version 24.x.x` 或更高（29.6.0） |
@@ -44,10 +44,10 @@ fused: true
 
 ```bash
 tccli --version
-# expected: 3.1.124.1
+# expected: 最新版本或更高
 ```
 ```text
-3.1.124.1
+3.1.126.1
 ```
 
 ```bash
@@ -111,7 +111,9 @@ ap-nanjing    nj
 | 特性 | **basic (基础版)** | standard (标准版) | premium (高级版) |
 |:-----|:------------------|:------------------|:-----------------|
 | 计费 | 按量 (`RegistryChargeType: 0`) | 按量/包年包月 | 按量/包年包月 |
-| 存储 | 基础容量 | 更大 | 最大 |
+| 命名空间配额 | 50 | 100 | 500 |
+| 镜像仓库配额 | 1000 | 3000 | 5000 |
+| VPC 接入配额 | 5 | 10 | 20 |
 | 跨地域同步 | 不支持 | 支持 | 支持 |
 | 安全扫描 | 基础 | 增强 | 全面 |
 | 适用 | 个人/小团队试用 | 企业日常开发 | 核心生产 |
@@ -360,6 +362,7 @@ TCR_ENDPOINT="<PUBLIC_DOMAIN>"
 | `<TOKEN>` | 访问凭证 | JWT 字符串，有时效 | `CreateInstanceToken` 响应的 `Token` 字段 |
 | `<PUBLIC_DOMAIN>` | 公网域名 | `<REGISTRY_NAME>.tencentcloudcr.com` | `DescribeInstances` 响应的 `PublicDomain` 字段 |
 
+> docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）
 ```bash
 echo "$TCR_TOKEN" | docker login "$TCR_ENDPOINT" -u "$TCR_USERNAME" --password-stdin
 # expected: Login Succeeded
@@ -394,17 +397,20 @@ tccli tcr CreateNamespace \
 
 ### 3.4 推送镜像
 
+> docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）
 ```bash
 # 拉取轻量测试镜像
 docker pull alpine:latest
 # expected: Status: Downloaded newer image for alpine:latest
 ```
 
+> docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）
 ```bash
 # 打标签（格式: <PUBLIC_DOMAIN>/<NAMESPACE_NAME>/<REPO_NAME>:<TAG>）
 docker tag alpine:latest "$TCR_ENDPOINT/<NAMESPACE_NAME>/<REPO_NAME>:<TAG>"
 ```
 
+> docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）
 ```bash
 # 推送
 docker push "$TCR_ENDPOINT/<NAMESPACE_NAME>/<REPO_NAME>:<TAG>"

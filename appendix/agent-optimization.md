@@ -46,6 +46,20 @@ tccli cvm DescribeInstances --region ap-guangzhou \
 
 > ⚠️ `--filter` 字段名必须匹配 API 实际响应键名。首次用某接口时，先 `--Limit 1` 看响应结构，再构造 `--filter`。
 
+> ⚠️ **多键投影 + `--output text` 的列序规则**：投影 `{a:X, b:Y}` 在 `--output json` 下按你写的 key 序输出；但 `--output text` 下**列序由 API 响应对象的字段声明序决定，不跟投影 key 序**。若要按固定列序解析（如 `awk '{print $1}'` 取某列），用 `--output json` 或在投影里只取单字段；多字段 text 输出适合人眼看 tab 分隔，不适合按列号机器解析。
+
+```bash
+# json 模式：按投影 key 序输出，适合机器按列解析
+tccli tcr DescribeInstances --region ap-guangzhou \
+  --filter "Registries[].{name:RegistryName,id:RegistryId}" --output json
+# → [{"name": "...", "id": "..."}]   列序 = 投影 key 序
+
+# text 模式：列序 = 响应声明序（RegistryId 在 RegistryName 前），与投影 key 序无关
+tccli tcr DescribeInstances --region ap-guangzhou \
+  --filter "Registries[].{name:RegistryName,id:RegistryId}" --output text
+# → tcr-xxxx   <name>   列序 = RegistryId, RegistryName（声明序），非 name, id
+```
+
 ### 2. 模板驱动 — 确定入参
 
 **何时用**：创建/修改资源，参数复杂或反复执行。

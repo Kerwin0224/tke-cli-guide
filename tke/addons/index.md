@@ -9,6 +9,14 @@ doc_type: Overview
 
 插件是封装好的 Kubernetes 组件，一键安装到集群。TKE 提供官方插件列表，每个插件有版本与配置。
 
+## 触发条件
+
+- 你要给集群安装/更新/卸载组件（存储 `cbs`、监控 `monitoragent`、网络 `ip-masq-agent`/`eniipamd` 等）— 去 [插件管理](manage.md)（`InstallAddon`/`UpdateAddon`/`DeleteAddon`）
+- 你要查某插件当前状态/版本/配置（如 `eniipamd` 是否 `Phase=Succeeded`）— 用 `DescribeAddon`，见 [快速检查](#快速检查)
+- 你不确定当前集群有哪些可用插件及版本 — 用 `GetTkeAppChartList`/`DescribeAddonValues` 核对，见 [常见插件](#常见插件)
+- 你要装的不是官方插件而是自定义应用 — 插件本质是 Helm Release，去 [应用发布](../releases/manage.md)
+- 插件 `Phase` 异常（非 `Succeeded`）— 看 [故障排查](../troubleshooting.md)
+
 ## 核心概念
 
 | 概念 | 含义 | 为什么重要 |

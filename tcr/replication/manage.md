@@ -7,6 +7,7 @@ fused: true
 
 > 配置 TCR 企业版实例间的镜像跨地域同步，将主实例的镜像自动复制到从实例。
 > 控制台: [实例同步](https://console.cloud.tencent.com/tcr/sync) · [实例复制](https://console.cloud.tencent.com/tcr/replication)（运维中心「同步复制」下两个入口）。**基础版不支持**实例同步——控制台在 basic 实例上打开同步页会提示「基础版实例不支持，请前往实例管理调整实例规格」；API 返回 `UnsupportedOperation: only supports standard and premium instance`。
+> 官方文档: [同实例多地域复制镜像](https://cloud.tencent.com/document/product/1141/52095) · [跨实例同步镜像](https://cloud.tencent.com/document/product/1141/41945)
 
 ## 触发条件
 
@@ -209,6 +210,7 @@ tccli tcr DescribeReplicationInstanceCreateTasks --region <SOURCE_REGION> \
 
 ## 收尾确认
 
+> docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）
 ```bash
 # ③ 跨步骤汇总：从实例创建 + 同步规则就绪 + 同步状态完成 一次性核对（Verify 逐项查，这里汇总三步产物）
 tccli tcr DescribeReplicationInstances --region <SOURCE_REGION> --RegistryId "<SOURCE_REGISTRY_ID>" \

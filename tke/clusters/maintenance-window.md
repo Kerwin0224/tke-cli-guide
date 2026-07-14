@@ -10,6 +10,8 @@ fused: false
 
 > 本文档所有 Action 属 **TKE 2018-05-25**（旧版独有，新版无）。注意集群级用 `ClusterID`（大写 ID）寻址，全局级用 `TargetRegions` + `ID` 寻址——契约不同，不可类推。
 
+> 官方文档：[基本概念](https://cloud.tencent.com/document/product/457/45598) · [集群生命周期](https://cloud.tencent.com/document/product/457/32188) · [常见高危操作](https://cloud.tencent.com/document/product/457/39539)
+
 ## 概述
 
 维护窗口（MaintenanceWindow）限定 TKE **计划升级**（控制面与集群内系统组件等）可执行的时间段。两层模型：
@@ -29,6 +31,8 @@ fused: false
 | 紧急例外 | 安全漏洞等紧急变更**可能不遵循**维护窗口，直接收敛风险 |
 
 > 启用计划升级前须已配地域级或集群级维护窗口，否则无法启用。计划升级覆盖托管控制面与集群内系统组件（如 coredns），**暂不包括用户节点组件**。
+
+> 配额：无额外限制。[配额说明](https://cloud.tencent.com/document/product/457/9087)
 
 ## 触发条件
 
@@ -68,6 +72,8 @@ fused: false
 > `DayOfWeek` 枚举值全集：`MO`/`TU`/`WE`/`TH`/`FR`/`SA`/`SU`。
 
 ## 应用
+
+> ⚠️ **高危操作**：维护窗口设置不当 → 自动升级中断业务高峰；确认维护时段与业务低峰匹配，排除了封网期。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
 
 ### 步骤 1：创建集群级维护窗口
 
@@ -168,7 +174,7 @@ tccli tke DescribeGlobalMaintenanceWindowAndExclusions --region <REGION> --Limit
 | 全局窗口存在 | `DescribeGlobalMaintenanceWindowAndExclusions` | `TotalCount >= 1`，含目标 `ID` |
 | 排除项生效 | 同上，查 `Exclusions` | 含配置的排除时段 |
 
-> ⚠️ **Filter 名受限**：`DescribeClusterMaintenanceWindowAndExclusions` 的 `Filters[].Name` 真机接受 **`ClusterID`**（大写 ID；无窗口时 `TotalCount=0`）。`cluster-id` / `clusterId` / `ClusterId` 报 `InvalidParameter`（`invalid filter name`）。无窗口时仍可全量 `--Limit` + 客户端按 `ClusterID` 过滤。
+> ⚠️ **Filter 名受限**：`DescribeClusterMaintenanceWindowAndExclusions` 的 `Filters[].Name` 实际接受 **`ClusterID`**（大写 ID；无窗口时 `TotalCount=0`）。`cluster-id` / `clusterId` / `ClusterId` 报 `InvalidParameter`（`invalid filter name`）。无窗口时仍可全量 `--Limit` + 客户端按 `ClusterID` 过滤。
 
 ## 回滚
 

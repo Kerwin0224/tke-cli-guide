@@ -9,6 +9,14 @@ doc_type: Overview
 
 TCR 镜像生命周期管理自动化处理镜像版本的保留、保护与清理，避免旧版本堆积导致存储超限或被误覆盖。
 
+## 触发条件
+
+- 你要按规则自动删旧留新镜像版本（保留最近 N 个或按天保留）— 用 `CreateTagRetentionRule`，见 [版本保留](tag-retention.md)
+- 你要禁止覆盖已存在的 Tag（防止 `latest` 被推送同名版本覆盖）— 用 `CreateImmutableTagRules`，见 [不可变标签](immutable-tags.md)
+- 你删除 Tag 后存储未释放，需回收底层残留镜像层 — 用 `CreateGCJob`，见 [GC 垃圾回收任务](tag-retention.md#gc-垃圾回收任务)
+- 你要在镜像推送/删除时触发外部回调 — 用 `CreateWebhookTrigger`，见 [Webhook 触发器](tag-retention.md#webhook-触发器)
+- 你混淆「版本保留」与「制品清理 GC」（保留删 Tag 信息，GC 才回收层数据）— 看 [生命周期子主题](#生命周期子主题) 下方说明
+
 ## 核心概念
 
 | 概念 | 含义 | 为什么重要 |

@@ -7,12 +7,18 @@ fused: true
 
 > 控制台: [容器服务控制台 - 节点池](https://console.cloud.tencent.com/tke2/nodepool)
 > 调整节点池的期望节点数（DesiredCapacity），触发 ASG 扩容（加节点）或缩容（驱逐并移除节点）。异步操作。
+>
+> 官方文档：[节点概述](https://cloud.tencent.com/document/product/457/32201) · [集群扩缩容](https://cloud.tencent.com/document/product/457/32190) · [超级节点资源规格](https://cloud.tencent.com/document/product/457/39808)
+>
+> 配额：扩缩不超节点池 Min/Max 区间限制、单集群节点 5000、ASG 冷却时间对账。[配额说明](https://cloud.tencent.com/document/product/457/9087)
+>
+> ⚠️ **高危操作**：缩容选错策略致关键 Pod 被误驱逐、扩容遇 ResourceInsufficient、ASG 冷却期不一致致缩容不生效。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
 
 ## 触发条件
 
 - DescribeClusterNodePools 返回 LifeState=normal 但 DesiredNodesNum 不满足业务容量（需扩容或缩容）
 - 集群节点数已达 MaxNodesNum 上限，或扩容报 `LimitExceeded`/`ResourceInsufficient.SpecifiedInstanceType`（机型售罄）需调区间或换机型
-- 你遇到扩缩容节点池问题想查诊断路径 — 看 [故障恢复]段
+- 你遇到扩缩容节点池问题需查诊断路径 — 看 [故障恢复]段
 
 
 ## 概述
@@ -72,7 +78,7 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet
 #### 为什么区分扩缩容策略
 
 - **扩容**: 直接设 `DesiredCapacity` 为目标值，ASG 自动建 CVM。失败模式主要是机型售罄/配额不足
-- **缩容**: ASG 按"移出最老节点"策略缩容，**TKE 不感知具体缩容节点**，无提前驱逐/封锁。要安全缩容，先手动 `DrainClusterVirtualNode` 或 `kubectl drain`
+- **缩容**: ASG 按"移出最老节点"策略缩容，**TKE 不跟踪具体被缩容节点**，无提前驱逐/封锁。要安全缩容，先手动 `DrainClusterVirtualNode` 或 `kubectl drain`
 - **默认推荐**: 缩容前先 drain 目标节点，避免 Pod 被强制终止
 - **弹性伸缩**: 若节点池开了 `EnableAutoscale`，不建议手动改 `DesiredCapacity`——让 ASG 按负载自动调整
 
@@ -267,6 +273,8 @@ tccli tke ModifyClusterNodePool --region ap-guangzhou \
 
 ## 收尾确认
 
+> kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
+<!-- kubectl验证tccli扩缩容操作结果，kubectl get nodes观察K8s层节点Ready与Pod调度状态，非tccli边界 -->
 ```bash
 # ②业务可用性端到端: 扩容新节点不仅 InstanceState=running 须 K8s Ready（缩容后无 Pod Pending）
 # 扩容后 kubectl get nodes 看新节点真 Ready（InstanceState=running 不等于 K8s Ready，kubelet 注册需时间）

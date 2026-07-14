@@ -10,20 +10,24 @@ fused: false
 
 > 本文档 Action 属 **TKE 2018-05-25**（旧版独有，新版无）。备份存储位置是全局命名资源，不绑定集群——`--ClusterId` 不是其入参。
 
+> 官方文档：[基本概念](https://cloud.tencent.com/document/product/457/45598) · [常见高危操作](https://cloud.tencent.com/document/product/457/39539)
+
 ## 概述
 
 TKE 集群备份（基于 Velero）将集群资源（Deployment/Service/ConfigMap 等）备份到对象存储（COS）。备份存储位置（BackupStorageLocation）是备份的目标 COS 桶配置——配好位置后，集群备份会写入该桶。
 
-> ⚠️ **产品边界（灾备生命周期三段，tcli 只覆盖第一段）**：
-> - **配置存储位置** → tcli `CreateBackupStorageLocation`（本文档）
-> - **执行一次备份** → **Velero 插件层**（`kubectl` 调 Velero CRD，非 tcli）
-> - **从备份恢复** → **Velero 插件层**（`kubectl` 调 Velero CRD，非 tcli）
+> ⚠️ **产品边界（灾备生命周期三段，TCCLI 只覆盖第一段）**：
+> - **配置存储位置** → tccli `CreateBackupStorageLocation`（本文档）
+> - **执行一次备份** → **Velero 插件层**（`kubectl` 调 Velero CRD，非 tccli）
+> - **从备份恢复** → **Velero 插件层**（`kubectl` 调 Velero CRD，非 tccli）
 >
 > ⚠️ **恢复边界**：当前**仅支持 Kubernetes 资源对象**的备份与恢复；**不支持**云硬盘 CBS、负载均衡 CLB 等云资源的恢复。跨集群恢复要求备份组件 ≥1.1.0。
 >
-> tke API 无 `ExecuteBackup`/`Restore` Action——备份/恢复执行由 Velero（集群内插件）承担。本文覆盖 tcli 能做的存储位置 CRUD，并指路 Velero kubectl 命令完成灾备闭环（见 [执行备份与恢复](#执行备份与恢复velero-边界) 段）。
+> tke API 无 `ExecuteBackup`/`Restore` Action——备份/恢复执行由 Velero（集群内插件）承担。本文覆盖 TCCLI 能做的存储位置 CRUD，并指路 Velero kubectl 命令完成灾备闭环（见 [执行备份与恢复](#执行备份与恢复velero-边界) 段）。
 
 > ⚠️ 备份存储位置是**全局命名资源**，不绑定集群（`--ClusterId` 不是其入参）。一个位置可被多个集群共用。多地域 TKE 集群备份到同一仓库无需重复创建。单账号最多创建 **100 个**备份仓库，超出需清理闲置仓库。
+
+> 配额：COS 桶桶名须 `tke-backup` 前缀；单账号最多 **100** 个备份仓库；COS 存储另有容量限制。[配额说明](https://cloud.tencent.com/document/product/457/9087)
 
 ## 触发条件
 
@@ -72,6 +76,8 @@ TKE 集群备份（基于 Velero）将集群资源（Deployment/Service/ConfigMa
 > `DescribeBackupStorageLocations` 用 `Names[]`，不接受 `--ClusterId`。
 
 ## 操作步骤
+
+> ⚠️ **高危操作**：恢复覆盖现有资源不可逆；备份过期清理策略不当致数据丢失；跨 Region 恢复需验证兼容性（当前仅支持 K8s 资源对象，不支持 CBS/CLB 云资源恢复）。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
 
 ### 步骤 1：创建合规 COS 桶
 
@@ -132,17 +138,20 @@ tccli tke DescribeBackupStorageLocations --region <REGION>
 
 ## 执行备份与恢复（Velero 边界）
 
-> 以下命令用 **Velero CLI**（非 tcli、非 kubectl 内置）——tke API 不提供执行备份/恢复的 Action，灾备执行由 Velero 集群内插件承担。前置：集群已装 Velero 插件（见 [插件管理](../addons/manage.md)）、本地装 Velero CLI（`velero` 命令，见 [Velero 安装文档](https://velero.io/docs/main/install-overview/)）、且配好本篇的存储位置。
+> 以下命令用 **Velero CLI**（非 tccli、非 kubectl 内置）——tke API 不提供执行备份/恢复的 Action，灾备执行由 Velero 集群内插件承担。前置：集群已装 Velero 插件（见 [插件管理](../addons/manage.md)）、本地装 Velero CLI（`velero` 命令，见 [Velero 安装文档](https://velero.io/docs/main/install-overview/)）、且配好本篇的存储位置。
 >
 > ⚠️ `kubectl create backup/restore` **不是有效命令**——`kubectl create` 仅支持内置资源，Velero 备份/恢复须用 `velero` CLI 或提交 Backup/Restore CRD YAML。
 
 ### 前置：确认 Velero 已装
 
+> Velero CLI（非 tccli；tke API 无备份执行 Action，灾备由 Velero 插件承担）
+<!-- kubectl检查Velero Pod状态，tccli无K8s Pod管理能力，非tccli边界 -->
 ```bash
 kubectl get pods -n velero-system
 # expected: velero pod Running（若不存在，先在 TKE 控制台或 addons 装 Velero 插件）
 ```
 
+> Velero CLI（非 tccli；tke API 无备份执行 Action，灾备由 Velero 插件承担）
 ```bash
 velero version --client-only
 # expected: Velero CLI 版本号（若 command not found，装 Velero CLI）
@@ -150,12 +159,15 @@ velero version --client-only
 
 ### 执行一次备份
 
+> Velero CLI（非 tccli；tke API 无备份执行 Action，灾备由 Velero 插件承担）
+<!-- velero执行K8s资源备份，tccli无备份执行Action，非tccli边界 -->
 ```bash
 # 备份 default 命名空间所有资源到已配的存储位置
 velero backup create <BACKUP_NAME> --include-namespaces default
 # expected: Backup request submitted successfully
 ```
 
+> Velero CLI（非 tccli；tke API 无备份执行 Action，灾备由 Velero 插件承担）
 ```bash
 # 查看备份状态（BackupPhase 由 New → InProgress → Completed）
 velero backup get <BACKUP_NAME>
@@ -166,6 +178,8 @@ velero backup get <BACKUP_NAME>
 
 > ⚠️ 恢复只会还原 K8s 对象（Deployment/Service/ConfigMap 等）。**PVC 背后的 CBS、Service/Ingress 关联的 CLB 不会随备份恢复**——须另行重建云资源或改 YAML 绑定已有资源。
 
+> Velero CLI（非 tccli；tke API 无备份执行 Action，灾备由 Velero 插件承担）
+<!-- velero执行K8s资源恢复，tccli无恢复Action，非tccli边界 -->
 ```bash
 # 从指定备份恢复（恢复到原命名空间）
 velero restore create --from-backup <BACKUP_NAME>
@@ -175,7 +189,7 @@ velero restore get
 # expected: <RESTORE_NAME> STATUS=Completed
 ```
 
-> Velero 是 K8s 原生灾备工具，命令以 Velero CRD（`kubectl get backup/restore`）操作，非 tcli。完整 Velero 文档见 [Velero 官方](https://velero.io/docs/)。tcli 仅管存储位置 CRUD。
+> Velero 是 K8s 原生灾备工具，命令以 Velero CRD（`kubectl get backup/restore`）操作，非 tccli。完整 Velero 文档见 [Velero 官方](https://velero.io/docs/)。tccli 仅管存储位置 CRUD。
 
 ## 清理
 
@@ -200,6 +214,8 @@ tccli tke DeleteBackupStorageLocation --region <REGION> --Name <LOCATION_NAME>
 
 ## 收尾确认
 
+> Velero CLI（非 tccli；tke API 无备份执行 Action，灾备由 Velero 插件承担）
+<!-- kubectl检查Velero插件就绪，tccli无K8s Pod管理能力，非tccli边界 -->
 ```bash
 # 衔接下一步前置：Velero 插件就绪（backup.md 声明的备份执行前置，Verify 查 State=Available 但没查 Velero 插件能否执行备份）
 kubectl get pods -n velero-system
@@ -212,7 +228,7 @@ tccli tke DescribeBackupStorageLocations --region <REGION> \
 # expected: state=Available → 存储位置可达
 ```
 
-> 存储位置 `State=Available` + Velero 插件 pod `Running` = 备份前置就绪，可衔接 [执行备份与恢复（Velero 边界）](#执行备份与恢复velero-边界) 段。**业务可用性边界**：tcli 仅管存储位置 CRUD，执行备份须 Velero 插件就绪（见 [§概述](#概述) 产品边界警告）；Velero 未装时存储位置配好也无法备份。
+> 存储位置 `State=Available` + Velero 插件 pod `Running` = 备份前置就绪，可衔接 [执行备份与恢复（Velero 边界）](#执行备份与恢复velero-边界) 段。**业务可用性边界**：tccli 仅管存储位置 CRUD，执行备份须 Velero 插件就绪（见 [§概述](#概述) 产品边界警告）；Velero 未装时存储位置配好也无法备份。
 
 ## 下一步
 

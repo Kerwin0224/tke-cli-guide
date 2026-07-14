@@ -38,7 +38,7 @@ fused: true
 
 ```bash
 tccli --version
-# expected: 3.1.124.1
+# expected: 3.1.126.1 或更高
 
 tccli tke DescribeRegions \
     --filter "RegionInstanceSet[0].{name:RegionName,status:Status}" --output text
@@ -230,6 +230,7 @@ tccli tke DescribeClusterSecurity --region <REGION> --ClusterId <CLUSTER_ID> \
 cls-xxxxxxxx.ccs.tencent-cloud.com
 ```
 
+> kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
 ```bash
 # 维度 4: kubeconfig 可用
 tccli tke DescribeClusterSecurity --region <REGION> --ClusterId <CLUSTER_ID> \

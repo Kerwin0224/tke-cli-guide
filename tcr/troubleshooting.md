@@ -62,6 +62,7 @@ tccli tcr CreateInstanceToken --region ap-guangzhou \
 
 **验证**：
 
+> docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）
 ```bash
 docker login <REGISTRY_DOMAIN> --username <USERNAME> --password <TOKEN>
 # expected: Login Succeeded
@@ -117,7 +118,7 @@ curl -s -o /dev/null -w "%{http_code}" https://<REGISTRY_DOMAIN>/v2/
 **诊断**：
 
 ```bash
-# 0. 先确认公网端点（Closed 时 DescribeSecurityPolicies 真机 ResourceNotFound: Failed to get security group id）
+# 0. 先确认公网端点（Closed 时 DescribeSecurityPolicies 报 ResourceNotFound: Failed to get security group id）
 tccli tcr DescribeExternalEndpointStatus --region ap-guangzhou --RegistryId "<REGISTRY_ID>"
 # expected: Status=Opened；若 Closed → 先 ManageExternalEndpoint --Operation Open
 
@@ -145,6 +146,7 @@ tccli tcr CreateSecurityPolicy --region ap-guangzhou \
 
 **验证**：
 
+> docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）
 ```bash
 docker pull <REGISTRY_DOMAIN>/<NAMESPACE>/<REPO>:<TAG>
 # expected: 镜像拉取成功，不再 403
@@ -191,6 +193,7 @@ tccli tcr DescribeRepositories --region ap-guangzhou --RegistryId "<REGISTRY_ID>
 
 **修复**：
 
+> docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）
 ```bash
 # 用正确的路径重新推送
 docker tag <IMAGE> <REGISTRY_DOMAIN>/<CORRECT_NAMESPACE>/<CORRECT_REPO>:<TAG>

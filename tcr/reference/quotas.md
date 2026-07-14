@@ -4,7 +4,7 @@ subtype: 8C
 ---
 # TCR 配额与限制
 
-> 企业版按实例规格（basic / standard / premium）区分配额；个人版为共享服务、另有限额。数值以官方「产品服务层级与容量限制」为准，调额后以官网最新表为准。超限时常见 `LimitExceeded` / `FailedOperation.QuotaExceed`（以真机 `Error.Code` 为准）。
+> 企业版按实例规格（basic / standard / premium）区分配额；个人版为共享服务、另有限额。数值以官方「产品服务层级与容量限制」为准，调额后以官网最新表为准。超限时常见 `LimitExceeded` / `FailedOperation.QuotaExceed`（以实际 `Error.Code` 为准）。
 
 ## 企业版实例配额（按规格）
 

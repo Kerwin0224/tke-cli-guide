@@ -7,6 +7,7 @@ fused: true
 
 > 创建容器镜像服务 (TCR) 企业版实例，用于存储和管理 Docker/OCI 镜像。
 > 控制台: [实例管理](https://console.cloud.tencent.com/tcr/?rid=1) →「新建」进入 [购买页](https://buy.cloud.tencent.com/tcr)（单页选购，非多步向导）
+> 官方文档: [产品概述](https://cloud.tencent.com/document/product/1141/39278) · [产品服务层级与容量限制](https://cloud.tencent.com/document/product/1141/104731) · [企业版快速入门](https://cloud.tencent.com/document/product/1141/39287) · [创建企业版实例](https://cloud.tencent.com/document/product/1141/51110)
 
 ## 触发条件
 
@@ -35,7 +36,7 @@ TCR 实例是镜像存储的容器 —— 每个实例有独立的域名、存�
 
 ```bash
 tccli --version
-# expected: 3.1.124.1 或更高
+# expected: 最新版本或更高
 
 tccli tcr DescribeInstances --region ap-guangzhou
 # expected: { "TotalCount": ..., "Registries": [...] }  → 凭证有效
@@ -87,7 +88,7 @@ tccli tcr DescribeRegions
 - **basic vs standard**: basic 配额 NS 50 / 仓库 1000，适合入门；standard 为 100 / 3000，更适合生产；`basic` 不支持跨实例自动同步
 - **按量 vs 包年包月**: API 默认按量（`RegistryChargeType: 0`）；购买页建议长期使用优先包年包月（防欠费回收）。文档同时保留两种路径
 - **规格选择**: `basic` + 按量 —— 熟悉后再升级规格或转预付费
-- **能改吗?**: 规格可以升级 (basic→standard→premium)，不能降级。计费模式从按量可转包年包月，反之需退订
+- **可修改**： 规格可以升级 (basic→standard→premium)，不能降级。计费模式从按量可转包年包月，反之需退订
 
 ### 步骤 2：创建实例
 
@@ -149,7 +150,7 @@ tccli tcr DescribeInstances \
 
 ## 清理
 
-> ⚠️ 删除 TCR 实例会**级联删除**实例内所有命名空间/仓库/镜像（数据永久丢失）；`RegistryChargeType=1` 预付费实例删除不退费；自定义域名与 VPC 链接同时删除。TCR Instance 无独立删除章，本段是唯一删除入口。
+> ⚠️ 删除 TCR 实例会**级联删除**实例内所有命名空间/仓库/镜像（数据永久丢失，不可恢复）；`RegistryChargeType=1` 预付费实例删除不退费；自定义域名与 VPC 链接同时删除。TCR Instance 无独立删除章，本段是唯一删除入口。
 
 > 若需保留某些镜像，先 `tccli tcr DuplicateImage` 复制到其他实例（见 [推送拉取镜像](../images/push-pull.md)）。
 
@@ -228,6 +229,7 @@ tccli tcr DescribeInstanceAllNamespaces --Limit 50 --region <REGION>
 
 ## 收尾确认
 
+> docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）
 ```bash
 # 衔接下一步前置：实例 Running 可进入创建命名空间/仓库（Verify 查字段存在，这里查能否进入下一阶段）
 tccli tcr DescribeInstances --region ap-guangzhou --Registryids '["<REGISTRY_ID>"]' \

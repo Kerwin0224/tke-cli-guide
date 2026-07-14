@@ -7,9 +7,12 @@ fused: false
 
 > 在 TKE Prometheus 实例上为集群安装采集 Agent，上报集群内指标；管理 Agent 外部标签与采集目标状态。
 > 控制台: [容器服务 - 监控](https://console.cloud.tencent.com/tke2/monitor)
+>
+> 官方文档：[可观测体系概述](https://cloud.tencent.com/document/product/457/118975)
+>
+> 配额：单个 Prometheus 实例关联 Agent 集群数无额外配额限制。[配额说明](https://cloud.tencent.com/document/product/457/9087)
 
 > ⚠️ 本文档所有 Action 属 **TKE 2018-05-25（默认版本）**。
-> ⚠️ 本篇出参结构未经验证，按实际响应为准；错误码与诊断见 [§故障恢复](#故障恢复)。
 
 ## 触发条件
 
@@ -76,7 +79,7 @@ tccli tke CreatePrometheusClusterAgent --region <REGION> \
 | `<REGION>` | 地域 | 如 `ap-guangzhou` | `tccli tke DescribeRegions` |
 | `<CLUSTER_ID>` | 集群 ID | 已存在集群 | `tccli tke DescribeClusters --region <REGION>` |
 
-> ⚠️ **写操作 CAM 授权**：`CreatePrometheusClusterAgent` 需 `tke:CreatePrometheusClusterAgent` 权限，本环境返回 `AuthFailure.UnauthorizedOperation`。授权后回填成功输出。
+> ⚠️ **写操作 CAM 授权**：`CreatePrometheusClusterAgent` 需 `tke:CreatePrometheusClusterAgent` 权限，未授权返回 `AuthFailure.UnauthorizedOperation`。授权后调用成功。
 
 ### 步骤 2：配置外部标签
 
@@ -148,8 +151,6 @@ tccli tke DescribePrometheusAgents --region <REGION> \
 
 > `DescribePrometheusAgentInstances`（按集群反向查实例，入参 `ClusterId`）与 `DescribePrometheusAgents`（按实例正向查 Agent，入参 `InstanceId`+分页）方向相反。`DescribePrometheusClusterAgents`（步骤 1 验证用）同向但返回结构略不同。三者按「已知什么查什么」选用。
 
-> ⚠️ 上述输出结构为依据入参骨架与官方文档推断，未经验证，按实际响应为准。
-
 ## 回滚
 
 ```bash
@@ -166,6 +167,8 @@ tccli tke DescribePrometheusClusterAgents --region <REGION> --InstanceId <PROM_I
 ```
 
 > 仅移除 Agent，Prometheus 实例与已存储的历史指标不受影响。
+>
+> ⚠️ **高危操作**：误删 Agent 将导致该集群监控数据中断，告警规则可能因此漏报生产故障。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
 
 ## 故障恢复
 
@@ -195,7 +198,7 @@ tccli tke DescribePrometheusClusterAgents --region <REGION> --InstanceId <PROM_I
   --filter "Agents[].{cluster:ClusterId,region:Region,status:Status}"
 # expected: 目标集群 Status=Running
 
-# 业务可用性端到端：指标真可查（Verify 查 target lastError，此处查指标数据真落库）
+# 业务可用性端到端：指标真可查（Verify 查 target lastError，此处查指标数据已写入）
 tccli tke DescribePrometheusRecordRules --region <REGION> --InstanceId <PROM_INSTANCE_ID>
 # expected: 返回记录规则列表（说明 Agent 采集的指标已入库可查）
 

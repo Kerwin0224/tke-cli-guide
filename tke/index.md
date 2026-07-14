@@ -28,7 +28,7 @@ graph TD
 | 开发者 | 部署应用到 K8s，不需要管 Master | [Quickstart](../quickstart/tke-first-cluster.md) |
 | 运维/SRE | 管理集群生命周期、节点、监控 | [集群管理](clusters/index.md) |
 | 安全工程师 | 审计、加密、认证、权限控制 | [安全](security/index.md) |
-| 架构师 | Serverless、边缘计算、混合云接入 | [专用工作负载](specialized/index.md) + [扩展节点](nodes/external-nodes.md) |
+| 架构师 | Serverless、边缘计算、混合云接入 | [专用工作负载](specialized/index.md) + [注册节点](nodes/registered-nodes/overview.md) |
 
 ## 触发条件
 
@@ -59,7 +59,7 @@ graph TD
 
 > 控制台「新建集群」是进入 TKE 的第一个决策流。下表把控制台决策步映射到 tccli Action/字段与承载文档，标明每步调用哪个 Action、哪篇文档展开。控制台按决策步组织，tccli 按 Action 组织——本表是两者间的地图。
 >
-> **先选集群形态**（控制台第一屏）：TKE 标准集群（`CreateCluster`，默认）/ Serverless·EKS 集群（[存量运维](specialized/eks-cluster.md)，**新建入口已关闭**；新建免 CVM 用标准集群 + [虚拟节点](nodes/virtual-nodes.md)，两步）/ 注册集群（与 [注册节点](nodes/external-nodes.md) 不同；控制台标即将下线）。控制台「容器实例」CPU/GPU 不在本向导内，见 [容器实例](specialized/eks-cluster.md#创建容器实例部署-pod)。
+> **先选集群形态**（控制台第一屏）：TKE 标准集群（`CreateCluster`，默认）/ Serverless·EKS 集群（[存量运维](specialized/eks-cluster.md)，**新建入口已关闭**；新建免 CVM 用标准集群 + [虚拟节点](nodes/virtual-nodes.md)，两步）/ 注册集群（与 [注册节点](nodes/registered-nodes/overview.md) 不同；控制台标即将下线）。控制台「容器实例」CPU/GPU 不在本向导内，见 [容器实例](specialized/eks-cluster.md#创建容器实例-部署-pod)。
 
 ### 托管集群（4 步）
 
@@ -82,7 +82,7 @@ graph TD
 >
 > **创建后改不了（须在创建时定）**：地域、网络插件（`NetworkType`；仅 VPC-CNI 可事后开启）、Service CIDR 等——变更须重建集群或走受限变更路径，见各专题。
 >
-> **分支穷尽**：控制台创建流须同时索取托管(4步)/独立(5步)两个分支，独立多 Master 配置步用 `RunInstancesForNode NodeRole=MASTER_ETCD`。存量 Serverless·EKS / 注册集群是**单页向导**，勿套用本表四步；见 [EKS](specialized/eks-cluster.md) / [扩展节点](nodes/external-nodes.md)。**超级/虚拟节点**不在「新建集群」向导内：先完成本表 `CreateCluster`，再走 [虚拟节点](nodes/virtual-nodes.md)。
+> **托管与独立两条创建流**：控制台创建流分托管（4 步）与独立（5 步）两条，独立多 Master 配置步用 `RunInstancesForNode NodeRole=MASTER_ETCD`。存量 Serverless·EKS / 注册集群是**单页向导**，不适用本表四步；见 [EKS](specialized/eks-cluster.md) / [注册节点](nodes/registered-nodes/overview.md)。**超级/虚拟节点**不在「新建集群」向导内：先完成本表 `CreateCluster`，再走 [虚拟节点](nodes/virtual-nodes.md)。
 
 ## Node 类型
 
@@ -98,9 +98,9 @@ graph TD
 ## 不适用场景
 
 - 只有一两个容器、不需要 K8s 编排 → [CVM](https://cloud.tencent.com/product/cvm) + Docker Compose
-- **新建**免 CVM、要 K8s 编排 → **不要** `CreateEKSCluster`：① [标准集群](clusters/create.md)（`CreateCluster`）② [虚拟节点](nodes/virtual-nodes.md)；仅调 `CreateCluster` 不等于免 CVM 算力。无集群只要容器 → [容器实例](specialized/eks-cluster.md#创建容器实例部署-pod)。存量 EKS 见 [EKS](specialized/eks-cluster.md)（新建入口已关闭）
+- **新建**免 CVM、要 K8s 编排 → **不要** `CreateEKSCluster`：① [标准集群](clusters/create.md)（`CreateCluster`）② [虚拟节点](nodes/virtual-nodes.md)；仅调 `CreateCluster` 不等于免 CVM 算力。无集群只要容器 → [容器实例](specialized/eks-cluster.md#创建容器实例-部署-pod)。存量 EKS 见 [EKS](specialized/eks-cluster.md)（新建入口已关闭）
 - **新建**边缘/IDC 集群 → **不要**再开 TKE-Edge：用 [注册节点公网版](https://cloud.tencent.com/document/product/457/57916)；存量见 [边缘集群](specialized/edge-cluster.md)（已于 2024-08-28 下线）
-- 把「注册集群」与「注册节点」混用 → 注册节点走 [扩展节点](nodes/external-nodes.md)；注册集群控制台标即将下线，勿套用到注册节点配额
+- 把「注册集群」与「注册节点」混用 → 注册节点走 [注册节点](nodes/registered-nodes/overview.md)；注册集群控制台标即将下线，勿套用到注册节点配额
 - 需要多云 K8s 控制面 → 考虑 KubeVela / Crossplane（非本产品范围）
 
 ## API 版本选择
@@ -117,7 +117,7 @@ TKE 有两个 API 版本，TCCLI 默认走 `2018-05-25`，但**官方当前版�
 
 **三条铁律**:
 1. **同名≠同契约**: `DescribeClusterInstances` 入参两版不兼容（旧 `InstanceIds`/`InstanceRole` vs 新 `SortBy`/`NeedTags`），切换前用 `--generate-cli-skeleton` 核契约
-2. **显式 `--version`（仅同名 Action 必需）**: TKE 的两个 API 版本各自有**独占 Action**（如 `CreateCluster`/`DeleteCluster` 仅 2018-05-25、`CreateNodePool`/`ModifyNodePool` 仅 2022-05-01）——这类命令省略 `--version` 会走 TCCLI 默认版（2018-05-25），恰好就是它们唯一的版本，**省略不会错**。真正需要显式 `--version` 的是**两版同名**的 Action：`DescribeClusters`/`DescribeClusterInstances`/`DescribeClusterNodePools`(旧名) 等——省略会静默走默认版，可能与意图错位。**判据**：命令在该版本是唯一归属 → 可省；两版同名 → 必带 `--version`（或用 `--generate-cli-skeleton` 核归属）。
+2. **显式 `--version`（仅同名 Action 必需）**: TKE 的两个 API 版本各自有**独占 Action**（如 `CreateCluster`/`DeleteCluster` 仅 2018-05-25、`CreateNodePool`/`ModifyNodePool` 仅 2022-05-01）——这类命令省略 `--version` 会走 TCCLI 默认版（2018-05-25），即它们唯一的版本，**省略不会出错**。真正需要显式 `--version` 的是**两版同名**的 Action：`DescribeClusters`/`DescribeClusterInstances`/`DescribeClusterNodePools`(旧名) 等——省略会静默走默认版，可能与意图错位。**判据**：命令只在一个版本存在 → 可省略 `--version`；两版同名 → 必须带 `--version`（或用 `--generate-cli-skeleton` 确认归属版本）。
 3. **解析响应容错缺失**: 新版响应多 `Errors` 字段，旧版无，按字段名取值
 
 > 本指南内 [创建节点池](nodes/nodepool-create.md) 与 [节点运维](nodes/instance-ops.md) 已按版本标注命令。TCCLI 默认版为 `2018-05-25`（即 `tccli tke help` 首行），quickstart 的 `CreateCluster`/`DeleteCluster` 属该版独占 Action，故 quickstart 不写 `--version` 与本条不冲突。

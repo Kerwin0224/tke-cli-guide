@@ -4,6 +4,10 @@ subtype: 7B
 ---
 # TKE 故障排查
 
+> 官方文档：[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
+>
+> 配额：地域集群数默认 20、安全组规则数等限制可能影响排查路径，超限信号见 [配额说明](https://cloud.tencent.com/document/product/457/9087)。
+
 ## 从这里开始
 
 ```bash
@@ -133,8 +137,10 @@ tccli tke UpdateClusterKubeconfig --region ap-guangzhou --ClusterId "<CLUSTER_ID
 
 **验证**：
 
+> kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
+<!-- tccli不提供K8s集群连通验证与节点诊断(kubectl cluster-info/nodes/describe)，排查辅助非tccli边界 -->
 ```bash
-# kubectl 验证 kubeconfig 连通 (K8s 原生命令, tccli 不提供集群连通验证)
+# kubectl 验证 kubeconfig 连通 (K8s 原生命令, TCCLI 不提供集群连通验证)
 kubectl --kubeconfig <KUBECONFIG_FILE> cluster-info
 # expected: Kubernetes control plane is running at https://...
 ```
@@ -170,7 +176,7 @@ tccli tke DeleteCluster --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
 
 ## 高危操作后果速查
 
-> 下列操作易导致业务故障；部分**不可恢复**。排障前先对照：是否刚改过安全组、内核参数、LB 控制台、CBS 挂载。
+> 下列操作易导致业务故障；部分**不可恢复**。排障前先对照：是否刚改过安全组、内核参数、LB 控制台、CBS 挂载。完整高危操作清单见官方 [常见高危操作](https://cloud.tencent.com/document/product/457/39539)。
 
 ### 集群 / 节点
 

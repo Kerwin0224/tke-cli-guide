@@ -27,7 +27,7 @@ TCCLI 调用腾讯云 API 需要凭证。三类凭证作用域不同，本文只
 ## 触发条件
 
 - 任意 `tccli <service> <Action>` 返回 `AuthFailure.SecretIdNotFound`（secretId is invalid）— 凭证未配或已失效，用本文配置
-- 终端执行 `tccli configure list` 显示 secretId/secretKey 为空或 `****` 占位但调用报 `AuthFailure` — 凭证未配或已失效
+- 终端执行 `tccli configure list` 显示 secretId/secretKey 为空但调用报 `AuthFailure` — 凭证未配或已失效
 
 ## 决策依据
 
@@ -45,7 +45,7 @@ TCCLI 调用腾讯云 API 需要凭证。三类凭证作用域不同，本文只
 | 方式 | 机制 | 适用 |
 |:-----|:-----|:-----|
 | `tccli configure` | 交互式手填 SecretId/SecretKey/region/output | 已有 API 密钥、CI/CD（可 `tccli configure set` 非交互） |
-| `tccli auth login` | CAM 登录获取临时凭证（接受 `--browser` 参数） | 交互式登录、不想长期存密钥 |
+| `tccli auth login` | CAM 登录获取临时凭证（浏览器交互） | 交互式登录、不想长期存密钥 |
 
 > 两种方式二选一。`tccli auth login` 适合本地交互；`tccli configure` 适合自动化。本文以 `tccli configure` 为主（可复现、可脚本化）。
 
@@ -57,7 +57,7 @@ TCCLI 调用腾讯云 API 需要凭证。三类凭证作用域不同，本文只
 
 ```bash
 tccli --version
-# expected: tccli 3.1.124.1 或更高
+# expected: 最新版本或更高
 ```
 
 > 版本过低会缺新接口或字段名不一致。升级：`uv tool upgrade tccli`（uv 管理的 TCCLI）；非 uv 安装见 [安装 TCCLI](install.md)。
@@ -117,10 +117,10 @@ tccli configure set output json --profile <PROFILE_NAME>
 
 ```bash
 tccli auth login
-# expected: exit 0，触发 CAM 登录流程（接受 --browser 参数指定浏览器）
+# expected: exit 0，触发 CAM 登录流程（浏览器交互，仅接受 --profile 参数）
 ```
 
-> `tccli auth login` 接受 `--browser` 参数，触发 CAM 登录获取临时凭证。具体交互行为（浏览器/扫码）因环境与参数而异——首次使用建议直接运行观察提示。临时凭证会过期，过期后重新 `tccli auth login`。适合本地交互、不想长期存密钥。
+> `tccli auth login` 触发 CAM 登录获取临时凭证，用系统默认浏览器打开授权页（源码 `login.py` 调 `webbrowser.open`，无 `--browser` 参数可选）。具体交互行为（浏览器/扫码）因环境而异——首次使用建议直接运行观察提示。临时凭证会过期，过期后重新 `tccli auth login`。适合本地交互、不想长期存密钥。
 
 ## 验证
 
@@ -149,10 +149,10 @@ tccli tke DescribeRegions
 
 ```bash
 tccli configure list
-# expected: 列出各 profile 的 region/output，凭证字段以 **** 脱敏显示
+# expected: 列出各 profile 的 region/output，凭证字段（secretId/secretKey）明文显示
 ```
 
-> ⚠️ **安全红线**：`tccli configure list` 会对 SecretId/SecretKey 做 `****` 脱敏，但默认 region/output 明文可见。在共享环境、截图、工单中运行前先确认输出不含敏感信息；共享测试账号下严禁运行任何可能暴露凭证的命令，操作前确认只读命令的输出不含密钥明文。
+> ⚠️ **安全红线**：`tccli configure list` **明文打印 secretId/secretKey**（源码 `configure.py` 的 `ConfigureListCommand._run_main` 直接输出 `cred[config]` 原值，未做脱敏；命令 `--help` 示例里的 `****` 仅为文档演示，非实际行为）。禁止在共享环境、截图、工单、会话记录中运行该命令；共享测试账号下严禁运行任何可能暴露凭证的命令。仅在自己的隔离终端核查 profile 配置时使用。
 
 ## 故障恢复
 
@@ -183,13 +183,13 @@ tccli configure remove --profile <PROFILE_NAME>
 ## 收尾确认
 
 ```bash
-# 跨产品端到端：凭证对 TKE 和 TCR 两个产品域均生效（Verify 仅验证 TKE 域）
+# 跨产品端到端：凭证对 TKE 和 TCR 两个产品域均生效（验证段仅验证 TKE 域）
 tccli tcr DescribeRegions --filter "TotalCount" --output text
-# expected: 数字（如 11）→ 凭证对 TCR 域同样可达，跨产品配置闭环完成
+# expected: 非零数字（如 27）→ 凭证对 TCR 域同样可达，跨产品配置闭环完成
 
-# 安全残留核查：默认 profile 未误配主账号密钥（主账号泄露=全资源失守）
-tccli configure list | grep -E "^default" | awk '{print $2}'
-# expected: default（仅默认 profile，子账号凭证已隔离）
+# profile 核查：确认当前用的是哪个 profile（避免误用主账号密钥）
+tccli configure list | grep -E "^region|^output" 
+# expected: region/output 行明文显示（凭证段不 grep，避免密钥入终端历史）
 ```
 
 > TKE + TCR 双域均可调用 + 默认 profile 仅子账号密钥 = 凭证配置闭环完成，可进入任意 TKE/TCR 操作。

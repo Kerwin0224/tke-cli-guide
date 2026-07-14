@@ -17,7 +17,7 @@ fused: false
 
 ## 概述
 
-审计日志记录"谁在什么时候对什么资源做了什么操作"。开启后，集群 API Server 的所有操作（kubectl/TCCLI/控制台）落盘到 CLS 日志集。
+审计日志记录"谁在什么时候对什么资源做了什么操作"。开启后，集群 API Server 的所有操作（kubectl <!-- tccli管控审计开关/日志集配置，kubectl操作作为审计对象被记录，非tccli边界 --> /TCCLI/控制台）写入 CLS 日志集。
 
 | 状态 | 含义 | 查询 |
 |:-----|:-----|:-----|
@@ -26,13 +26,17 @@ fused: false
 
 > 审计日志存储在 CLS 服务（跨产品），TKE 无 `DescribeClusterAuditLog` 接口——查日志须到 CLS 控制台或用 `tccli cls` 检索。
 
+> 官方文档：[身份验证和授权概述](https://cloud.tencent.com/document/product/457/11542) · [服务授权相关角色权限说明](https://cloud.tencent.com/document/product/457/43416) · [常见高危操作](https://cloud.tencent.com/document/product/457/39539)
+> 配额：CLS 日志集/主题存储限制（按 CLS 计费模式），日志集数量默认 20。[配额限制](https://cloud.tencent.com/document/product/457/9087)
+> ⚠️ **高危操作**：关闭审计日志致安全事件不可追溯；审计日志投递中断期间的所有操作无记录。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
+
 ## 决策依据
 
 #### 为什么开启审计
 
 - **开启 vs 关闭**: 开启后所有 API 操作可追溯（合规、事故定位）；关闭省 CLS 存储费
 - **默认推荐**: 生产环境开启（合规追溯需要）；测试集群可关
-- **能关闭吗?**: 能，`DisableClusterAudit`。但已存的审计日志保留在 CLS
+- **可关闭**：是，`DisableClusterAudit`。但已存的审计日志保留在 CLS
 
 ## 配置项
 
@@ -130,7 +134,7 @@ tccli tke DisableEventPersistence --ClusterId "<CLUSTER_ID>" --region <REGION> -
 ```bash
 # 查询加密状态
 tccli tke DescribeEncryptionStatus --ClusterId "<CLUSTER_ID>" --region <REGION>
-# expected: exit 0, Status=Closed (未加密) / Enabled (已加密)
+# expected: exit 0, Status=Closed (未加密) / Opened (已加密)
 ```
 ```json
 {"Status": "Closed", "ErrorMsg": "", "RequestId": "..."}
@@ -142,14 +146,14 @@ tccli tke DisableEncryptionProtection --ClusterId "<CLUSTER_ID>" --region <REGIO
 # expected: exit 0
 ```
 
-> `Status` 状态机：`Closed`（未加密）→ `enabling` → `Enabled`。`DisableEncryptionProtection` 关闭加密保护（非关闭加密本身），允许对加密集群做特殊操作。
+> `Status` 状态机：`Closed`（未加密）→ `Opening`（开启中）→ `Opened`（已开启）。`DisableEncryptionProtection` 关闭加密保护（非关闭加密本身），允许对加密集群做特殊操作。
 
 ```bash
 # 开启加密保护（KMSConfiguration 传 KMS 加密配置）
 tccli tke EnableEncryptionProtection --region <REGION> \
   --ClusterId "<CLUSTER_ID>" \
   --KMSConfiguration '{"KmsRegion":"<KMS_REGION>","KmsKeyId":"<KMS_KEY_ID>"}'
-# expected: exit 0, Status 进入 enabling → Enabled; 集群不存在报 ResourceNotFound
+# expected: exit 0, Status 进入 Opening → Opened; 集群不存在报 ResourceNotFound
 ```
 
 | 占位符 | 含义 | 如何获取 |
@@ -157,7 +161,7 @@ tccli tke EnableEncryptionProtection --region <REGION> \
 | `<KMS_REGION>` | KMS 密钥所在地域 | `tccli kms ListKeys --region <REGION>` |
 | `<KMS_KEY_ID>` | KMS 主密钥 ID | `tccli kms ListKeys` → `Keys[].KeyId` |
 
-> `EnableEncryptionProtection` 的 `KmsConfiguration` 是嵌套对象（含 `KmsRegion`/`KmsKeyId`），开启后 etcd 数据用 KMS 密钥加密。开启是异步操作，用 `DescribeEncryptionStatus` 轮询 `Status` 到 `Enabled`。开启前需先在 KMS 创建密钥并授权 TKE 使用。
+> `EnableEncryptionProtection` 的 `KmsConfiguration` 是嵌套对象（含 `KmsRegion`/`KmsKeyId`），开启后 etcd 数据用 KMS 密钥加密。开启是异步操作，用 `DescribeEncryptionStatus` 轮询 `Status` 到 `Opened`。开启前需先在 KMS 创建密钥并授权 TKE 使用。
 
 ## 开放策略（OPA/Gatekeeper）
 
@@ -190,11 +194,11 @@ tccli tke ModifyOpenPolicyList --ClusterId "<CLUSTER_ID>" --region <REGION> \
 
 入参 `--Category`（`help --detail`：基线 / 优选 / 可选）：
 
-| Category（入参） | 含义 | 实跑条数量级（空托管集群） |
+| Category（入参） | 含义 | 返回条数（空托管集群） |
 |:-----------------|:-----|:---------------------------|
-| `baseline` | 基线 | 少（如 1） |
-| `priority` | 优选 | 中（如十余） |
-| `optional` | 可选 | 多（如数十） |
+| `baseline` | 基线 | 少（约 1 条） |
+| `priority` | 优选 | 中（约十余条） |
+| `optional` | 可选 | 多（约数十条） |
 
 > 非法值（如 `soft`）不报错，行为未文档化——**只用上表三值**。勿把响应里的 `PolicyCategory`（cluster/node/…）填进 `--Category`。
 

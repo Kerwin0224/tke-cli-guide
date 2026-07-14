@@ -13,7 +13,7 @@ TCCLI 是腾讯云 API 的命令行客户端，用 Python 写成。本指南统�
 
 ## 触发条件
 
-- 终端执行 `tccli --version` 报 `command not found`，或版本低于 `3.1.124.1` — 用本文安装或升级
+- 终端执行 `tccli --version` 报 `command not found`，或版本过低（缺新接口/字段名不一致） — 用本文安装或升级
 - 终端执行任意 `tccli tke`/`tccli tcr` 命令报 `command not found: tccli` — TCCLI 未装，用本文安装
 
 ## 决策依据
@@ -27,7 +27,7 @@ TCCLI 是腾讯云 API 的命令行客户端，用 Python 写成。本指南统�
 | 规避系统包冲突 | 现代 macOS / 部分 Linux 的系统 Python 受保护（PEP 668），直接 `pip install` 会被拒；uv 自带独立环境，不受此限制 |
 | 升级与卸载干净 | `uv tool upgrade tccli` / `uv tool uninstall tccli` 一条命令，无残留 |
 
-> 一句话：uv 让你在任何机器上用同一条命令装好 TCCLI，且不影响系统 Python。
+> uv 可在任何机器上用同一条命令装好 TCCLI，且不影响系统 Python。
 
 > ⚠️ **保持 TCCLI 最新**：TCCLI 持续新增/调整 Action 与字段，旧版本可能缺新接口或字段名不同。开始使用前与定期维护时执行：
 >
@@ -35,10 +35,10 @@ TCCLI 是腾讯云 API 的命令行客户端，用 Python 写成。本指南统�
 > uv tool upgrade tccli
 > # expected: exit 0（已是最新则显示 Nothing to upgrade）
 > tccli --version
-> # expected: tccli 3.1.124.1 或更高
+> # expected: 最新版本或更高
 > ```
 >
-> 本指南命令示例基于 `tccli 3.1.124.1`；若你的版本更高，优先以 `tccli <service> help` / `help --detail` 的实时契约为准。
+> 本指南命令示例基于近期 `tccli` 版本；tccli 持续新增/调整 Action 与字段，若你的版本不同，优先以 `tccli <service> help` / `help --detail` 的实时契约为准。
 
 ## 准备工作
 
@@ -77,10 +77,10 @@ uv 会下载 TCCLI 及其依赖到独立环境，并把 `tccli` 命令链接到 
 
 ```bash
 tccli --version
-# expected: tccli 3.1.124.1 或更高
+# expected: 最新版本或更高
 ```
 ```text
-3.1.124.1
+3.1.126.1
 ```
 
 ```bash
@@ -94,7 +94,7 @@ which tccli
 |:-----|:---------|:-----|:-----|
 | `command not found: uv` | `which uv` | uv 未安装或未在 PATH | 按上文"安装 uv"步骤重装；macOS/Linux 确认 `~/.local/bin` 在 PATH（`echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc` 后 `source ~/.zshrc`） |
 | `command not found: tccli`（安装成功后） | `ls ~/.local/bin/tccli` | PATH 未含 `~/.local/bin` | 同上加入 PATH；Windows 将 `%USERPROFILE%\.local\bin` 加入 PATH |
-| 版本过旧，缺少新接口 | `tccli --version` 对照 3.1.124.1 | TCCLI 版本低 | `uv tool upgrade tccli` |
+| 版本过旧，缺少新接口 | `tccli --version` 确认是否最新 | TCCLI 版本低 | `uv tool upgrade tccli` |
 | 升级后仍报旧命令不存在 | `tccli help \| grep <Action>` | 升级未生效或装了多个 TCCLI | `uv tool uninstall tccli && uv tool install tccli` 重装 |
 
 ## 更新与卸载
@@ -114,7 +114,7 @@ uv tool uninstall tccli
 ```bash
 # 衔接下一步：tccli 在 PATH 且可进产品域（安装闭环；凭证下一步再配）
 tccli --version
-# expected: tccli 3.1.124.1 或更高
+# expected: 最新版本或更高
 
 tccli tke help 2>&1 | head -3
 # expected: AVAILABLE VERSIONS 含 2018-05-25 / 2022-05-01 → 可进入 [配置凭证](credentials.md)

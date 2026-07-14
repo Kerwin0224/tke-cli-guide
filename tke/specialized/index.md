@@ -9,6 +9,13 @@ doc_type: Overview
 
 TKE 标准集群覆盖通用场景。本目录覆盖边缘与存量 EKS / 容器实例；**新建免 CVM、仍要 K8s 编排**时，主路径是 [标准集群](../clusters/create.md) + [虚拟节点](../nodes/virtual-nodes.md)，不是本目录里的 `CreateEKSCluster`。
 
+## 触发条件
+
+- 你要在边缘位置（IoT/门店/CDN）运行 K8s 集群，节点处于弱网环境 — 看 [边缘集群](edge-cluster.md)（`CreateTKEEdgeCluster`；已迁移到[注册节点公网版](https://cloud.tencent.com/document/product/457/57916)）
+- 你已有存量 EKS 集群（`DescribeEKSClusters` 返回资源），需查询/扩缩容/删除 — 去 [EKS / 容器实例](eks-cluster.md)
+- 你要运行单次或常驻容器，不要 K8s 控制面 — 用 `CreateEKSContainerInstances`，见 [容器实例](eks-cluster.md#创建容器实例-部署-pod)
+- 你要新建免 CVM、仍要 K8s 编排，不确定用 `CreateEKSCluster` 还是 `CreateCluster` + 虚拟节点 — 看 [选型指南](#选型指南)
+
 ## 选型指南
 
 | 场景 | 方案 | 何时选择 | 计费 | 状态 |
@@ -16,7 +23,7 @@ TKE 标准集群覆盖通用场景。本目录覆盖边缘与存量 EKS / 容器
 | 标准 Web 服务/微服务 | [TKE 标准集群](../clusters/index.md) | 固定流量，需完整 K8s | 集群管理费 + 节点费 | — |
 | 边缘计算（IoT/门店/CDN） | [边缘集群 TKEEdge](edge-cluster.md) | 节点在弱网/边缘位置 | 集群费 + 边缘节点费 | ⚠️ 已迁移到[注册节点公网版](https://cloud.tencent.com/document/product/457/57916) |
 | **新建**免 CVM、要 K8s 编排 | [虚拟节点](../nodes/virtual-nodes.md)（先 [CreateCluster](../clusters/create.md)） | 标准集群内按 Pod 用量扩容 | Pod 按用量 | **推荐新建路径**（两步，非一次 CreateCluster） |
-| 无集群、单次/常驻容器 | [容器实例](eks-cluster.md#创建容器实例部署-pod) | 不要 K8s 控制面 | 按实例规格用量 | 控制台「容器实例」CPU/GPU |
+| 无集群、单次/常驻容器 | [容器实例](eks-cluster.md#创建容器实例-部署-pod) | 不要 K8s 控制面 | 按实例规格用量 | 控制台「容器实例」CPU/GPU |
 | 存量 EKS 集群运维 | [EKS / 容器实例](eks-cluster.md) | 已有 `DescribeEKSClusters` 资源 | 按 Pod 用量 | ⚠️ 新建入口已关闭 |
 
 ## 核心概念
@@ -40,9 +47,9 @@ TKE 标准集群覆盖通用场景。本目录覆盖边缘与存量 EKS / 容器
 ## 不适用场景
 
 - 标准数据中心容器工作负载 → 用 [标准集群](../clusters/index.md)，不需专用
-- 已有自建 K8s → 不需 EKS，考虑标准集群的 [注册节点池](../nodes/external-nodes.md)
+- 已有自建 K8s → 不需 EKS，考虑标准集群的 [注册节点池](../nodes/registered-nodes/overview.md)
 - **新建**免 CVM、要编排 → [虚拟节点](../nodes/virtual-nodes.md)（先 `CreateCluster`），**不要** `CreateEKSCluster`
-- 不要集群、只要容器 → [容器实例](eks-cluster.md#创建容器实例部署-pod)，**不要**当成虚拟节点
+- 不要集群、只要容器 → [容器实例](eks-cluster.md#创建容器实例-部署-pod)，**不要**当成虚拟节点
 
 ## 快速检查
 

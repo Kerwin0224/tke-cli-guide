@@ -11,6 +11,8 @@ fused: true
 
 > 本文档 Action 属 **TKE 2018-05-25** 
 
+> 官方文档：[基本概念](https://cloud.tencent.com/document/product/457/45598) · [创建集群](https://cloud.tencent.com/document/product/457/103981) · [常见高危操作](https://cloud.tencent.com/document/product/457/39539)
+
 ## 概述
 
 创建 TKE 集群即在腾讯云上运行 K8s。TKE 提供两种集群类型:
@@ -22,11 +24,13 @@ fused: true
 | INDEPENDENT_CLUSTER (独立) | 存量：完全控制 Master  | 需自行维护 Master HA | 手动升级 Master  | ❌ **已停止新建** |
 
 
-**默认推荐**: `MANAGED_CLUSTER`。Master/Etcd 由腾讯云运维，你管理工作节点。`INDEPENDENT_CLUSTER` 已停止新建（真机空参创建报 `FailedOperation.Param`：`not has master NodeRole`）；勿用独立类型做新建路径。
+**默认推荐**: `MANAGED_CLUSTER`。Master/Etcd 由腾讯云运维，你管理工作节点。`INDEPENDENT_CLUSTER` 已停止新建（空参创建报 `FailedOperation.Param`：`not has master NodeRole`）；勿用独立类型做新建路径。
 
 > 控制台"新建集群"含三类形态（标准/Serverless/注册集群）+ 创建流全景（托管4步/独立5步），见 [TKE 容器服务 — 控制台创建流全景](../index.md#控制台创建流全景)。本文只覆盖标准集群的 `CreateCluster` 操作。
 
 操作是**异步**的: 命令返回 `ClusterId` 即表示创建已提交，集群就绪需等待 5-10 分钟。
+
+> 配额：单地域集群默认 **20**（可提工单调高）。[配额说明](https://cloud.tencent.com/document/product/457/9087)
 
 ## 触发条件
 
@@ -43,7 +47,7 @@ fused: true
 
 ```bash
 tccli --version
-# expected: tccli 版本号 (如 3.1.124.1)
+# expected: tccli 版本号（最新版或更高）
 
 tccli cvm DescribeRegions --region ap-guangzhou
 # expected: { "TotalCount": ..., "RegionSet": [...] }  → 凭证有效（tccli 默认剥离 Response 包装层）
@@ -100,7 +104,7 @@ tccli tke DescribeClusters --region ap-guangzhou
 
 | 字段                  | 类型     | 必填  | 约束                                                                                           | 填错时的错误                              |
 | ------------------- | ------ | --- | -------------------------------------------------------------------------------------------- | ----------------------------------- |
-| ClusterType         | string | 是   | `MANAGED_CLUSTER` / `INDEPENDENT_CLUSTER`（后者**已停止新建**；空集群创建真机 `FailedOperation.Param`：`not has master NodeRole`，非 `InvalidParameterValue.ClusterType`） | 非法枚举可能 `InvalidParameterValue.ClusterType`；停新建独立见上 |
+| ClusterType         | string | 是   | `MANAGED_CLUSTER` / `INDEPENDENT_CLUSTER`（后者**已停止新建**；空集群创建报 `FailedOperation.Param`：`not has master NodeRole`，非 `InvalidParameterValue.ClusterType`） | 非法枚举可能 `InvalidParameterValue.ClusterType`；停新建独立见上 |
 | ClusterCIDRSettings | object | 是   | ClusterCIDR + ServiceCIDR（不传报 `the following arguments are required: --ClusterCIDRSettings`） | `InvalidParameterValue.ClusterCIDR` |
 
 
@@ -116,7 +120,7 @@ tccli tke DescribeClusters --region ap-guangzhou
 | `ClusterCIDR`               | 全部      | 容器网段，如 `172.16.0.0/16`，不得与 VPC CIDR 冲突   |
 | `ServiceCIDR`               | 全部      | 服务网段，如 `10.96.0.0/20`                    |
 | `MaxNodePodNum`             | GR      | 单节点最大 Pod 数（影响 IP 分配），如 `64`             |
-| `MaxClusterServiceNum`      | GR / VPC-CNI | 集群最大 Service 数；须 ≥ `ServiceCIDR` 容量（`/17`→32768）。过小真机 `FailedOperation.Param`（消息含 `service ip number is N, but the ClusterServiceNum paramter is M`） |
+| `MaxClusterServiceNum`      | GR / VPC-CNI | 集群最大 Service 数；须 ≥ `ServiceCIDR` 容量（`/17`→32768）。过小报 `FailedOperation.Param`（消息含 `service ip number is N, but the ClusterServiceNum paramter is M`） |
 | `IgnoreClusterCIDRConflict` | 全部      | `true` 忽略与 VPC 路由表冲突，默认 `false`          |
 | `IgnoreServiceCIDRConflict` | 全部      | `true` 忽略 ServiceCIDR 冲突，默认 `false`      |
 | `EniSubnetIds`              | VPC-CNI | ENI 模式子网 ID 列表（`NetworkType=VPC-CNI` 时用） |
@@ -232,6 +236,8 @@ tccli tke DescribeClusters --region ap-guangzhou
 
 ### 集群 IP 类型决策树
 
+> **控制台维度**：控制台「集群 IP 类型」一步 = tccli 多字段组合 `IsDualStack` + `NetworkType` + `VpcCniType`（双栈仅 `NetworkType=VPC-CNI` 适用；`VpcCniType` 决定共享/独立网卡）。下面决策树把控制台这一个决策步映射到 tccli 字段组合。
+
 控制台"集群 IP 类型"步（IPv4-only vs IPv4/IPv6 双栈）对应 tccli 多字段组合：
 
 ```
@@ -250,6 +256,8 @@ tccli tke DescribeClusters --region ap-guangzhou
 
 ## 操作步骤
 
+> ⚠️ **高危操作**：Region 选错不可迁移；NetworkType 创建后不可切换；IPVS 开启后不可关闭；删除保护未开 = 裸奔。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
+
 > ⚠️ **本文创建的是空集群（控制面）**：`CreateCluster` 后 `ClusterState=Running` 但 `ClusterRunningNodeNum=0`，**无法运行 Pod**。
 >
 > "可运行 Pod 的集群"完整闭环 = 本步（空集群）→ [创建节点池](../nodes/nodepool-create.md)（加工作节点）→ [开端点](../networking/endpoints.md) → [kubectl 连通](../security/auth.md)。
@@ -267,7 +275,7 @@ tccli tke DescribeClusters --region ap-guangzhou
 - **托管 vs 独立**: 托管集群的 Master 由腾讯云负责 (HA、升级、备份)；独立集群需要自己维护 Master 节点
 - **成本差异**: 托管集群收取集群管理费 (L5 约 ¥0.4/小时)；独立集群不收取管理费但需支付 Master 的 CVM 费用
 - **默认推荐**: `MANAGED_CLUSTER`（独立模式**已停止新建**）
-- **能改吗?**: 不能。集群类型创建后无法切换。存量独立集群须持续维护 Master
+- **可修改**： 不能。集群类型创建后无法切换。存量独立集群须持续维护 Master
 
 
 
@@ -286,7 +294,7 @@ tccli tke DescribeClusters --region ap-guangzhou
 
 > **判据**: 路径 A 分步可控，失败仅回退控制面；路径 B/C 单步完成但失败须连集群带节点一起排查；路径 D 与网络模型绑定（CiliumOverlay 创建时定型）。首次部署用 A，批量部署可用 B/C。
 
-> **4 路径共用同一** `CreateCluster` **Action**——返回结构一致（`ClusterId`/`RequestId`），区别仅在顶层嵌套入参组合。下方 B/C/D 的 `RunInstancesPara`/`ExistedInstancesPara`/`ExtensionAddons` 是字符串化 JSON 嵌套组合（`RunInstancesForNode` 透传 CVM `RunInstances` 全参数）；expected 与路径 A 同构。B/C 因会真实创建/重装 CVM（计费+副作用），命令块用占位符示参，实跑前先核 CVM 机型/镜像/子网库存（见 [创建节点池 — 准备工作（机型查询）](../nodes/nodepool-create.md#准备工作)）。
+> **4 路径共用同一** `CreateCluster` **Action**——返回结构一致（`ClusterId`/`RequestId`），区别仅在顶层嵌套入参组合。下方 B/C/D 的 `RunInstancesPara`/`ExistedInstancesPara`/`ExtensionAddons` 是字符串化 JSON 嵌套组合（`RunInstancesForNode` 透传 CVM `RunInstances` 全参数）；expected 与路径 A 同构。B/C 因会真实创建/重装 CVM（计费+副作用），命令块用占位符示参，调用前先核 CVM 机型/镜像/子网库存（见 [创建节点池 — 准备工作（机型查询）](../nodes/nodepool-create.md#准备工作)）。
 
 
 
@@ -430,6 +438,7 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_I
 ```
 
 
+<!-- kubectl验证tccli操作结果(集群创建后验证节点连通)，非tccli边界 -->
 | 维度         | 命令                                                                       | 预期                                                 |
 | ---------- | ------------------------------------------------------------------------ | -------------------------------------------------- |
 | Status     | `DescribeClusterStatus`                                                  | `ClusterState: "Running"`                          |

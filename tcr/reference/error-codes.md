@@ -36,8 +36,8 @@ subtype: 8D
 |------|---------|:---------:|----------|-----|
 | `AuthFailure.SecretIdNotFound` | 凭证无效或已过期 | 否 | `tccli tcr DescribeRegions` 验证凭证 | 见 [配置凭证](../../getting-started/credentials.md) 重新配置 |
 | `InvalidParameterValue` | 参数值不合法 | 否 | 查 `--generate-cli-skeleton` 字段约束 | 检查参数格式和取值范围 |
-| `RequestLimitExceeded` | API 限频 | yes (退避) | 观察请求频率 | 等待后重试；`DescribeInstanceStatus` 限频 20/s |
-| `InternalError` | 内部错误 | yes (退避) | 收集 RequestId 重试 | 重试 2-3 次，仍失败提工单 |
+| `RequestLimitExceeded` | API 限频 | 是（退避） | 观察请求频率 | 等待后重试；`DescribeInstanceStatus` 限频 20/s |
+| `InternalError` | 内部错误 | 是（退避） | 收集 RequestId 重试 | 重试 2-3 次，仍失败提工单 |
 
 ## 诊断命令
 

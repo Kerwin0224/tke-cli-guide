@@ -7,6 +7,7 @@ fused: true
 
 > 配置自动保留规则，按策略清理旧镜像版本。**该操作可能批量删除镜像**——匹配的 tag 会被永久删除，不可恢复。
 > 控制台: [版本保留](https://console.cloud.tencent.com/tcr/tagretention)（底层层数据回收见 [制品清理](https://console.cloud.tencent.com/tcr/gc)）
+> 官方文档: [自动删除镜像版本](https://cloud.tencent.com/document/product/1141/50613) · [镜像版本不可变](https://cloud.tencent.com/document/product/1141/58200)
 
 ## 触发条件
 
@@ -26,7 +27,7 @@ fused: true
 
 > 规则作用于命名空间级别（`NamespaceId`）。**单个命名空间暂只能创建一条**保留规则。规则创建后按 `CronSetting` 定时执行，也可 `CreateTagRetentionExecution` 手动触发。创建后**不可修改**生效的命名空间。
 
-> **删除边界**：版本保留删除的是**镜像版本信息**，**不删除**底层镜像层数据；要释放 COS 空间须再跑 GC / 制品清理（见 [生命周期概览](index.md)）。
+> **删除边界**：版本保留删除的是**镜像版本信息**，**不删除**底层镜像层数据；要释放 COS 空间须再执行 GC / 制品清理（见 [生命周期概览](index.md)）。
 >
 > **Digest 风险**：多个 Tag 可能指向同一 Digest。删除其中一个 Tag 时，可能连带清理该 Digest 上的全部 Tag——仓库若存在「同 Digest、多 Tag」，启用保留规则前先评估，或暂时禁用已有规则。
 
@@ -83,7 +84,7 @@ tccli tcr DescribeTagRetentionRules --region <REGION> --RegistryId "<REGISTRY_ID
 - **latestPushedK（保留 N 个）**: 保留最近 N 个版本，数量固定。适合持续集成（每次推送保留最新 10 个）
 - **nDays（保留 N 天）**: 保留 N 天内版本，时间固定。适合按时间回滚的需求
 - **默认推荐**: `latestPushedK` + `Value=10`——多数场景保留最新 10 个够用
-- **能改吗?**: 能，`ModifyTagRetentionRule` 修改规则
+- **可修改**： 能，`ModifyTagRetentionRule` 修改规则
 
 ```bash
 # 修改保留规则（RegistryId + RetentionId 定位 + 新 CronSetting/RetentionRule）
@@ -260,7 +261,7 @@ tccli tcr CreateGCJob --RegistryId "<REGISTRY_ID>" --region <REGION> \
 # expected: exit 0，返回 {"RequestId":"..."}（无 JobId 字段，任务用 DescribeGCJobs 查 Jobs[] 状态）
 ```
 
-> `GCParameters` 含 `DryRun` 试跑开关。GC 删除镜像层后释放存储，**不可逆**，建议先 `DryRun=true` 预览影响范围再正式执行。
+> `GCParameters` 含 `DryRun` 试运行开关。GC 删除镜像层后释放存储，**不可逆**，建议先 `DryRun=true` 预览影响范围再正式执行。
 
 ### 查询 GC 任务
 

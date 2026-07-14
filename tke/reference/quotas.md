@@ -38,7 +38,7 @@ subtype: 8C
 
 ## API 限频
 
-> 来源：腾讯云 TKE API 概览页。多数接口 20 次/秒，写操作与高频查询有差异。
+> 限频值见腾讯云 TKE API 概览页。多数接口 20 次/秒，写操作与高频查询有差异。
 
 | 接口类别 | 限频 (次/秒) | 超限信号 |
 |:---------|:----------:|:---------|
@@ -54,9 +54,9 @@ subtype: 8C
 ## 查询配额用量
 
 ```bash
-# 集群存量 (核对是否接近 50 上限)
+# 集群存量 (核对是否接近单地域默认 20 上限)
 tccli tke DescribeClusters --region <REGION> --output text --filter "TotalCount"
-# expected: 数字 ≤ 50
+# expected: 数字 ≤ 20（默认配额，已提额账号可更高）
 
 # 节点池存量 (核对是否接近 20 上限)
 tccli tke DescribeClusterNodePools --region <REGION> --ClusterId "<CLUSTER_ID>" --output text --filter "TotalCount"

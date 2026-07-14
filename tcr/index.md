@@ -67,7 +67,7 @@ graph TD
 | 分桶（控制台左栏） | 先决决策 | 文档 |
 |------|----------|------|
 | 实例管理 | 规格 `basic`/`standard`/`premium` + 计费（API 默认按量；长期使用可优先包年包月） | [创建实例](instances/create.md) · [实例管理](instances/index.md) |
-| 资源中心 | 命名空间 → 镜像仓库 / Helm Chart；（另有 AI 模型、AI Skills 控制台入口，专章可后补） | [管理仓库](repositories/manage.md) |
+| 资源中心 | 命名空间 → 镜像仓库 / Helm Chart / **AI 模型、AI Skills** | [管理仓库](repositories/manage.md) · [AI 模型与 Skill](ai/index.md) |
 | 运维中心 · 访问 | **优先内网（VPC）**，公网作补充；用户级账号 vs 服务级账号 | [访问控制](access/manage.md) · [访问管理](instances/manage-access.md) |
 | 运维中心 · 版本管理 | 版本保留（删 Tag）与制品清理/GC（回收层数据）分工 | [生命周期](lifecycle/index.md) |
 | 运维中心 · 同步复制 | 实例同步 vs 实例复制；**基础版不支持**实例同步 | [实例同步](replication/manage.md) |
@@ -98,6 +98,7 @@ tccli tcr DescribeInstances --region ap-guangzhou
 - [管理仓库](repositories/manage.md) — 命名空间和仓库 CRUD
 - [推送镜像](images/push-pull.md) — docker push 你的第一个镜像
 - [镜像加速](images/acceleration.md) — P2P 大规模拉取加速
+- [AI 模型与 Skill](ai/index.md) — 模型仓库与 Skill 查询
 - [访问控制](access/manage.md) — Token、公网白名单、VPC 链接
 - [生命周期](lifecycle/index.md) — 版本保留、不可变标签、自动清理
 - [实例同步](replication/manage.md) — 跨地域/跨账号同步镜像

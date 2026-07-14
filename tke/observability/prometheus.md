@@ -7,6 +7,10 @@ fused: true
 
 > 控制台: [容器服务控制台 - Prometheus 监控](https://console.cloud.tencent.com/tke2/prometheus)
 > 创建 Prometheus 实例、关联集群 Agent、查询采集目标。Prometheus 是 TKE 监控的核心。异步操作。
+>
+> 官方文档：[可观测体系概述](https://cloud.tencent.com/document/product/457/118975)
+>
+> 配额：Prometheus 实例规格与数据存储周期以产品购买页为准，TKE 侧无额外配额限制。[配额说明](https://cloud.tencent.com/document/product/457/9087)
 
 ## 触发条件
 
@@ -26,7 +30,7 @@ Prometheus 监控三步：创建实例 → 关联集群 Agent（采集） → �
 | 查询目标 | `DescribePrometheusTargets` | 看采集目标状态 |
 | 查询实例 | `DescribePrometheusInstancesOverview` | 看实例列表 |
 
-> Prometheus 是 TKE 2018-05-25 旧版独有功能（2022-05-01 新版无），命令须带 `--version 2018-05-25`。相关 Action 共 48 个，本文覆盖入口 3 个核心操作，其余见 [告警配置](prometheus-alerting.md)/[配置与模板](prometheus-config.md)/[Agent 管理](prometheus-agent.md)。
+> Prometheus 是 TKE 2018-05-25 旧版独有功能（2022-05-01 新版无）。本文覆盖入口 3 个核心操作，其余见 [告警配置](prometheus-alerting.md)/[配置与模板](prometheus-config.md)/[Agent 管理](prometheus-agent.md)。
 
 ## 准备工作
 
@@ -53,7 +57,7 @@ tccli vpc DescribeSubnets --region <REGION> --Filters '[{"Name":"vpc-id","Values
 # expected: 子网 ID 列表
 ```
 
-> ⚠️ **CAM 前置（真机）**：`DescribePrometheusInstancesOverview` / `DescribePrometheusOverviews` / `DescribePrometheusTemp` 等在未授权账号返回 `UnauthorizedOperation`（消息含 Operation denied by Cloud API）。仅有 TKE 集群权限不够；须单独开通 Prometheus/TMP 相关 CAM 策略。未授权时本篇后续 Create/Run 命令同样会被拒，勿把 CAM 拒绝当成参数错误。
+> ⚠️ **CAM 前置**：`DescribePrometheusInstancesOverview` / `DescribePrometheusOverviews` / `DescribePrometheusTemp` 等在未授权账号返回 `UnauthorizedOperation`（消息含 Operation denied by Cloud API）。仅有 TKE 集群权限不够；须单独开通 Prometheus/TMP 相关 CAM 策略。未授权时本篇后续 Create/Run 命令同样会被拒，勿将 CAM 拒绝误判为参数错误。
 
 ## 关键字段
 
@@ -93,7 +97,7 @@ tccli vpc DescribeSubnets --region <REGION> --Filters '[{"Name":"vpc-id","Values
 - **独立实例（推荐）**: 独立 Prometheus 服务，数据隔离，可长期存储
 - **集群内置**: 集群内临时 Prometheus，数据随集群销毁
 - **默认推荐**: 生产用独立实例；测试可用集群内置
-- **能换吗?**: 独立实例创建后可改规格，但不能转为集群内置
+- **可更换**： 独立实例创建后可改规格，但不能转为集群内置
 
 ### 步骤 2：创建实例
 
@@ -146,6 +150,8 @@ tccli tke DescribePrometheusInstancesOverview --region ap-guangzhou \
 ## 清理
 
 > **副作用警告**：删除 Prometheus 实例会销毁所有监控数据。Agent 会从集群卸载。
+>
+> ⚠️ **高危操作**：删除 Prometheus 实例不可逆，所有历史监控数据将永久丢失且无法恢复。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
 
 ```bash
 # 1. 卸载 Agent
@@ -225,8 +231,9 @@ tccli tke DeletePrometheusTemplateSync --TemplateId "<TEMPLATE_ID>" --region <RE
 
 ```bash
 # 一次性核对：Prometheus 实例已就绪
-tccli tke DescribePrometheusInstance --region <REGION> --InstanceId <INSTANCE_ID>   --filter "{name:InstanceName,charge:ChargeStatus}"
-# expected: charge=Running → Prometheus 监控闭环完成
+tccli tke DescribePrometheusInstance --region <REGION> --InstanceId <INSTANCE_ID> \
+  --filter "{name:Name,id:InstanceId}"
+# expected: id 与创建返回一致，name 非空 → Prometheus 监控闭环完成
 ```
 
 ---

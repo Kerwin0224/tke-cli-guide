@@ -29,8 +29,9 @@ TKE 集群拉取 TCR 镜像的三种典型场景：
 
 ## 准备工作
 
-> 本篇跨三个 CLI：tccli（管 TCR 凭证/TKE 端点）+ kubectl（部署 Pod 验证拉取，K8s 原生）+ docker（本地镜像操作）。kubectl 用于验证镜像拉取链路终点（Pod 级验证 tccli 做不到）。
+> 本篇跨三个 CLI：TCCLI（管 TCR 凭证/TKE 端点）+ kubectl（部署 Pod 验证拉取，K8s 原生）+ docker（本地镜像操作）。kubectl 用于验证镜像拉取链路终点（Pod 级验证 TCCLI 做不到）。
 
+> kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
 ```bash
 # 1. tccli 可用
 tccli --version
@@ -73,6 +74,7 @@ tccli tcr CreateInstanceToken --region ap-guangzhou \
 
 ## 步骤 2：TKE 集群配置 imagePullSecret
 
+> kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
 ```bash
 # 获取 TCR 访问域名（公网或内网）
 tccli tcr DescribeInstances --region ap-guangzhou --Registryids '["<REGISTRY_ID>"]' \
@@ -99,6 +101,7 @@ kubectl create secret docker-registry tcr-secret \
 
 ## 步骤 3：部署应用并验证拉取
 
+> kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
 ```bash
 # 部署应用，引用 imagePullSecret
 kubectl run my-app --image="<REGISTRY_DOMAIN>/<NAMESPACE>/<REPO>:<TAG>" \
@@ -111,12 +114,14 @@ kubectl run my-app --image="<REGISTRY_DOMAIN>/<NAMESPACE>/<REPO>:<TAG>" \
 
 从两个维度确认镜像拉取链路通：
 
+> kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
 ```bash
 # 维度 1: Pod Running，无 ImagePullBackOff
 kubectl get pods -l app=my-app
 # expected: Pod Running，STATUS 非 ImagePullBackOff/ErrImagePull
 ```
 
+> kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
 ```bash
 # 维度 2: 确认镜像拉取来源
 kubectl describe pod -l app=my-app | /usr/bin/grep -A2 "Events:"
@@ -127,6 +132,7 @@ kubectl describe pod -l app=my-app | /usr/bin/grep -A2 "Events:"
 
 ## 清理
 
+> kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
 ```bash
 # 1. 删除部署
 kubectl delete deployment my-app
@@ -147,6 +153,7 @@ tccli tcr DeleteInstanceToken --region ap-guangzhou --RegistryId "<REGISTRY_ID>"
 
 ## 收尾确认
 
+> kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
 ```bash
 # 业务可用性端到端：清理后重新部署 Pod，kubectl get pods 返回 ready=true
 # 证明镜像拉取+运行成功（Verify 在清理前查 Pod Running，此处清理后重部署验证链路可复现）

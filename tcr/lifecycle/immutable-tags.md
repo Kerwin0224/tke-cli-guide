@@ -6,6 +6,7 @@ fused: false
 # 镜像不可变规则
 
 > 控制台: [容器镜像服务控制台 - 不可变规则](https://console.cloud.tencent.com/tcr/immutable)
+> 官方文档: [镜像版本不可变](https://cloud.tencent.com/document/product/1141/58200)
 > 配置不可变规则，禁止覆盖已存在的镜像 Tag。防止 `latest` 等标签被意外覆盖。配置型操作。
 
 ## 触发条件
@@ -36,7 +37,7 @@ fused: false
 - **不可变规则**: 禁止覆盖已存在 Tag（防止 `latest` 被改）。Push 时拒绝
 - **版本保留**: 自动删旧留新（清理堆积）。定时执行删除
 - **默认推荐**: 生产命名空间对 `latest`/`v*` 设不可变；同时配版本保留清理旧版本（两套规则互补，勿混为一谈）
-- **能关闭吗?**: 能，`DeleteImmutableTagRules` 或 `ModifyImmutableTagRules --Disabled true`
+- **可关闭**：是，`DeleteImmutableTagRules` 或 `ModifyImmutableTagRules --Disabled true`
 
 ## 配置项
 
@@ -84,6 +85,7 @@ tccli tcr CreateImmutableTagRules --region <REGION> \
 
 ## 验证
 
+> docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）
 ```bash
 # 查看规则（响应含 Rules/EmptyNs/Total；计数键为 Total，非 TotalCount）
 tccli tcr DescribeImmutableTagRules --region <REGION> --RegistryId "<REGISTRY_ID>" \
@@ -139,6 +141,7 @@ tccli tcr DeleteImmutableTagRules --region <REGION> \
 
 ## 收尾确认
 
+> docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）
 ```bash
 # ② 业务可用性端到端：规则真正拦截覆盖行为（Verify 查规则字段存在，这里查实际 push 行为符合预期）
 # 覆盖已存在 latest 应被拒（证明规则生效）

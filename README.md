@@ -4,7 +4,7 @@ doc_type: Overview
 # TKE + TCR: TCCLI 文档
 
 > 腾讯云容器服务 (TKE) 和容器镜像服务 (TCR) 的 TCCLI 命令行操作指南。
-> 零基础知识即可上手，每条命令可复制执行。
+> 零基础知识即可入门，每条命令可复制执行。
 
 ## 是什么
 
@@ -46,23 +46,18 @@ doc_type: Overview
 
 ## 本指南不覆盖哪些操作？
 
-并非所有 `tccli tke` / `tccli tcr` 的 Action 都在本指南范围内。以下 **27** 个 Action 经评估**有意排除**（非文档缺失；与 `tools/data/semantic-clustering-audit.json` 排除域同源）——遇到它们时不要在本指南查找 runbook，直接去对应去向：
+并非所有 `tccli tke` / `tccli tcr` 的 Action 都在本指南范围内。以下 Action 不在本指南——遇到它们时直接去对应去向：
 
-| 排除域 | Action | 排除理由 | 去向 |
-|:-------|:-------|:---------|:-----|
-| TKE 预留券/规模价格（计费域，7 个） | `CreateReservedInstances` / `DeleteReservedInstances` / `DescribeReservedInstances` / `DescribeReservedInstanceUtilizationRate` / `ModifyReservedInstanceScope` / `RenewReservedInstances` / `GetClusterLevelPrice` | 包年包月资源计费管理，属计费域，非容器运维 | [预留实例计费文档](https://cloud.tencent.com/document/product/457) |
-| TKE 计费用量（6 个） | `DescribeRIUtilizationDetail` / `DescribePodChargeInfo` / `DescribePodDeductionRate` / `DescribePodsBySpec` / `DescribePostNodeResources` / `DescribeResourceUsage` | 用量/抵扣查询；不写 runbook，仅作参考 | [配额参考](tke/reference/quotas.md) |
-| TKE Edge 下线（5 个） | `DescribeAvailableTKEEdgeVersion` / `DescribeEdgeAvailableExtraArgs` / `DescribeTKEEdgeExternalKubeconfig` / `DescribeTKEEdgeScript` / `ForwardTKEEdgeApplicationRequestV3` | 4 个 `status=deprecated`；`ForwardTKEEdgeApplicationRequestV3` 真机全域 `UnsupportedRegion` | Edge 已下线；边缘场景见 [EKS](tke/specialized/eks-cluster.md) / [注册节点](tke/nodes/external-nodes.md) |
-| TCR AI 模型（Beta，4 个） | `ListAIModels` / `ListAIModelVersions` / `DescribeAIModelVersionDetail` / `DeleteAIModel` | Beta，尚未稳定 | [TCR 产品文档](https://cloud.tencent.com/document/product/1141) |
-| TCR Skill（Beta，5 个） | `ListSkills` / `ListSkillVersions` / `DescribeSkillDetail` / `DescribeSkillDownloadInfo` / `DeleteSkill` | Beta，尚未稳定 | [TCR 产品文档](https://cloud.tencent.com/document/product/1141) |
+| 类别 | Action | 去向 |
+|:-----|:-------|:-----|
+| TKE 预留券/规模价格（计费域，7 个） | `CreateReservedInstances` / `DeleteReservedInstances` / `DescribeReservedInstances` / `DescribeReservedInstanceUtilizationRate` / `ModifyReservedInstanceScope` / `RenewReservedInstances` / `GetClusterLevelPrice` | [预留实例计费文档](https://cloud.tencent.com/document/product/457) |
+| TKE 计费用量（6 个） | `DescribeRIUtilizationDetail` / `DescribePodChargeInfo` / `DescribePodDeductionRate` / `DescribePodsBySpec` / `DescribePostNodeResources` / `DescribeResourceUsage` | [配额参考](tke/reference/quotas.md) |
+| TKE Edge（已下线，5 个） | `DescribeAvailableTKEEdgeVersion` / `DescribeEdgeAvailableExtraArgs` / `DescribeTKEEdgeExternalKubeconfig` / `DescribeTKEEdgeScript` / `ForwardTKEEdgeApplicationRequestV3` | Edge 已下线；边缘场景见 [EKS](tke/specialized/eks-cluster.md) / [注册节点](tke/nodes/registered-nodes/overview.md) |
+| **超 TCCLI 范围（控制台/独立产品面，无 tccli Action，9 项）** | 成本洞察 / Node Map / Workload Map / 服务网格 / 云原生 etcd / 备份中心 / 节点迁移 / EIS 推理三件套 / 弹性推理 / 交付流水线 | 由控制台或独立产品提供，非 TCCLI 可达。其中：服务网格=[TCM](https://cloud.tencent.com/document/product/1251)；云原生 etcd=[云原生 etcd](https://cloud.tencent.com/document/product/457/58176)；EIS 推理=[TI-ONE/EIS](https://cloud.tencent.com/document/product/851) |
 
-> 本指南覆盖上述排除域之外的**全部 TKE + TCR TCCLI 操作**。若你使用的 Action 既不在本指南、也不在上表，请通过 [GitHub 反馈](https://github.com/) 提交。
+> 本指南覆盖上表之外的 TKE + TCR TCCLI 操作。若你使用的 Action 既不在本指南、也不在上表，请通过 [GitHub 反馈](https://github.com/) 提交。
 >
-> **覆盖口径（可复现）**：覆盖率按命令在场计——非排除 Action 须在文档 fenced 代码块内出现字面 `tccli (tke|tcr) <Action>` 调用。概念归属见 `tools/data/semantic-clustering-audit.json`；命令覆盖见 `command/COVERAGE.md`。
->
-> **覆盖规模（tccli 3.1.124.1）**：TKE + TCR 非排除 Action 在 docs 字面 command-presence **全覆盖**（TKE 并集 275 + TCR 115；排除计费/用量/Edge 下线/AI·Skill 共 27，见上表）。清单见 `command/COVERAGE.md`。
->
-> **调用边界**：① 部分账号 CAM 可能拒绝 `tke:CreateCluster` 等写操作——以 `help --detail` 核入参，并以真机返回的 `Error.Code` 为准；响应字段以实际响应为准，不预写未验证字段。② 个别 Action 命令行展开参数可能解析失败，改用 `--cli-input-json file://` 传参。
+> **调用边界**：① 部分账号 CAM 可能拒绝 `tke:CreateCluster` 等写操作——以 `help --detail` 核入参，以实际返回的 `Error.Code` 为准；响应字段以实际响应为准，不预写未验证字段。② 个别 Action 命令行展开参数可能解析失败，改用 `--cli-input-json file://` 传参。
 
 ## 快速检查
 

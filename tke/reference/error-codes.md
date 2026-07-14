@@ -15,11 +15,11 @@ subtype: 8D
 
 ## TKE 特有错误码
 
-> 来源：腾讯云 TKE API 错误码文档。`InvalidParameter.Param` / `ResourceNotFound` 为常见错误码。
+> `InvalidParameter.Param` / `ResourceNotFound` 为常见错误码。
 
 | 错误码 | 含义 | 可重试 | 诊断 | 修复 |
 |------|---------|:---------:|----------|-----|
-| `InvalidParameter.Param` | 参数错误（含资源不存在） | 否 | 核对参数值与资源 ID | 确认资源 ID 存在、参数格式正确；删不存在的集群返回 `[E404000 ResourceNotFound] record not found` |
+| `InvalidParameter.Param` | 参数错误 | 否 | 核对参数值与资源 ID | 确认资源 ID 存在、参数格式正确 |
 | `InternalError.QuotaMaxClsLimit` | 集群数超配额 | 否 | `tccli tke DescribeClusters` 看集群存量 | 删除闲置集群或提工单提额（单地域默认 **20**） |
 | `InternalError.QuotaMaxNodLimit` | 节点数超配额 | 否 | `tccli tke DescribeClusterStatus` 看节点数 | 删除闲置节点或提工单提额 |
 | `LimitExceeded` | 超过配额限制（节点池等） | 否 | `tccli tke DescribeClusterNodePools` 看节点池数 | 删除闲置节点池（单集群建议 ≤20） |
@@ -37,14 +37,14 @@ subtype: 8D
 | `AuthFailure.SecretIdNotFound` | 凭证无效或已过期 | 否 | `tccli tke DescribeRegions` 验证凭证 | 见 [配置凭证](../../getting-started/credentials.md) 重新配置 |
 | `InvalidParameterValue` | 参数值不合法 | 否 | 查 `--generate-cli-skeleton` 的字段约束 | 检查参数格式和取值范围 |
 | `ResourceNotFound` | 资源不存在 | 否 | `tccli tke DescribeClusters` 核对 ID/Region | 确认 ID 格式与地域一致 |
-| `RequestLimitExceeded` | API 限频 | yes (退避) | 观察请求频率 | 等待后重试；TKE 多数接口 20/s，`DeleteCluster` 50/s，`DescribeClusterSecurity` 100/s |
-| `InternalError` | 内部错误 | yes (退避) | 收集 RequestId 重试 | 重试 2-3 次，仍失败提工单 |
+| `RequestLimitExceeded` | API 限频 | 是（退避） | 观察请求频率 | 等待后重试；TKE 多数接口 20/s，`DeleteCluster` 50/s，`DescribeClusterSecurity` 100/s |
+| `InternalError` | 内部错误 | 是（退避） | 收集 RequestId 重试 | 重试 2-3 次，仍失败提工单 |
 
 ## 诊断命令
 
 ```bash
 # 验证凭证
-tccli cvm DescribeRegions
+tccli tke DescribeRegions
 # expected: RegionSet 列表返回
 
 # 核对集群 ID 与地域

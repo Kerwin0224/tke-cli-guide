@@ -7,11 +7,15 @@ fused: false
 
 > 集群调度器插件配置（`SchedulerPolicy`），控制 Pod 调度行为。集群级配置，属集群属性而非节点操作。
 
+> 官方文档：[基本概念](https://cloud.tencent.com/document/product/457/45598) · [常见高危操作](https://cloud.tencent.com/document/product/457/39539)
+
 ## 概述
 
 调度策略（SchedulerPolicy）配置 K8s 调度器插件，决定 Pod 如何被调度到节点。通过 `DescribeClusterSchedulerPolicy` 查询、`ModifyClusterSchedulerPolicy` 修改。
 
 > 调度策略控制的是"Pod 放到哪个节点"（资源适配/亲和性），与安全无关——故归集群配置而非集群加固。
+
+> 配额：无额外限制。[配额说明](https://cloud.tencent.com/document/product/457/9087)
 
 ## 触发条件
 
@@ -30,7 +34,7 @@ fused: false
 
 ```bash
 tccli --version
-# expected: tccli 3.1.124.1 或更高
+# expected: 最新版本或更高
 
 tccli tke DescribeClusters --region <REGION> --filter "Clusters[0].ClusterId"
 # expected: 集群 ID（凭证有效，见 [配置凭证](../../getting-started/credentials.md)）
@@ -42,6 +46,8 @@ tccli tke DescribeClusters --region <REGION> --filter "Clusters[0].ClusterId"
 | `<REGION>` | 地域 | 如 `ap-guangzhou` | `tccli tke DescribeRegions` |
 
 ## 应用
+
+> ⚠️ **高危操作**：调度策略变更影响全集群 Pod 调度；新策略与节点资源不匹配 → 新 Pod 卡 `Pending`；修改只影响新调度，已运行 Pod 不重调度；先在测试环境验证。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
 
 ### 查询调度策略
 
@@ -118,6 +124,8 @@ tccli tke ModifyClusterSchedulerPolicy --ClusterId "<CLUSTER_ID>" --region <REGI
 
 ## 收尾确认
 
+> kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
+<!-- tccli管调度策略CRUD，kubectl get pods查K8s层Pod调度观测，非tccli边界 -->
 ```bash
 # 跨步骤汇总：SchedulerName + PluginConfigs + Extenders 三项一次性核对（Verify 查字段存在，此处核对配置项协同生效）
 tccli tke DescribeClusterSchedulerPolicy --ClusterId "<CLUSTER_ID>" --region <REGION> \

@@ -33,7 +33,7 @@ TKE 集群节点从子网分配内网 IP，Pod/Service 用 VPC CIDR 通信。创
 
 ```bash
 tccli --version
-# expected: 3.1.124.1 或更高
+# expected: 最新版本或更高
 
 tccli cvm DescribeRegions --filter "TotalCount" --output text
 # expected: 数字（如 49）→ 凭证有效（凭证配置见 [配置凭证](credentials.md)）

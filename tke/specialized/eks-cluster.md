@@ -7,6 +7,10 @@ fused: true
 
 > 存量 EKS 集群运维 + 控制台「容器实例」CPU/GPU（`*EKSContainerInstance*`）。
 > 控制台: [容器实例 · CPU 实例](https://console.cloud.tencent.com/tke2/eksci) · [容器实例 · GPU 实例](https://console.cloud.tencent.com/tke2/eksci-gpu)
+>
+> 官方文档：[超级节点资源规格](https://cloud.tencent.com/document/product/457/39808) · [边缘集群迁移至标准集群](https://cloud.tencent.com/document/product/457/110447)
+>
+> 配额：弹性集群数与容器实例规格受 [资源规格](https://cloud.tencent.com/document/product/457/39808) 限制，集群数默认 20。[配额说明](https://cloud.tencent.com/document/product/457/9087)
 
 > ⚠️ **「Serverless」不是单一产品**，勿把下列三条当成同一条 Action 路径：
 >
@@ -20,16 +24,20 @@ fused: true
 >
 > **本文创建流（容器实例）**：控制台左侧 **容器实例** 下分 **CPU 实例** / **GPU 实例** 两页（非标准集群 4 步）。两页同一 Action 族 `*EKSContainerInstance*`，用规格字段区分 CPU/GPU。勿套用 [tke/index 托管四步全景](../index.md#控制台创建流全景)。
 
+> ⚠️ **产品调整（功能迁移 + 存量可用）**：EKS 集群（独立 Serverless 控制面）**新建入口已关闭**，不再承接新建需求；新建免 CVM 算力改走 [标准集群](../clusters/create.md)（`CreateCluster`）+ [虚拟节点/超级节点](../nodes/virtual-nodes.md)。**存量 EKS 集群与存量容器实例可继续按本文运维**（功能迁移升级至标准集群，非强制下线）。
+>
+> ⚠️ **高危操作**：产品已调整，禁止再用 `CreateEKSCluster` 新建 EKS 集群；建议存量 EKS 集群尽早迁移至标准集群 + 虚拟节点方案。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
+
 ## 触发条件
 
 - **新建免 CVM 算力（要 K8s 编排）** → 不用本文：走 [标准集群](../clusters/create.md)（`CreateCluster`）+ [虚拟节点](../nodes/virtual-nodes.md)；**不是**一次 `CreateCluster` 就等于 Serverless
-- 控制台「容器实例 → CPU 实例 / GPU 实例」→ 本文 [创建容器实例](#创建容器实例部署-pod)（`CreateEKSContainerInstances`）；与节点池「CPU 节点 / GPU 节点」、与虚拟节点 **都不是**同一功能
+- 控制台「容器实例 → CPU 实例 / GPU 实例」→ 本文 [创建容器实例](#创建容器实例-部署-pod)（`CreateEKSContainerInstances`）；与节点池「CPU 节点 / GPU 节点」、与虚拟节点 **都不是**同一功能
 - 存量：`DescribeEKSClusters` 已有 EKS 集群，需查凭证/更新/事件 — 用本文「EKS 集群」段
 - 存量容器实例出现 `ImagePullBackOff`/`OutOfCpu`/`CreatePodSandboxFailed` — 用 `DescribeEKSContainerInstanceEvent`
 
 ## 准备工作
 
-- 已安装 tccli 并配置凭证 (见 [配置凭证](../../getting-started/credentials.md))
+- 已安装 TCCLI 并配置凭证 (见 [配置凭证](../../getting-started/credentials.md))
 - 已确认地域支持容器实例：`DescribeEKSContainerInstanceRegions`（勿仅用 `DescribeRegions`）
 - 规格在支持表内：见 [资源规格](https://cloud.tencent.com/document/product/457/39808)；GPU 还须账号对该 `GpuType` 有售卖/配额
 - EKS / 容器实例相关资源配额充足
@@ -61,6 +69,21 @@ fused: true
 | 列表 / 重启 / 更新 / 删除 | 两页共用 | `Describe*` / `Restart*` / `Update*` / `Delete*EKSContainerInstance(s)` | 出参含 `GpuType`/`GpuCount`；CPU 实例多为空/`0` |
 
 > **不是**集群节点池里的「CPU 节点 / GPU 节点」（那是 `CreateNodePool` 的 `InstanceTypes` + `DescribeGPUInfo`/`GPUArgs`，见 [节点池创建](../nodes/nodepool-create.md) / [节点实例运维](../nodes/instance-ops.md#查询-gpu-驱动版本-2022-05-01)）。
+
+> **控制台维度**：控制台「容器实例 → CPU 实例 / GPU 实例」是两页，但对应 tccli 同一 `CreateEKSContainerInstances`，变量只在是否传 `GpuType`/`GpuCount`（见下字段分叉决策表）。
+
+> **CPU / GPU 字段分叉决策表（同一 `CreateEKSContainerInstances`，靠规格字段分叉）**：控制台「CPU 实例」与「GPU 实例」是两页，但 tccli 是**同一个 Action**，变量只在是否传 `GpuType`/`GpuCount`。下表为唯一决策依据（字段真值取自 `api.json` `CreateEKSContainerInstancesRequest`；`Cpu`/`Memory`/`VpcId`/`SubnetId`/`SecurityGroupIds`/`EksCiName`/`Containers` 为顶层必填，不随 CPU/GPU 变化）。
+
+| 决策点 | CPU 实例（控制台 `/tke2/eksci`） | GPU 实例（控制台 `/tke2/eksci-gpu`） | 字段真值（api.json） |
+|:---|:---|:---|:---|
+| 是否传 `GpuType` | **不传** | **传**（`1/4*V100`/`1/2*V100`/`V100`/`1/4*T4`/`1/2*T4`/`T4`） | `GpuType` 顶层 optional；缺省空字符串 |
+| 是否传 `GpuCount` | **不传**（出参 `GpuCount=0`） | **传**（GPU 卡数，须与 `GpuType` 规格表匹配） | `GpuCount` 顶层 optional int；缺省 0 |
+| `Cpu` / `Memory` | 必传（与 CPU 规格表匹配） | 必传（须与所选 `GpuType` 规格表匹配，≥ GPU 配套的最小 CPU/内存） | 顶层 required=True；单位 核 / GiB |
+| `CpuType` | 可选（`intel`/`amd`/`amd,intel` 优先级） | 可选（GPU 场景通常省略，由 `GpuType` 定卡型） | 顶层 optional；不填则不强制 CPU 型号 |
+| `Containers[].GpuLimit` | 不传（CPU 实例无 GPU 概念） | 可选（该容器可用 GPU 上限，整数；须 ≤ `GpuCount`） | `Container.GpuLimit` 容器内 optional int |
+| 出参 `GpuType`/`GpuCount` | 空 / `0` | 与创建一致 | `DescribeEKSContainerInstances` 出参 |
+
+> **分叉铁律**：CPU 与 GPU 不是两个 Action、不是「先建 CPU 再升级 GPU」——同一 Action 调两次建**两个**实例；改规格走 `UpdateEKSContainerInstance`（`Containers[]` 覆盖式整体替换，须带上 `GpuLimit` 才能保留 GPU 配额）。GPU 库存不足时 Create 仍可能 exit 0 返回 `EksCiIds`，随后事件 `CreatePodSandboxFailed`（Message 含 `gpu instance types is empty` / `not found t4 gpu info`），须 `Describe`+`DescribeEKSContainerInstanceEvent` 确认 Running，勿凭 exit 码判可用。
 
 ## 关键操作
 
@@ -257,10 +280,10 @@ tccli tke UpdateEKSContainerInstance --region ap-guangzhou \
   --EksCiId "<EKSCI_ID>" \
   --RestartPolicy "Always" \
   --Containers '[{"Name":"nginx","Image":"nginx:1.25","Cpu":0.5,"Memory":1.0}]'
-# expected: CAM 拦截 AuthFailure.UnauthorizedOperation（参数已验证）；授权后返回 EksCiId
+# expected: CAM 拦截 AuthFailure.UnauthorizedOperation；授权后返回 EksCiId
 ```
 
-> ⚠️ `UpdateEKSContainerInstance` 需 CAM 授权，参数名（`EksCiId`/`RestartPolicy`/`Containers[]`）已验证；授权后返回 `EksCiId`。`Containers[]` 是覆盖式整体替换（非增量），调用前先 `DescribeEKSContainerInstances` 取当前容器定义再改，避免遗漏。`RestartPolicy` 取值 `Always`/`OnFailure`/`Never`。与 `RestartEKSContainerInstances`（重启，不改定义）区别。GPU 实例更新时若需保留卡配额，在 `Containers[]` 中继续传 `GpuLimit`。
+> ⚠️ `UpdateEKSContainerInstance` 需 CAM 授权；授权后返回 `EksCiId`。`Containers[]` 是覆盖式整体替换（非增量），调用前先 `DescribeEKSContainerInstances` 取当前容器定义再改，避免遗漏。`RestartPolicy` 取值 `Always`/`OnFailure`/`Never`。与 `RestartEKSContainerInstances`（重启，不改定义）区别。GPU 实例更新时若需保留卡配额，在 `Containers[]` 中继续传 `GpuLimit`。
 
 ### EKS 日志采集配置
 
@@ -279,14 +302,14 @@ tccli tke CreateEksLogConfig --ClusterId "<CLUSTER_ID>" --region <REGION> \
 
 > 修改 EKS 集群属性（名称/描述/子网/CLB/DNS）与开启事件持久化（事件投递到 CLS）。参数见各 Action 的 `help --detail`。
 >
-> ⚠️ `UpdateEKSCluster` 返回 `UnauthorizedOperation.CamNoAuth`、`EnableEksEventPersistence` 返回 `FailedOperation.CamNoAuth`——均需 CAM 授权，参数名已验证；授权后 `UpdateEKSCluster` exit 0、`EnableEksEventPersistence` exit 0。
+> ⚠️ `UpdateEKSCluster` 返回 `UnauthorizedOperation.CamNoAuth`、`EnableEksEventPersistence` 返回 `FailedOperation.CamNoAuth`——均需 CAM 授权；授权后 `UpdateEKSCluster` exit 0、`EnableEksEventPersistence` exit 0。
 
 ```bash
 # 更新 EKS 集群属性（ClusterId 定位，ClusterName/ClusterDesc/SubnetIds 等覆盖式更新）
 tccli tke UpdateEKSCluster --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" \
   --ClusterName "<NEW_NAME>" --ClusterDesc "<NEW_DESC>"
-# expected: CAM 拦截 UnauthorizedOperation.CamNoAuth（参数已验证）；授权后 exit 0
+# expected: CAM 拦截 UnauthorizedOperation.CamNoAuth；授权后 exit 0
 ```
 
 ```bash
@@ -294,7 +317,7 @@ tccli tke UpdateEKSCluster --region ap-guangzhou \
 tccli tke EnableEksEventPersistence --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" \
   --LogsetId "<CLS_LOGSET_ID>" --TopicId "<CLS_TOPIC_ID>" --TopicRegion "<REGION>"
-# expected: CAM 拦截 FailedOperation.CamNoAuth（参数已验证）；授权后 exit 0，集群事件投递到 CLS
+# expected: CAM 拦截 FailedOperation.CamNoAuth；授权后 exit 0，集群事件投递到 CLS
 ```
 
 | 占位符 | 含义 | 如何获取 |
@@ -349,6 +372,7 @@ tccli tke DescribeEKSClusters --region ap-guangzhou
 
 ## 收尾确认
 
+> kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
 ```bash
 # 维度 1（跨步骤汇总）：集群 Running（Verify 已查 Status；此处再核名称与 ID 一致）
 tccli tke DescribeEKSClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]' \

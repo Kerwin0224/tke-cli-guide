@@ -7,6 +7,10 @@ fused: true
 
 > 控制台: [容器服务控制台 - 插件管理](https://console.cloud.tencent.com/tke2/addon)
 > 安装、更新、卸载 TKE 集群插件。插件是封装好的 Helm Chart，扩展集群功能。异步操作。
+>
+> 官方文档：[组件与应用概述](https://cloud.tencent.com/document/product/457/81234)
+>
+> 配额：集群插件受集群配额限制（单地域集群数默认 20），组件版本兼容性见 [VPC-CNI 组件变更记录](https://cloud.tencent.com/document/product/457/64920)。[配额说明](https://cloud.tencent.com/document/product/457/9087)
 
 ## 触发条件
 
@@ -179,6 +183,8 @@ tccli tke DescribeAddon --region ap-guangzhou --ClusterId "<CLUSTER_ID>" --Addon
 ## 清理
 
 > **副作用警告**：卸载插件会移除其管理的资源。如 `cbs-csi` 卸载后已有 PVC 可能无法挂载。
+>
+> ⚠️ **高危操作**：误删核心组件（如 DNS 插件、网络插件 CBS-CSI/IPAMD）会导致集群 DNS 解析失败、存储挂载异常或 Pod 网络不通，可能引发生产故障。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
 
 ```bash
 # 1. 卸载
@@ -249,6 +255,8 @@ tccli tke DeleteImageCaches --region <REGION> --ImageCacheIds '["<CACHE_ID>"]'
 
 ## 收尾确认
 
+> kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
+<!-- tccli管Addon生命周期，kubectl查Pod部署状态，非tccli边界 -->
 ```bash
 # 插件 Phase=Succeeded（Verify 查 Phase/版本/Reason，此处端到端核 Pod 真运行 + 衔接前置）
 tccli tke DescribeAddon --region ap-guangzhou --ClusterId "<CLUSTER_ID>" --AddonName "<ADDON_NAME>" \

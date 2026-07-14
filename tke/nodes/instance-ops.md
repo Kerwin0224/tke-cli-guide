@@ -7,12 +7,18 @@ fused: true
 
 > 节点的查询、启停、删除。本节命令跨 TKE 两个 API 版本——按操作类型选择版本，所有命令显式带 `--version`。
 > 完整版本选择见 [API 版本选择](../index.md#api-版本选择)。
+>
+> 官方文档：[节点概述](https://cloud.tencent.com/document/product/457/32201) · [集群生命周期](https://cloud.tencent.com/document/product/457/32188) · [常见高危操作](https://cloud.tencent.com/document/product/457/39539)
+>
+> 配额：启停/重装/退还/销毁按 CVM 实例配额、重启节点上限 100。[配额说明](https://cloud.tencent.com/document/product/457/9087)
+>
+> ⚠️ **高危操作**：StopMachines 停机前需驱逐 Pod 防业务中断、DeleteClusterMachines 销毁不可逆、SetMachineLogin 修改登录凭据影响节点安全。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
 
 ## 触发条件
 
 - DescribeClusterInstances/DescribeClusterMachines 返回节点列表，需对具体节点执行启停/删除/驱逐/扩缩/修改/GPU/接入操作 — 从 [查询节点](#查询节点) 开始定位节点
 - 节点出现 NotReady 或需维护（驱逐 Pod 后重建）— 看 [节点隔离与驱逐](#节点隔离与驱逐kubectl非-tccli) 段
-- 你遇到节点运维问题想查诊断路径 — 看 [故障恢复] 或对应操作段
+- 你遇到节点运维问题需查诊断路径 — 看 [故障恢复] 或对应操作段
 
 
 ## 查询节点
@@ -78,6 +84,8 @@ tccli tke DeleteClusterMachines --version 2022-05-01 \
 
 ### 隔离节点（停止调度新 Pod）
 
+> kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
+<!-- tccli无普通节点cordon能力(仅DrainClusterVirtualNode/DrainExternalNode)，kubectl管理K8s原生节点调度，非tccli边界 -->
 ```bash
 kubectl cordon <NODE_NAME>
 # expected: node <NODE_NAME> cordoned（节点标 SchedulingDisabled，已运行 Pod 不动）
@@ -85,6 +93,8 @@ kubectl cordon <NODE_NAME>
 
 ### 驱逐节点上 Pod（维护前移走工作负载）
 
+> kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
+<!-- tccli无普通节点drain能力(仅DrainClusterVirtualNode/DrainExternalNode)，kubectl管理K8s原生Pod驱逐，非tccli边界 -->
 ```bash
 kubectl drain <NODE_NAME> --ignore-daemonsets --delete-emptydir-data
 # expected: 逐个 evict Pod，DaemonSet Pod 保留（--ignore-daemonsets），emptyDir 数据删（--delete-emptydir-data）
@@ -92,6 +102,8 @@ kubectl drain <NODE_NAME> --ignore-daemonsets --delete-emptydir-data
 
 > `kubectl drain` = `cordon` + 逐个 evict Pod。维护后恢复调度：
 
+> kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
+<!-- kubectl管理K8s原生节点调度恢复，tccli无uncordon能力，非tccli边界 -->
 ```bash
 kubectl uncordon <NODE_NAME>
 # expected: node <NODE_NAME> uncordoned（恢复可调度）
@@ -197,7 +209,7 @@ tccli tke AddExistedInstances --version 2018-05-25 \
 tccli tke CreateClusterInstances --version 2018-05-25 \
   --ClusterId "<CLUSTER_ID>" --region ap-guangzhou \
   --RunInstancePara '<CVM_RUNINSTANCES_JSON>'
-# expected: CAM 拦截 AuthFailure.UnauthorizedOperation（参数已验证）；授权后返回 InstanceIdSet[]
+# expected: CAM 拦截 AuthFailure.UnauthorizedOperation；授权后返回 InstanceIdSet[]
 ```
 
 | 占位符 | 含义 | 如何获取 |

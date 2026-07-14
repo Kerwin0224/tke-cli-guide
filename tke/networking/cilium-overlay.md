@@ -27,6 +27,10 @@ CiliumOverlay 是 TKE 的三种容器网络类型之一（另两种：Global Rou
 
 > 三模型对比与选用见 [网络管理](index.md#网络模型对比)。CiliumOverlay 与 VPC-CNI 互斥（均为非 GR 模型），与 Global Router 亦互斥——`NetworkType` 三选一，创建时定型。
 
+> 官方文档：[容器网络概述](https://cloud.tencent.com/document/product/457/50353) · [网络方案选型](https://cloud.tencent.com/document/product/457/106561) · [集群启用 IPVS](https://cloud.tencent.com/document/product/457/32193)
+> 配额：集群 CIDR 规划（创建时自定义，暂不支持变更）；控制面子网须预留 ≥2 IP。[配额限制](https://cloud.tencent.com/document/product/457/9087)
+> ⚠️ **高危操作**：开启 CiliumOverlay 后不可回退至 GlobalRouter（`NetworkType` 创建时定型不可切换）；DataPlaneV2 与 kube-proxy iptables 模式强绑定，误配致集群不可用。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
+
 ## 决策依据
 
 #### 什么时候选 CiliumOverlay
@@ -44,10 +48,10 @@ CiliumOverlay 是 TKE 的三种容器网络类型之一（另两种：Global Rou
 |:------|:---------|------|:--------:|------|
 | NetworkType | ClusterAdvancedSettings | string | 否（默认 `GR`） | 容器网络类型枚举：`GR` / `VPC-CNI` / `CiliumOverlay`。选 CiliumOverlay 传 `CiliumOverlay` |
 | SubnetId | ClusterBasicSettings | string | **CiliumOverlay 时必填** | 控制面子网。CiliumOverlay 时 TKE 从该子网取 **2 个 IP** 创建内网负载均衡 |
-| ClusterOs | ClusterBasicSettings | string | **CiliumOverlay 时受限** | 真机：`ubuntu20.04x86_64` 等报 `FailedOperation.Param`（`cluster os … is not supported to use cilium overlay mode`）；可用 **`tlinux3.1x86_64`** |
-| CiliumMode | ClusterAdvancedSettings | string | **CiliumOverlay 时禁止传** | 真机：与 `NetworkType=CiliumOverlay` 同传报 `FailedOperation.Param`（`CiliumMode … must not set when use CiliumOverlay`） |
-| DataPlaneV2 | ClusterAdvancedSettings | boolean | **CiliumOverlay 时禁止 `true`** | 真机：`NetworkType CiliumOverlay is not supported to use dataplaneV2 mode` |
-| IPVS / kube-proxy | ClusterAdvancedSettings | — | **CiliumOverlay 仅 iptables** | 真机：`IPVS=true` 报 `cluster of CiliumOverlay only support kubeproxy with mode iptables`；勿传 `IPVS=true` |
+| ClusterOs | ClusterBasicSettings | string | **CiliumOverlay 时受限** | 传 `ubuntu20.04x86_64` 等报 `FailedOperation.Param`（`cluster os … is not supported to use cilium overlay mode`）；可用 **`tlinux3.1x86_64`** |
+| CiliumMode | ClusterAdvancedSettings | string | **CiliumOverlay 时禁止传** | 与 `NetworkType=CiliumOverlay` 同传报 `FailedOperation.Param`（`CiliumMode … must not set when use CiliumOverlay`） |
+| DataPlaneV2 | ClusterAdvancedSettings | boolean | **CiliumOverlay 时禁止 `true`** | 同传 `true` 报 `NetworkType CiliumOverlay is not supported to use dataplaneV2 mode` |
+| IPVS / kube-proxy | ClusterAdvancedSettings | — | **CiliumOverlay 仅 iptables** | 传 `IPVS=true` 报 `cluster of CiliumOverlay only support kubeproxy with mode iptables`；勿传 `IPVS=true` |
 
 > ⚠️ **`SubnetId` 的条件必填**：容器网络插件为 CiliumOverlay 时，TKE 会从该子网获取 2 个 IP 用来创建内网负载均衡，故 `ClusterBasicSettings.SubnetId` 必传，且子网须有可用 IP。该字段 API 层 `required=false`（条件必填不体现在字段级 required 标记），易漏。
 
@@ -76,7 +80,7 @@ tccli tke CreateCluster --region ap-guangzhou \
 | `<CLUSTER_CIDR>` | 容器网段 | 不得与 VPC CIDR 冲突 | 自取，如 `172.16.0.0/16` |
 | `<SERVICE_CIDR>` | 服务网段 | 不与 ClusterCIDR/VPC 冲突 | 自取，如 `10.96.0.0/20` |
 
-> **CiliumOverlay 创建时只传 `NetworkType`**：勿叠 `CiliumMode` / `DataPlaneV2=true` / `IPVS=true`（真机均 `FailedOperation.Param`）。`ClusterOs` 用 `tlinux3.1x86_64`（ubuntu 系列真机拒 CiliumOverlay）。
+> **CiliumOverlay 创建时只传 `NetworkType`**：勿叠 `CiliumMode` / `DataPlaneV2=true` / `IPVS=true`（同传均报 `FailedOperation.Param`）。`ClusterOs` 用 `tlinux3.1x86_64`（ubuntu 系列报错拒绝 CiliumOverlay）。
 
 ### 用 --generate-cli-skeleton 取完整入参骨架
 
@@ -105,7 +109,7 @@ tccli tke DescribeClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]'
 
 ## 回滚
 
-> CiliumOverlay 在集群创建时定型（`ClusterAdvancedSettings.NetworkType`），**创建后不可切换回 GR/VPC-CNI**——只能重建集群。误配参数（如 `ClusterAdvancedSettings` 子字段）可用 `ModifyClusterAdvancedSettings` 调整，但网络模型本身不可逆。
+> CiliumOverlay 在集群创建时定型（`ClusterAdvancedSettings.NetworkType`），**创建后不可切换回 GR/VPC-CNI**——只能重建集群。集群创建后可改的属性（名称/等级/项目/高可用/安全模式等）用 `ModifyClusterAttribute`，但其入参不含 `ClusterAdvancedSettings` 的网络字段——`NetworkType` 无事后修改路径，误配只能重建集群。
 
 ---
 
@@ -145,7 +149,7 @@ tccli tke DescribeClusterKubeconfig --region ap-guangzhou --ClusterId "<CLUSTER_
 # expected: apiVersion: v1
 ```
 
-> 集群 Running + NetworkType=CiliumOverlay 定型 + kubeconfig 可拉取 = 创建闭环完成。但空集群(0 节点)无法运行 Pod（业务可用性边界），须创建节点池；CiliumOverlay 的 Pod 跨节点通信依赖 Cilium Overlay 隧道，节点池就绪后用 `kubectl get pods -o wide` 核 Pod IP 不在 VPC 子网段（Overlay 独立网段）端到端验证。
+> 集群 Running + NetworkType=CiliumOverlay 定型 + kubeconfig 可拉取 = 创建闭环完成。但空集群(0 节点)无法运行 Pod（业务可用性边界），须创建节点池；CiliumOverlay 的 Pod 跨节点通信依赖 Cilium Overlay 隧道，节点池就绪后用 `kubectl get pods -o wide` <!-- kubectl验证CiliumOverlay Pod IP在独立网段，非tccli边界 --> 核 Pod IP 不在 VPC 子网段（Overlay 独立网段）端到端验证。
 
 ---
 

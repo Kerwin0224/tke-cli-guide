@@ -37,7 +37,7 @@ tccli tcr DescribeInstanceStatus --region <REGION> --RegistryIds '["<REGISTRY_ID
 
 ## 企业版实例状态 (Status)
 
-> 来源：`DescribeInstanceStatus` 响应。值 `Running`；枚举来自腾讯云 TCR 官方文档。
+> `Status` 字段取自 `DescribeInstanceStatus` 响应。常驻值为 `Running`；枚举见腾讯云 TCR 官方文档。
 
 | 状态 | 含义 | 触发条件 | 用户可执行操作 | 终态 |
 |:-----|:-----|:---------|:--------------|:----:|

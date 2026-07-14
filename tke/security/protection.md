@@ -27,6 +27,10 @@ fused: false
 | 事件持久化 | K8s 事件存 CLS 用于审计 | `EnableEventPersistence` / `DisableEventPersistence` |
 | 集群密钥 | 查询集群证书等敏感信息 | `DescribeClusterSecurity` |
 
+> 官方文档：[策略管理](https://cloud.tencent.com/document/product/457/103179) · [使用 KMS 进行 ETCD 加密](https://cloud.tencent.com/document/product/457/45594) · [常见高危操作](https://cloud.tencent.com/document/product/457/39539)
+> 配额：集群配置限制参见 [配额限制](https://cloud.tencent.com/document/product/457/9087)。
+> ⚠️ **高危操作**：关闭删除保护后误删集群不可逆；加密密钥丢失致 ETCD 数据不可恢复。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
+
 ## 配置项
 
 > 入参字段名与必填以 `tccli tke <Action> help --detail` 为准。
@@ -74,7 +78,7 @@ tccli tke EnableClusterDeletionProtection --region ap-guangzhou --ClusterId "<CL
 ### 查询 OPA 准入策略
 
 ```bash
-# 入参 Category 仅 baseline|priority|optional（≠ 响应 PolicyCategory）；可省略拿全量
+# 入参 Category 仅 baseline|priority|optional（≠ 响应 PolicyCategory）；省略则返回全量
 tccli tke DescribeOpenPolicyList --region ap-guangzhou --ClusterId "<CLUSTER_ID>" --Category "baseline"
 # expected: OpenPolicyInfoList[]（PolicyCategory/EnforcementAction/EnabledStatus=open|close）+ GatekeeperStatus；入参枚举详 [审计日志](audit.md)
 ```

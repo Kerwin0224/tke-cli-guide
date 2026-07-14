@@ -6,7 +6,8 @@ fused: true
 # 推送和拉取镜像
 
 > 控制台: [容器镜像服务控制台 - 镜像管理](https://console.cloud.tencent.com/tcr/image)
-> 用 TCCLI 获取访问凭证、docker CLI 推送/拉取镜像、TCCLI 验证。跨工具操作——TCCLI 管 TCR 侧，docker 管镜像传输。
+> 官方文档: [管理镜像仓库](https://cloud.tencent.com/document/product/1141/41811) · [产品服务层级与容量限制](https://cloud.tencent.com/document/product/1141/104731)
+> 用 TCCLI 获取访问凭证、docker CLI 推送/拉取镜像、TCCLI 验证。跨工具操作——TCCLI 管 TCR 侧，docker 管镜像传输（TCCLI 无镜像推送/拉取能力，docker 命令属非 tccli 边界）。
 
 ## 触发条件
 
@@ -37,6 +38,7 @@ fused: true
 tccli --version
 # expected: tccli 版本号
 
+# docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）
 docker --version
 # expected: Docker version 20+
 ```
@@ -114,7 +116,9 @@ tccli tcr CreateInstanceToken --region <REGION> \
 
 > 凭证 1 小时过期（`ExpTime` 字段）。过期后 `docker push` 报 `unauthorized`，需重新 `CreateInstanceToken`。
 
-### 步骤 2：docker login
+### 步骤 2：docker login（docker CLI，非 tccli）
+
+> docker CLI 镜像传输操作（非 tccli；TCCLI 不提供 docker daemon 操作能力）。
 
 ```bash
 docker login <REGISTRY_DOMAIN> -u "<USERNAME>" -p "<TOKEN>"
@@ -131,6 +135,8 @@ docker login <REGISTRY_DOMAIN> -u "<USERNAME>" -p "<TOKEN>"
 
 #### 选项 A：单架构推送
 
+> docker CLI 镜像传输操作（非 tccli；TCCLI 不提供 docker daemon 操作能力）。
+
 ```bash
 # 打标签
 docker tag alpine:latest <REGISTRY_DOMAIN>/<NAMESPACE_NAME>/<REPOSITORY_NAME>:v1
@@ -142,7 +148,7 @@ docker push <REGISTRY_DOMAIN>/<NAMESPACE_NAME>/<REPOSITORY_NAME>:v1
 
 #### 选项 B：多架构推送（buildx）
 
-> **与 A 二选一，非在 A 之后执行**。用 buildx 构建多架构 manifest 后一次性推送。
+> **与 A 二选一，非在 A 之后执行**。用 buildx 构建多架构 manifest 后一次性推送。docker CLI（非 tccli；TCCLI 不提供 docker daemon 操作能力）。
 
 ```bash
 # 用 buildx 构建多架构镜像后推送
@@ -151,7 +157,9 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 # expected: 推送多架构 manifest
 ```
 
-### 步骤 4：拉取镜像
+### 步骤 4：拉取镜像（docker CLI，非 tccli）
+
+> docker CLI 镜像传输操作（非 tccli；TCCLI 不提供 docker daemon 操作能力）。
 
 ```bash
 docker pull <REGISTRY_DOMAIN>/<NAMESPACE_NAME>/<REPOSITORY_NAME>:v1
@@ -182,6 +190,7 @@ tccli tcr DescribeImages --region <REGION> \
 
 > **副作用警告**：`DeleteImage` 删除指定镜像版本，不可恢复。`docker rmi` 只删本地镜像，不影响 TCR 侧。
 
+> docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）
 ```bash
 # 1. TCR 侧删除镜像版本
 tccli tcr DeleteImage --region <REGION> \
@@ -189,7 +198,7 @@ tccli tcr DeleteImage --region <REGION> \
   --RepositoryName "<REPOSITORY_NAME>" --ImageVersion "<TAG>"
 # expected: exit 0
 
-# 2. 本地清理
+# 2. 本地清理（docker CLI，非 tccli）
 docker rmi <REGISTRY_DOMAIN>/<NAMESPACE_NAME>/<REPOSITORY_NAME>:<TAG>
 # expected: Untagged + Deleted
 
@@ -249,6 +258,7 @@ tccli tcr DuplicateImage --RegistryId "<REGISTRY_ID>" --region <REGION> \
 
 ## 收尾确认
 
+> docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）
 ```bash
 # ③ 跨步骤汇总：digest 双向核对（push 返回的 digest 与 TCR 侧 DescribeImages 返回的 digest 一致 = 推送产物真落地）
 tccli tcr DescribeImages --region ap-guangzhou --RegistryId "<REGISTRY_ID>" \
@@ -257,6 +267,7 @@ tccli tcr DescribeImages --region ap-guangzhou --RegistryId "<REGISTRY_ID>" \
 # expected: tag=推送的 tag, digest 与 docker push 返回的 sha256:... 一致
 
 # ② 业务可用性端到端：docker pull 真正成功（push-pull 的终极证明，Verify 查 TCR 侧记录，这里查本地能拉下来）
+# docker CLI 端到端验证（非 tccli；TCCLI 不提供 docker daemon 拉取能力）
 docker pull <REGISTRY_DOMAIN>/<NAMESPACE_NAME>/<REPOSITORY_NAME>:<TAG>
 # expected: Pull complete / Status: Image is up to date
 ```

@@ -11,6 +11,12 @@ fused: true
 > ⚠️ **两步，不是一次 `CreateCluster`**：① [创建标准集群](../clusters/create.md)（`CreateCluster`，空控制面）→ ② 本文创建虚拟节点池/节点。`CreateCluster` **不会**单独变成「Serverless 集群」。
 >
 > 与另外两条路径区分：存量 **EKS 集群**（`CreateEKSCluster`，新建已关）与 **容器实例 CPU/GPU**（`CreateEKSContainerInstances`，无集群）见 [EKS / 容器实例](../specialized/eks-cluster.md)。三者 Action 不同，勿混用。
+>
+> 官方文档：[超级节点资源规格](https://cloud.tencent.com/document/product/457/39808) · [节点概述](https://cloud.tencent.com/document/product/457/32201)
+>
+> 配额：超级节点按量计费无上限，需关注成本。[配额说明](https://cloud.tencent.com/document/product/457/9087)
+>
+> ⚠️ **高危操作**：按量计费无上限、DrainClusterVirtualNode 驱逐 Pod 需确认业务可中断、删除节点池丢失所有虚拟节点。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
 
 ## 触发条件
 
@@ -147,6 +153,8 @@ tccli tke ModifyClusterVirtualNodePool \
 
 异步操作，检查 ≥4 个维度：
 
+> kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
+<!-- kubectl验证虚拟节点已加入集群(kubectl get nodes查K8s Node对象)，非tccli边界 -->
 ```bash
 # 维度1: 虚拟节点已加入集群 (kubectl 查 K8s Node 对象; tccli 查的是节点池抽象, 这里用 kubectl 看节点实物)
 kubectl get nodes --show-labels | grep super
@@ -194,6 +202,8 @@ tccli tke DeleteClusterVirtualNodePool --ClusterId "<ID>" --NodePoolId "<POOL>"
 
 ## 收尾确认
 
+> kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
+<!-- tccli管虚拟节点池CRUD，kubectl验证节点Ready并测试Pod调度到虚拟节点(K8s层观测)，非tccli边界 -->
 ```bash
 # ②业务可用性端到端: 虚拟节点 eklet-xxx Ready 且 Pod 可调度到虚拟节点（Verify 只查 LifeState，未查 Pod 真能调度）
 kubectl get nodes | grep eklet

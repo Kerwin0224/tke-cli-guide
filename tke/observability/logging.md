@@ -7,6 +7,10 @@ fused: false
 
 > 控制台: [容器服务控制台 - 日志采集](https://console.cloud.tencent.com/tke2/cluster)
 > 安装日志 Agent、采集业务日志与控制面日志到 CLS。配置型操作（开启采集行为，不创建资源）。
+>
+> 官方文档：[可观测体系概述](https://cloud.tencent.com/document/product/457/118975)
+>
+> 配额：CLS 日志集/主题存储限制见 CLS 服务配额，TKE 侧无额外配额限制。[配额说明](https://cloud.tencent.com/document/product/457/9087)
 
 ## 触发条件
 
@@ -34,7 +38,7 @@ TKE 日志分两类，采集方式不同：
 - **CLS Agent**: 采集 Pod 业务日志（应用输出），需 `InstallLogAgent` 安装 Agent + `CreateCLSLogConfig` 配置采集规则
 - **控制面日志**: 采集 Master 组件日志（apiserver/scheduler/controller-manager/etcd），仅托管集群支持
 - **默认推荐**: 业务日志用 CLS Agent；控制面问题排查时开启控制面日志
-- **能关闭吗?**: 能。`UninstallLogAgent` / `DisableControlPlaneLogs`
+- **可关闭**： 是。`UninstallLogAgent` / `DisableControlPlaneLogs`
 
 ## 配置项
 
@@ -46,7 +50,7 @@ TKE 日志分两类，采集方式不同：
 |:------|------|:--------:|:-----|:-----------|
 | ClusterId | string | 是 | 集群 ID | `ResourceNotFound` |
 | KubeletRootDir | string | 否 | kubelet 根目录，默认 `/var/lib/kubelet` | Agent 装错位置 |
-| ClusterType | string | 否 | 集群类型 | 类型不匹配 |
+| ClusterType | string | 是 | 集群类型（`MANAGED_CLUSTER`/`INDEPENDENT_CLUSTER`） | 类型不匹配/缺省报 `the following arguments are required: --ClusterType` |
 
 ### EnableControlPlaneLogs
 
@@ -55,7 +59,7 @@ TKE 日志分两类，采集方式不同：
 | 字段 | 类型 | 必填 | 作用 |
 |:------|------|:--------:|:-----|
 | ClusterId | string | 是 | 集群 ID |
-| ClusterType | string | 否 | 集群类型 |
+| ClusterType | string | 是 | 集群类型（`MANAGED_CLUSTER`/`INDEPENDENT_CLUSTER`） |
 | Components[] | list | 是 | 组件列表 |
 | Components[].Name | string | 是 | 组件名（kube-apiserver/etcd/kube-scheduler/kube-controller-manager） |
 | Components[].LogLevel | int | 否 | 日志级别 |
@@ -135,9 +139,11 @@ tccli tke DescribeLogSwitches --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>
 ## 回滚
 
 ```bash
-# 关闭控制面日志
-tccli tke DisableControlPlaneLogs --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
+# 关闭控制面日志（须传 ClusterType，独立/托管集群；api 层 required）
+tccli tke DisableControlPlaneLogs --region ap-guangzhou --ClusterId "<CLUSTER_ID>" --ClusterType "<CLUSTER_TYPE>"
 # expected: exit 0
+
+> `DisableControlPlaneLogs` 除 `--ClusterId` 外也需 `--ClusterType`（`MANAGED_CLUSTER`/`INDEPENDENT_CLUSTER`），缺省报 `the following arguments are required: --ClusterType`（exit 252）。
 
 # 卸载 CLS Agent
 tccli tke UninstallLogAgent --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
@@ -148,6 +154,8 @@ tccli tke DeleteLogConfigs --region ap-guangzhou --ClusterId "<CLUSTER_ID>" --Co
 # expected: exit 0
 ```
 
+> ⚠️ **高危操作**：卸载 CLS Agent 后日志采集中断，审计日志与业务日志将形成盲区，安全事件不可追溯。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
+>
 > 卸载 Agent 后已投递的 CLS 日志保留，按 CLS 保留期过期。停止 CLS 计费需删除日志集。
 
 ## 故障恢复
@@ -222,10 +230,12 @@ tccli tke ModifyLogConfig --ClusterId "<CLUSTER_ID>" --region <REGION> --Name "<
 # expected: exit 0
 ```
 
-> `DescribeControlPlaneLogs`：托管集群（`MANAGED_CLUSTER`）实测报 `InvalidParameter.Param`（`cluster type not supported:MANAGED_CLUSTER`）；须 `--ClusterType INDEPENDENT_CLUSTER`（独立集群）。`DescribeLogConfigs` 在未装 CLS CRD 时可能报 `FailedOperation.KubernetesListOperationError`（`logconfigs.cls.cloud.tencent.com` 不存在）——先 `InstallLogAgent` / 装采集组件后再查。
+> `DescribeControlPlaneLogs`：托管集群（`MANAGED_CLUSTER`）报 `InvalidParameter.Param`（`cluster type not supported:MANAGED_CLUSTER`）；须 `--ClusterType INDEPENDENT_CLUSTER`（独立集群）。`DescribeLogConfigs` 在未装 CLS CRD 时可能报 `FailedOperation.KubernetesListOperationError`（`logconfigs.cls.cloud.tencent.com` 不存在）——先 `InstallLogAgent` / 装采集组件后再查。
 
 ## 收尾确认
 
+> kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
+<!-- tccli管日志采集配置，kubectl查Agent部署状态，非tccli边界 -->
 ```bash
 # 跨步骤汇总三项合一：Agent 运行 + 业务日志可查 + 控制面日志可查
 # 1. CLS Agent DaemonSet Running（业务日志采集器就绪）

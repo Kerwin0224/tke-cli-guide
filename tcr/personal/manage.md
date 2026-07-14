@@ -6,6 +6,7 @@ fused: false
 # 个人版全功能操作
 
 > 控制台：企业版侧栏无独立「个人版」管理页（`/tcr/personal` 当前不可用）。个人版规格见 [购买页对比](https://buy.cloud.tencent.com/tcr)；公开镜像浏览见 [公有镜像](https://console.cloud.tencent.com/tcr/publicimage)（域名 `ccr.ccs.tencentyun.com`）。日常管理以本页 API / docker 为准。
+> 官方文档: [容器镜像服务个人版](https://cloud.tencent.com/document/product/1141/57780) · [个人版快速入门](https://cloud.tencent.com/document/product/1141/63910)
 > TCR 个人版的用户、命名空间、仓库管理与镜像推送。个人版 API 形态与企业版完全不同——所有 Action 带 `Personal` 后缀，全局服务不传 `--region`。
 
 ## 触发条件
@@ -119,6 +120,7 @@ tccli tcr CreateRepositoryPersonal --Namespace "<NAMESPACE_NAME>" --RepoName "<R
 
 ### 步骤 4：docker login + 推送
 
+> docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）
 ```bash
 # 登录个人版（域名 ccr.ccs.tencentyun.com）
 docker login ccr.ccs.tencentyun.com -u "<USERNAME>" -p "<PASSWORD>"
@@ -202,6 +204,7 @@ tccli tcr DescribeNamespacePersonal --Namespace "<NAMESPACE_NAME>" --Limit 10 --
 
 ## 收尾确认
 
+> docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）
 ```bash
 # ② 业务可用性端到端：docker login + push 真正可达（Verify 查 TCR 侧记录存在，这里查端到端镜像传输成功）
 docker login ccr.ccs.tencentyun.com -u "<USERNAME>" -p "<PASSWORD>"

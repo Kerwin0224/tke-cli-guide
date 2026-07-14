@@ -7,6 +7,10 @@ fused: true
 
 > 用 Helm Release 在集群内部署应用。创建、升级、回滚、卸载。异步操作。
 > 控制台: [容器服务 - 应用管理](https://console.cloud.tencent.com/tke2/helm)
+>
+> 官方文档：[组件与应用概述](https://cloud.tencent.com/document/product/457/81234)
+>
+> 配额：Release 受集群配额限制（单地域集群数默认 20），无额外 Release 数限制。[配额说明](https://cloud.tencent.com/document/product/457/9087)
 
 ## 触发条件
 
@@ -86,7 +90,7 @@ tccli tke GetTkeAppChartList --region ap-guangzhou \
 
 ## 操作步骤
 
-### 步骤 1：决策 — Chart 来源
+### 步骤 1：决策 — Chart 来源 {#chart-来源决策}
 
 #### 为什么选 tke 内置 vs 外部仓库
 
@@ -175,6 +179,8 @@ tccli tke DescribeClusterReleases --region ap-guangzhou --ClusterId "<CLUSTER_ID
 ## 清理
 
 > **副作用警告**：卸载 Release 会删除其部署的所有 K8s 资源（Deployment/Service/ConfigMap 等）。`UninstallClusterRelease` 默认不保留历史。
+>
+> ⚠️ **高危操作**：回滚到不兼容的历史版本可能导致应用版本混乱；误执行 `UninstallClusterRelease` 会永久删除所有关联 K8s 资源，数据不可恢复。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
 
 ```bash
 # 1. 卸载
@@ -272,13 +278,15 @@ tccli tke DescribeClusterRollOutSequenceTags --region ap-guangzhou \
 tccli tke ModifyClusterRollOutSequenceTags --region ap-guangzhou \
   --ClusterID "<CLUSTER_ID>" \
   --Tags '[{"Key":"env","Value":"canary"}]'
-# expected: CAM 拦截 UnauthorizedOperation.CamNoAuth（参数已验证）；授权后 exit 0
+# expected: CAM 拦截 UnauthorizedOperation.CamNoAuth；授权后 exit 0
 ```
 
 > ⚠️ `ModifyClusterRollOutSequenceTags` 用大写 `ClusterID`（区别于多数 TKE 接口的小写 `ClusterId`），`Tags[]` 是覆盖式整体更新。`DescribeClusterRollOutSequenceTags` 不需 ClusterId，按 Offset/Limit 翻页。两者参数见各 Action 的 `help --detail`。灰度序列用这些标签按节点 `Tags` 分批发布。
 
 ## 收尾确认
 
+> kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
+<!-- tccli管Release生命周期，kubectl查部署资源状态；helm为能力边界（tccli无helm原生命令），非tccli边界 -->
 ```bash
 # 跨步骤汇总三项合一：Release Status=deployed + 历史版本数 + 关联资源 Ready
 # 1. Release 已部署（Verify 查 Status/版本/Revision，此处汇总）

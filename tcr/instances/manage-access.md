@@ -6,6 +6,7 @@ fused: true
 # 管理实例访问
 
 > 控制台: [公网访问](https://console.cloud.tencent.com/tcr/publicaccess) · [内网访问](https://console.cloud.tencent.com/tcr/privateaccess) · [用户级账号](https://console.cloud.tencent.com/tcr/token)
+> 官方文档: [产品服务层级与容量限制](https://cloud.tencent.com/document/product/1141/104731)（VPC 接入配额 basic=5/standard=10/premium=20；服务账号配额 basic=10/standard=20/premium=100）
 > 配置 TCR 企业版实例的网络访问、登录凭证和白名单策略。
 
 ## 触发条件
@@ -21,9 +22,9 @@ TCR 实例默认不对外开放访问。你需要按顺序配置: ① 开启访�
 
 | 操作 | 作用 | 是否必须 | 副作用 |
 |------|------|:---:|------|
-| 开启公网访问 | 允许通过互联网访问 | 是 (docker login) | 无白名单时全互联网可访问 ⚠️ |
+| 开启公网访问 | 允许通过互联网访问 | 是 (docker login) | 无白名单时全互联网可访问 -- 公网端点开启后尽快配白名单，否则任何人知道 Registry 域名即可尝试登录。公网产生 COS 公网流量费（内网不计该费） |
 | 开启内网访问 | 允许 VPC 内访问 | 否 | 需要配置 VPC 私有域解析 |
-| 创建 Token | 生成 docker login 凭证 | 是 | Token 泄露 = 任何人可 push/pull |
+| 创建 Token | 生成 docker login 凭证 | 是 | Token 泄露 = 任何人可 push/pull -- 凭证只显示一次，长期 Token 泄露后先禁用再删除止损 |
 | 配置白名单 | 限制公网访问来源 IP | 否（公网场景建议开） | 白名单外 IP 被拒绝 |
 
 ## 准备工作
@@ -45,7 +46,7 @@ tccli tcr DescribeInstances --region ap-guangzhou --Registryids '["<REGISTRY_ID>
 - **默认推荐**: 先开公网（开发阶段），上线后:
   - CI/CD 在腾讯云 → 切换到内网访问
   - 外部 CI/CD → 公网 + 白名单只允许 CI IP
-- **能改吗?**: 公网/内网可以随时开关，互不冲突
+- **可修改**： 公网/内网可以随时开关，互不冲突
 
 ### 步骤 2：开启公网访问
 
@@ -88,7 +89,7 @@ tccli tcr CreateInstanceToken \
 
 > ⚠️ **Token 只显示一次。** 保存好返回的 `Token` 值与 `TokenId`（Create 响应字段名），离开后就无法再次获取 Token 值。
 >
-> **字段名分叉（实测）**：`CreateInstanceToken`（`longterm`）返回顶层 `TokenId`；`DescribeInstanceToken` 列表项字段是 **`Id`**（不是 `TokenId`），值与 Create 的 `TokenId` 相同。`DeleteInstanceToken` / `ModifyInstanceToken` 入参仍用 **`--TokenId`**，传入列表里的 `Id`。`temp` 创建时常返回 `TokenId: ""`，且通常**不会**出现在 `DescribeInstanceToken` 列表中（约 1 小时自动过期）。
+> **字段名分叉**：`CreateInstanceToken`（`longterm`）返回顶层 `TokenId`；`DescribeInstanceToken` 列表项字段是 **`Id`**（不是 `TokenId`），值与 Create 的 `TokenId` 相同。`DeleteInstanceToken` / `ModifyInstanceToken` 入参仍用 **`--TokenId`**，传入列表里的 `Id`。`temp` 创建时常返回 `TokenId: ""`，且通常**不会**出现在 `DescribeInstanceToken` 列表中（约 1 小时自动过期）。
 
 #### Token 生命周期闭环
 
@@ -113,6 +114,7 @@ tccli tcr DescribeInstances \
 
 登录测试:
 
+> docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）
 ```bash
 docker login <REGISTRY_DOMAIN> --username <USERNAME> --password <TOKEN>
 # expected: Login Succeeded
@@ -129,7 +131,7 @@ docker login <REGISTRY_DOMAIN> --username <USERNAME> --password <TOKEN>
 - **`<YOUR_IP>/32` vs `0.0.0.0/0`**: `/32` 只允许你自己访问；`0.0.0.0/0` 对全互联网开放
 - **安全风险**: `0.0.0.0/0` + Token 泄露 = 任何人可读写你的镜像仓库
 - **默认推荐**: 开发期用 IP 白名单；生产环境用 VPC 内网 + 白名单
-- **能改吗?**: 随时可以修改/删除白名单规则（见 [访问控制](../access/manage.md)）
+- **可修改**： 随时可以修改/删除白名单规则（见 [访问控制](../access/manage.md)）
 
 ### 步骤 5：开启内网访问 (可选)
 
@@ -204,6 +206,7 @@ tccli tcr DeleteSecurityPolicy --RegistryId "<ID>" --PolicyIndex <INDEX>  # 见 
 
 ## 收尾确认
 
+> docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）
 ```bash
 # ③ 跨步骤汇总：公网端点 Opened + Token Enabled + 白名单含 IP 三条同时满足才闭环（Verify 逐项查，这里一次性核对三步产物）
 tccli tcr DescribeExternalEndpointStatus --region ap-guangzhou --RegistryId "<REGISTRY_ID>" --filter "Status"

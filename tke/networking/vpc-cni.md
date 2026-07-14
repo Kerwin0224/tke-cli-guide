@@ -11,7 +11,7 @@ fused: false
 ## 触发条件
 
 - `DescribeClusters` → `NetworkType` 含 `GR`（Global Router）但需 Pod 固定 IP 或安全组直通，要开启 VPC-CNI
-- `DescribeEnableVpcCniProgress` 返回 `Status` 非 `Enabled`，或 Pod 卡在 `ContainerCreating` 且 `kubectl describe pod` 显示 IP 分配失败
+- `DescribeEnableVpcCniProgress` 返回 `Status` 非 `Enabled`，或 Pod 卡在 `ContainerCreating` 且 `kubectl describe pod` <!-- tccli管VPC-CNI配置，kubectl describe查Pod详情诊断IP分配，非tccli边界 --> 显示 IP 分配失败
 - `DescribeIPAMD` → `EnableIPAMD=false`，需开启 VPC-CNI 让 Pod 从 VPC 子网获 IP — 看 [故障恢复]段
 
 
@@ -26,11 +26,18 @@ VPC-CNI 是 TKE 的三种 Pod 网络模型之一（另两种：Global Router / C
 | CiliumOverlay | Overlay 隧道 | ❌ | ❌ | 少（不占 VPC IP） | ❌ |
 
 > VPC-CNI 可与 Global Router 共存：Global Router 为主，VPC-CNI 子网补充。开启 VPC-CNI 不影响已有 Global Router Pod。CiliumOverlay 与两者互斥（创建时定型，不可切换），见 [配置 CiliumOverlay](cilium-overlay.md)。
+
+> 官方文档：[容器网络概述](https://cloud.tencent.com/document/product/457/50353) · [网络方案选型](https://cloud.tencent.com/document/product/457/106561) · [容器集群网络规划](https://cloud.tencent.com/document/product/457/106706)
+> 配额：VPC 子网可用 IP 数决定 VPC-CNI Pod 上限；容器网段 CIDR 创建时自定义暂不支持变更。[配额限制](https://cloud.tencent.com/document/product/457/9087)
+> ⚠️ **高危操作**：开启 VPC-CNI 后不可回退至 GlobalRouter（关闭前须先迁移已有 VPC-CNI Pod）；子网 IP 耗尽致新 Pod 无法调度。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
+
 >
 > **eniipamd 组件**：VPC-CNI 依赖集群内 `tke-eni-agent` / `tke-eni-ipamd` / `tke-eni-ip-scheduler`（Addon 名常为 `eniipamd`）。三组件版本一般相同，`tke-eni-ip-scheduler` 可能略旧。排障或升级前用镜像 Tag 核对版本；变更记录见 [VPC-CNI（eniipamd）组件变更记录](https://cloud.tencent.com/document/product/457/64920)。安装/升级走 [插件管理](../addons/manage.md)。
 
+> kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
 ```bash
 # 核对 eniipamd 相关组件镜像 Tag（版本）
+<!-- tccli管VPC-CNI开启/关闭/子网配置，kubectl查K8s层组件镜像版本，非tccli边界 -->
 kubectl -n kube-system get ds tke-eni-agent -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
 kubectl -n kube-system get deploy tke-eni-ipamd -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
 kubectl -n kube-system get deploy tke-eni-ip-scheduler -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
@@ -43,7 +50,7 @@ kubectl -n kube-system get deploy tke-eni-ip-scheduler -o jsonpath='{.spec.templ
 
 - **VPC-CNI vs Global Router vs CiliumOverlay**: VPC-CNI 让 Pod 拿 VPC IP，支持固定 IP（StatefulSet 稳定地址）与安全组直通（Pod 级网络策略）；Global Router 的 Pod 用容器网段 IP，不暴露到 VPC；CiliumOverlay 用 Overlay 隧道，不占 VPC IP 但无固定 IP/安全组直通，适合要 Cilium 数据面的场景（见 [配置 CiliumOverlay](cilium-overlay.md)）
 - **默认推荐**: 不需要固定 IP / 安全组直通时用 Global Router（契约默认 `NetworkType=GR`）。需要固定 IP 或安全组直通时开启 VPC-CNI；需要 Cilium 数据面且接受创建时定型时选 CiliumOverlay
-- **能关闭吗?**: VPC-CNI 能，`DisableVpcCniNetworkType`（已有 VPC-CNI Pod 需先迁移）。CiliumOverlay 不能——创建时定型，无独立开关 Action
+- **可关闭**：VPC-CNI 可关闭，`DisableVpcCniNetworkType`（已有 VPC-CNI Pod 需先迁移）。CiliumOverlay 不可关闭——创建时定型，无独立开关 Action
 - **与 IPVS 的关系**: IPVS / kube-proxy 模式在**创建集群**时选定，开启 IPVS 后不可关闭（见 [网络管理 — 转发模式半常量](index.md#转发模式半常量与-networktype-正交)）；开启 VPC-CNI **不改变**已选定的转发模式
 
 ## 配置项
@@ -185,7 +192,7 @@ tccli tke DescribeIPAMD --region ap-guangzhou --ClusterId "<CLUSTER_ID>" \
 | IPAMD | `DescribeIPAMD` → `EnableIPAMD` | `true`（开启后） |
 | 开启进度 | `DescribeEnableVpcCniProgress` → `Status` | `Enabled`（非 VPC-CNI 集群勿调，会 FailedOperation） |
 | 网络类型 | `DescribeClusters` → `NetworkType` | 含 `VPC-CNI` |
-| Pod 获 IP | `kubectl get pod -o wide` | Pod IP 在 VPC 子网段内 |
+| Pod 获 IP | `kubectl get pod -o wide` <!-- tccli管VPC-CNI网络配置，kubectl查Pod IP状态验证IP分配，非tccli边界 --> | Pod IP 在 VPC 子网段内 |
 
 ## 回滚
 
@@ -212,7 +219,7 @@ tccli tke DisableVpcCniNetworkType --region ap-guangzhou --ClusterId "<CLUSTER_I
 | 现象 | 诊断 | 根因 | 修复 |
 |:--------|:----------|:------------|:-----|
 | 开启卡住进度不动 | `DescribeEnableVpcCniProgress` | 子网 IP 不足或路由冲突 | 加子网（`AddVpcCniSubnets`）或换子网 |
-| Pod 卡在 ContainerCreating | `kubectl describe pod` | 子网 IP 耗尽 | `AddVpcCniSubnets` 增加子网 |
+| Pod 卡在 ContainerCreating | `kubectl describe pod` <!-- tccli管VPC-CNI子网配置，kubectl describe查Pod详情诊断IP耗尽，非tccli边界 --> | 子网 IP 耗尽 | `AddVpcCniSubnets` 增加子网 |
 | 固定 IP 不生效 | `EnableStaticIp` 值 | 未设 true 或 StatefulSet 未配 | `EnableStaticIp=true`，StatefulSet 注解 `tke.cloud.tencent.com/vpc-ips` |
 
 ### 子网 IP 不足时增加子网
@@ -237,6 +244,7 @@ tccli tke AddVpcCniSubnets --region ap-guangzhou \
 
 ## 收尾确认
 
+> kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
 ```bash
 # VPC-CNI 开启进度完成（Verify 查进度，此处端到端核 Pod 真从子网获 IP）
 tccli tke DescribeEnableVpcCniProgress --region ap-guangzhou --ClusterId "<CLUSTER_ID>" \
@@ -244,6 +252,7 @@ tccli tke DescribeEnableVpcCniProgress --region ap-guangzhou --ClusterId "<CLUST
 # expected: status=Enabled
 
 # 业务可用性端到端：部署测试 Pod，核 Pod IP 在指定子网段内（Verify 仅列维度未端到端验证）
+<!-- tccli管VPC-CNI网络能力配置，kubectl管Pod生命周期验证IP分配，非tccli边界 -->
 kubectl run vpc-cni-test --image=nginx --restart=Never
 kubectl get pod vpc-cni-test -o wide --no-headers | awk '{print $6}'
 # expected: Pod IP 在 <SUBNET_ID> 子网 CidrBlock 段内 → VPC-CNI 配置闭环完成

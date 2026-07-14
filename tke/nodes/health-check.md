@@ -9,6 +9,12 @@ fused: false
 > 控制台: [容器服务 - 节点健康检测](https://console.cloud.tencent.com/tke2/node-health)
 
 > ⚠️ 本文档所有 Action 属 **TKE 2022-05-01（官方当前版本）**，调用必须显式 `--version 2022-05-01`。2018-05-25 无此功能域。不带 `--version` 会静默走 2018-05-25 报「未知 Action」。
+>
+> 官方文档：[节点概述](https://cloud.tencent.com/document/product/457/32201) · [容器服务可观测体系概述](https://cloud.tencent.com/document/product/457/118975)
+>
+> 配额：无额外配额限制。[配额说明](https://cloud.tencent.com/document/product/457/9087)
+>
+> ⚠️ **高危操作**：检测规则过严致频繁告警、规则过宽致漏报、误改运行中策略致自愈行为异常。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
 
 ## 触发条件
 
@@ -143,15 +149,6 @@ tccli tke DescribeHealthCheckPolicyBindings --version 2022-05-01 --region <REGIO
 # expected: exit 0，返回 HealthCheckPolicyBindings[]+TotalCount
 ```
 
-```bash
-# 查询策略绑定关系（Filter 无 s，单数；按策略名过滤）
-tccli tke DescribeHealthCheckPolicyBindings --version 2022-05-01 --region <REGION> \
-  --ClusterId <CLUSTER_ID> \
-  --Filter '[{"Name":"HealthCheckPolicyName","Values":["<POLICY_NAME>"]}]' \
-  --Offset 0 --Limit 20
-# expected: exit 0，返回 HealthCheckPolicyBindings[]+TotalCount
-```
-
 ## 回滚
 
 ```bash
@@ -167,7 +164,7 @@ tccli tke DeleteHealthCheckPolicy --version 2022-05-01 --region <REGION> \
 tccli tke ModifyHealthCheckPolicy --version 2022-05-01 --region <REGION> \
   --ClusterId <CLUSTER_ID> \
   --HealthCheckPolicy '{"Name":"<POLICY_NAME>","Rules":[{"Name":"KubeletUnhealthy","Enabled":true,"AutoRepairEnabled":true}]}'
-# expected: CAM 拦截 AuthFailure.UnauthorizedOperation（参数已验证）；授权后 exit 0
+# expected: CAM 拦截 AuthFailure.UnauthorizedOperation；授权后 exit 0
 ```
 
 > `ModifyHealthCheckPolicy` 的 `HealthCheckPolicy` 是覆盖式整体更新（非增量），调用前先用 `DescribeHealthCheckPolicies` 取当前规则，改完整体回传，避免遗漏已有规则。
@@ -177,7 +174,7 @@ tccli tke ModifyHealthCheckPolicy --version 2022-05-01 --region <REGION> \
 | 现象 | 根因 | 修复 |
 |:-----|:-----|:-----|
 | `UnsupportedRegion` | `DescribeHealthCheckTemplate` 在 `ap-guangzhou` 不可用 | 改用 `ap-beijing` 等支持地域查模板；策略创建/查询用集群所在地域 |
-| `AuthFailure.UnauthorizedOperation` (tke:CreateHealthCheckPolicy) | CAM 策略要求资源带特定标签（要求 `billing&kerwinwjyan` 标签） | 给集群加授权要求的标签，或申请 `tke:CreateHealthCheckPolicy` 权限 |
+| `AuthFailure.UnauthorizedOperation` (tke:CreateHealthCheckPolicy) | CAM 策略要求资源带特定标签（要求 `billing` 标签） | 给集群加授权要求的标签，或申请 `tke:CreateHealthCheckPolicy` 权限 |
 | 同名策略已存在 | `HealthCheckPolicy.Name` 集群内唯一 | 先 `DeleteHealthCheckPolicy` 再建，或 `ModifyHealthCheckPolicy` 覆盖 |
 | 自动修复未触发 | 规则 `RepairAction=None`（如 `ReadonlyFilesystem`）不可修复 | 仅 `KubeletUnhealthy`/`RuntimeUnhealthy` 可自动修复，其余只能告警 |
 

@@ -6,9 +6,11 @@ fused: true
 # 独立集群 Master 运维
 
 > 控制台: [容器服务控制台 - 集群详情 - Master 节点](https://console.cloud.tencent.com/tke2/cluster)
-> 扩缩容独立集群（INDEPENDENT_CLUSTER）的 Master/etcd 节点。仅独立集群适用——托管集群 Master 由腾讯云运维，无此操作。
+> 扩缩容独立集群（INDEPENDENT_CLUSTER）的 Master/etcd **节点规模**。仅独立集群适用——托管集群 Master/etcd 节点规模由腾讯云负责，无此扩缩操作（控制面参数/组件/etcd 加密仍可用 tccli 改，见 [配置集群属性与运行时](configure.md) 与 [集群加密保护](../security/protection.md)）。
 
 > 本文档所有 Action 属 **TKE 2018-05-25（默认版本）**，无需显式 `--version`。
+
+> 官方文档：[集群扩缩容](https://cloud.tencent.com/document/product/457/32190) · [基本概念](https://cloud.tencent.com/document/product/457/45598) · [常见高危操作](https://cloud.tencent.com/document/product/457/39539)
 
 ## 概述
 
@@ -21,13 +23,17 @@ fused: true
 
 操作是**异步**的：命令返回即提交，Master 节点进入 `MasterScaling` 状态，需轮询直到 `Running`。
 
-> ⚠️ **仅独立集群可用**：在托管集群调用稳定返回 `InvalidParameter: only independent cluster allowed to scale master or etcd`。集群类型创建后不可切换（见 [创建集群](create.md)）。
+> 配额：Master 节点规格需申请 `MASTER_ETCD` 实例配额（Master 最小 4C8G）；扩容即新增 CVM 费用。[配额说明](https://cloud.tencent.com/document/product/457/9087)
+
+> ⚠️ **仅独立集群可改节点规模**：`ScaleOut/ScaleInClusterMaster` 在托管集群稳定返回 `InvalidParameter: only independent cluster allowed to scale master or etcd`，集群类型创建后不可切换（见 [创建集群](create.md)）。
+>
+> **托管集群的两层边界**：① **Master/etcd 节点规模**——由腾讯云运维，不可扩缩容；② **控制面参数 / 组件启停 / etcd 加密**——仍可用 tccli 改：`ModifyClusterExtraArgs`（apiserver / controller-manager / scheduler / etcd 参数，托管专属）、`ModifyMasterComponent`（组件停机演练，托管专属）、`EnableEncryptionProtection`（etcd KMS 加密）。后者见 [配置集群属性与运行时](configure.md) 与 [集群加密保护](../security/protection.md)。
 
 ## 触发条件
 
 - 独立集群 Master 负载持续偏高或 HA 冗余不足（`DescribeClusters` 的 `ClusterMaterNodeNum` 接近瓶颈）— 用 `ScaleOutClusterMaster` 扩容
 - 独立集群 Master 过剩或有故障节点需下线 — 用 `ScaleInClusterMaster` 缩容（缩容须保 etcd 多数派 ≥3 奇数）
-- 托管集群误调本接口报 `only independent cluster allowed` — 改用独立集群，托管 Master 不可扩缩容
+- 托管集群误调本接口报 `only independent cluster allowed` — 节点规模不可改；若需改控制面参数/组件/加密，走 [配置集群属性与运行时](configure.md) / [集群加密保护](../security/protection.md)，非本篇
 
 ## 准备工作
 
@@ -97,6 +103,8 @@ tccli tke DescribeClusters --region <REGION> --ClusterIds '["<CLUSTER_ID>"]' --v
 > ⚠️ **缩容不可破坏 etcd 多数派**：`MASTER_ETCD` 节点缩容后剩余数量必须仍构成 etcd 多数派（≥3 且为奇数），否则集群控制面不可用。缩容前核对剩余 Master 数。
 
 ## 操作步骤
+
+> ⚠️ **高危操作**：Master 扩缩影响集群稳定性；缩容破坏 etcd 多数派（剩余<3或偶数）会导致集群控制面不可用；缩容前确认节点角色与负载。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
 
 ### 步骤 1：决策 — 扩还是缩，缩哪个
 
@@ -194,6 +202,7 @@ tccli tke DescribeClusterStatus --region <REGION> --filter "ClusterStatusSet[?Cl
 > # expected: kubeconfig 文件生成，可 KUBECONFIG=kubeconfig.yaml kubectl get nodes
 > ```
 
+<!-- kubectl get nodes验证Master节点状态；kubectl get pods/healthz查K8s层观测，tccli管配置CRUD，非tccli边界 -->
 | 维度 | 命令 | 预期 |
 |:-----|:-----|:-----|
 | 集群状态 | `DescribeClusterStatus` → `ClusterState` | `MasterScaling` → `Running` |
@@ -215,7 +224,7 @@ tccli tke DescribeClusterStatus --region <REGION> --filter "ClusterStatusSet[?Cl
 
 | 现象 | 诊断 | 根因 | 修复 |
 |:--------|:----------|:------------|:-----|
-| `InvalidParameter: only independent cluster allowed to scale master or etcd` | `tccli tke DescribeClusters --ClusterIds '["<ID>"]' --filter "Clusters[0].ClusterType"` | 目标是托管集群（MANAGED_CLUSTER） | 托管集群 Master 不可扩缩容；如确需，新建独立集群迁移 |
+| `InvalidParameter: only independent cluster allowed to scale master or etcd` | `tccli tke DescribeClusters --ClusterIds '["<ID>"]' --filter "Clusters[0].ClusterType"` | 目标是托管集群（MANAGED_CLUSTER） | 托管集群 Master/etcd **节点规模**不可扩缩容；控制面参数/组件/加密仍可由 tccli 改（见 [配置集群属性与运行时](configure.md) / [集群加密保护](../security/protection.md)），无需迁移独立集群 |
 | CAM `has no permission`（含 `qcs:resource_tag` `billing` 条件） | `tccli tke DescribeClusters --ClusterIds '["<ID>"]' --filter "Clusters[0].TagSpecification[*].Tags[*]"` | 目标独立集群未带 CAM 要求的 `billing` 标签 | 给集群加 `billing` 标签，或申请 `tke:ScaleOutClusterMaster`/`tke:ScaleInClusterMaster` 权限。环境限制，非命令错误 |
 | `ResourceNotFound` (InstanceId) | `tccli cvm DescribeInstances --InstanceIds '["<ID>"]'` | 缩容的 InstanceId 不存在或不在该集群 | 核对 CVM ID，确认属于该集群 Master |
 | `UnsupportedOperation` | `tccli tke DescribeClusterStatus` 查看状态 | 集群非 `Running`（MasterScaling 中或异常） | 等集群 `Running` 后重试 |
@@ -223,6 +232,7 @@ tccli tke DescribeClusterStatus --region <REGION> --filter "ClusterStatusSet[?Cl
 
 ### 命令成功但状态不对 (exit = 0)
 
+<!-- kubectl get nodes验证Master缩容后节点状态，非tccli边界 -->
 | 现象 | 诊断 | 根因 | 修复 |
 |:--------|:----------|:------------|:-----|
 | 长时间停在 `MasterScaling` | `tccli tke DescribeClusterStatus` + `kubectl get nodes` | 新 Master 加入 etcd 集群卡住 / CVM 初始化失败 | 查新节点 CVM 状态，必要时 `ScaleIn` 回滚新增节点 |

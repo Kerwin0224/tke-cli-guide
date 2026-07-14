@@ -9,6 +9,14 @@ doc_type: Overview
 
 TKE 集群网络分两层：**访问端点**（kubectl/API Server 如何连接）与 **Pod 网络模型**（Pod 如何获取 IP）。
 
+## 触发条件
+
+- 你要开启或关闭集群的公网/内网访问端点（kubectl 连接 API Server 的入口）— 去 [管理访问端点](endpoints.md)
+- 你要给已建集群开启 VPC-CNI（Pod 固定 IP、安全组直通），或查 VPC-CNI 子网与固定 IP 约束 — 去 [配置 VPC-CNI](vpc-cni.md)
+- 你要创建 CiliumOverlay 集群（Cilium 数据面且不占 VPC IP），须确认控制面子网前置 — 去 [配置 CiliumOverlay](cilium-overlay.md)
+- 你要查集群当前端点地址（公网/内网 IP）— 用 `DescribeClusterEndpoints`，见 [查询集群](../clusters/query.md)
+- 你遇到三种网络模型（VPC-CNI / Global Router / CiliumOverlay）不知选哪个 — 看 [网络模型对比](#网络模型对比)
+
 ## 核心概念
 
 | 概念 | 含义 | 为什么重要 |

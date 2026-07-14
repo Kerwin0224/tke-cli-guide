@@ -10,6 +10,10 @@ fused: false
 >
 > **凭证分层**: 本文讲的是 **kubeconfig**（kubectl 连集群的凭证，TKE 产品内）。让 TCCLI 能调用 API 的 **CAM 根凭证**（SecretId/SecretKey）是全局前置，见 [配置凭证](../../getting-started/credentials.md)。
 
+> 官方文档：[身份验证和授权概述](https://cloud.tencent.com/document/product/457/11542) · [服务授权相关角色权限说明](https://cloud.tencent.com/document/product/457/43416) · [常见高危操作](https://cloud.tencent.com/document/product/457/39539)
+> 配额：单集群 RBAC 授权条目数受集群规格限制；子账号权限策略数按 CAM 配额。[配额限制](https://cloud.tencent.com/document/product/457/9087)
+> ⚠️ **高危操作**：误授 `cluster-admin`（`tke:admin`）角色致全集群失控；kubeconfig 泄露致集群凭据外泄。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
+
 ## 触发条件
 
 - `DescribeClusterKubeconfig` 返回的 kubeconfig 用 `kubectl get nodes` 报 `certificate expired`，需轮转证书
@@ -64,7 +68,7 @@ tccli tke RotateClusterToken --region <REGION> --ClusterId "<CLUSTER_ID>"
 # expected: exit 0（仅返回 RequestId）；轮转后旧 Token 失效，须重新 DescribeClusterKubeconfig 获取新凭证
 ```
 
-> ⚠️ **权限约束（经测试验证）**：该 Action 受 CAM 强约束，资源策略要求 `qcs:resource_tag` 含 `billing&kerwinwjyan`（或等同授权）才允许执行。对非自有/无授权集群调用返回 `AuthFailure.UnauthorizedOperation`（非 `ResourceNotFound`），属**授权缺失**而非资源不存在——排查时优先查 CAM 策略而非集群 ID。
+> ⚠️ **权限约束**：该 Action 受 CAM 强约束，资源策略要求 `qcs:resource_tag` 含 `billing`（或等同授权）才允许执行。对非自有/无授权集群调用返回 `AuthFailure.UnauthorizedOperation`（非 `ResourceNotFound`），属**授权缺失**而非资源不存在——排查时优先查 CAM 策略而非集群 ID。
 > 与 `UpdateClusterKubeconfig`（轮转 kubeconfig 证书）的区别：`RotateClusterToken` 轮转的是集群对外访问 Token（如 kube-apiserver 访问凭据），二者是不同凭证面，按需选用。
 
 
@@ -103,32 +107,38 @@ tccli tke GrantUserPermissions --region <REGION> \
 
 ## 应用
 
+> kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
 ```bash
-# 1. 获取 kubeconfig
-tccli tke DescribeClusterKubeconfig --region ap-guangzhou --ClusterId "<CLUSTER_ID>" > ~/.kube/tke-config
+# 1. 获取 kubeconfig（须先开访问端点，见 [管理端点](../networking/endpoints.md)）
+tccli tke DescribeClusterKubeconfig --region ap-guangzhou --ClusterId "<CLUSTER_ID>" \
+  --filter "Kubeconfig" --output text > ~/.kube/tke-config
+# expected: YAML 含 apiVersion/clusters；server 为公网或内网 VIP
 
-# 2. 验证可用 (kubectl 验证 kubeconfig 连通, K8s 原生命令, tccli 不提供集群连通验证)
-kubectl --kubeconfig ~/.kube/tke-config get nodes
-# expected: 节点列表返回
+# 2. 验证连通（本机须公网端点 + ACL；仅内网 VIP 时本机超时属网络路径，非证书问题）
+<!-- kubectl验证tccli获取的kubeconfig可连通集群，非tccli边界 -->
+kubectl --kubeconfig ~/.kube/tke-config get nodes --request-timeout=15s
+# expected: 节点列表；超时/Unable to connect → 查端点类型与 ACL，见 endpoints.md
 ```
 
 ## 验证
 
+> kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
 ```bash
 # 查看当前认证配置
 tccli tke DescribeClusterAuthenticationOptions --region <REGION> --ClusterId "<CLUSTER_ID>"
 # expected: 返回 ServiceAccounts/OIDCConfig 配置
 
-# kubectl 连通性
-kubectl --kubeconfig kubeconfig.yaml get nodes
-# expected: 节点列表
+# kubectl 连通性（前置：公网端点 Created + SecurityPolicies 含本机出口 IP，或本机在 VPC 内）
+<!-- kubectl验证tccli配的kubeconfig认证有效性，非tccli边界 -->
+kubectl --kubeconfig kubeconfig.yaml get nodes --request-timeout=15s
+# expected: 节点列表；context deadline exceeded → 端点未开/仅内网/ACL 未放行
 ```
 
 | 维度 | 命令 | 预期 |
 |:-----|:-----|:-----|
-| kubeconfig 有效 | `kubectl --kubeconfig <file> get nodes` | 节点列表返回 |
+| kubeconfig 有效 | `kubectl --kubeconfig <file> get nodes` <!-- kubectl消费tccli产生的kubeconfig验证连通，非tccli边界 --> | 节点列表返回 |
 | OIDC 配置 | `DescribeClusterAuthenticationOptions` | OIDCConfig 非空 |
-| 证书未过期 | `kubectl --kubeconfig <file> version` | 无认证错误 |
+| 证书未过期 | `kubectl --kubeconfig <file> version` <!-- kubectl验证kubeconfig证书有效期，非tccli边界 --> | 无认证错误 |
 
 ## 回滚
 
@@ -156,7 +166,7 @@ tccli tke DescribeClusterKubeconfig --region <REGION> --ClusterId "<CLUSTER_ID>"
 
 | 现象 | 诊断 | 根因 | 修复 |
 |:--------|:----------|:------------|:-----|
-| kubectl 报 `certificate expired` | `kubectl version` | kubeconfig 证书过期 | `UpdateClusterKubeconfig` 轮转 |
+| kubectl 报 `certificate expired` | `kubectl version` <!-- kubectl诊断kubeconfig证书状态，非tccli边界 --> | kubeconfig 证书过期 | `UpdateClusterKubeconfig` 轮转 |
 | kubectl 报 `Unable to connect` | 端点状态 | 集群端点未开启或不通 | 见 [管理访问端点](../networking/endpoints.md) |
 | OIDC 登录失败 | `DescribeClusterAuthenticationOptions` | issuer 不可达或 JWKSURI 错 | 确认 IdP 服务可达 |
 
@@ -197,9 +207,11 @@ tccli tke DeleteUserPermissions --TargetUin "<SUB_UIN>" --region <REGION> \
 
 ## 收尾确认
 
+> kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
 ```bash
 # 跨步骤汇总三项合一：kubeconfig 可用 + OIDC 配置生效 + RBAC 权限授予
 # 1. kubeconfig 端到端可用（Verify 查 OIDC 配置，此处查 kubeconfig 真能连集群）
+<!-- kubectl端到端验证tccli认证配置可连通集群，非tccli边界 -->
 kubectl --kubeconfig kubeconfig.yaml get nodes
 # expected: 节点列表返回
 

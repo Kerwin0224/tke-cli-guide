@@ -4,13 +4,20 @@ doc_type: Overview
 # TCR 个人版
 
 > 适合个人开发者和轻量场景——免费使用，与企业版 API 形态完全不同。
-> 控制台：无独立个人版管理页——`https://console.cloud.tencent.com/tcr/personal` 与 `/ccr*` 实测 **404**（页面提示网址已删除或尚未生效）；左栏无个人版入口。规格对比见 [购买页](https://buy.cloud.tencent.com/tcr)，个人版相关面见 [公有镜像](https://console.cloud.tencent.com/tcr/publicimage)（域名 `ccr.ccs.tencentyun.com`）。操作走本文 API / [个人版全功能](manage.md)。
+> 控制台：无独立个人版管理页——`https://console.cloud.tencent.com/tcr/personal` 与 `/ccr*` 返回 **404**（页面提示网址已删除或尚未生效）；左栏无个人版入口。规格对比见 [购买页](https://buy.cloud.tencent.com/tcr)，个人版相关面见 [公有镜像](https://console.cloud.tencent.com/tcr/publicimage)（域名 `ccr.ccs.tencentyun.com`）。操作走本文 API / [个人版全功能](manage.md)。
 
 ## 是什么
 
 TCR 个人版是腾讯云容器镜像服务的免费版本，提供基础的镜像托管能力。与企业版不同，个人版**不需要先创建实例**，直接使用命名空间组织仓库，是共享服务（所有个人版用户共享后端）。
 
 > ⚠️ 个人版 API 形态与企业版完全不同：所有 Action 带 `Personal` 后缀（如 `CreateNamespacePersonal` 而非 `CreateNamespace`），且个人版是全局服务（无 `--region` 概念，不传地域参数）。两版不能混用接口。
+
+## 触发条件
+
+- 你要免费托管镜像且无需先建实例（直接用命名空间组织仓库）— 本域是入口，操作见 [个人版全功能](manage.md)
+- 你要用 `docker login` 推送/拉取镜像到 `ccr.ccs.tencentyun.com` — 先 `CreateUserPersonal` 建登录账号，再 [创建命名空间与仓库](manage.md)
+- 你遇到个人版 Action 带 `*Personal` 后缀、全局服务不传 `--region` 与企业版接口不兼容 — 看 [个人版 vs 企业版](#个人版-vs-企业版)
+- 你要查个人版配额上限（命名空间 10 / 仓库按地域 / Tag 100，不支持调额）— 用 `DescribeUserQuotaPersonal`，不够则升企业版
 
 ## 核心概念
 
