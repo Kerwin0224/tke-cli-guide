@@ -67,6 +67,27 @@ spec:
                   number: 80
 ```
 
+## 准备工作
+
+- 已创建 TKE 标准集群（见[创建集群](../../clusters/create.md)）。
+- 已配置 tccli 凭证（见[配置凭证](../../../getting-started/credentials.md)）。
+- 已通过[专线版](dedicated-line.md)接入注册节点且节点在线（CLB 仅专线版支持，公网版不支持）。
+- 已获取集群 kubeconfig 并可执行 `kubectl`（见[集群认证](../../security/auth.md)），本文操作步骤通过 `kubectl` 下发 Service / Ingress。
+- 已确认流量接入层：四层（Service `LoadBalancer`）转发 TCP，七层（Ingress）转发 HTTP/HTTPS，按后端协议选择。
+
+### 注册节点在线（TCCLI 前置）
+
+下发 Service / Ingress 前，用 TCCLI 确认注册节点已在线（CLB 后端依赖注册节点 Ready）：
+
+```bash
+tccli tke DescribeExternalNode \
+  --ClusterId "<CLUSTER_ID>" \
+  --region ap-guangzhou \
+  --filter "Nodes[?Status=='Running'].{name:Name,ip:IP,status:Status}" \
+  --output text
+# expected: 至少一行 name/ip/status=Running；空输出 → 先完成专线版接入
+```
+
 ## 验证
 
 <!-- tccli管集群注册，kubectl管K8s原生Service/Ingress，非tccli边界 -->
@@ -75,14 +96,6 @@ spec:
 kubectl get svc registered-nodeport-svc -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
 # expected: 返回 CLB VIP，外部可访问
 ```
-
-## 准备工作
-
-- 已创建 TKE 标准集群（见[创建集群](../../clusters/create.md)）。
-- 已配置 tccli 凭证（见[配置凭证](../../../getting-started/credentials.md)）。
-- 已通过[专线版](dedicated-line.md)接入注册节点且节点在线（CLB 仅专线版支持，公网版不支持）。
-- 已获取集群 kubeconfig 并可执行 `kubectl`（见[集群认证](../../security/auth.md)），本文操作步骤通过 `kubectl` 下发 Service / Ingress。
-- 已确认流量接入层：四层（Service `LoadBalancer`）转发 TCP，七层（Ingress）转发 HTTP/HTTPS，按后端协议选择。
 
 ## 故障恢复
 

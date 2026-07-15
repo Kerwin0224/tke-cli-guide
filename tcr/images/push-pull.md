@@ -7,7 +7,7 @@ fused: true
 
 > 控制台: [容器镜像服务控制台 - 镜像管理](https://console.cloud.tencent.com/tcr/image)
 > 官方文档: [管理镜像仓库](https://cloud.tencent.com/document/product/1141/41811) · [产品服务层级与容量限制](https://cloud.tencent.com/document/product/1141/104731)
-> 用 TCCLI 获取访问凭证、docker CLI 推送/拉取镜像、TCCLI 验证。跨工具操作——TCCLI 管 TCR 侧，docker 管镜像传输（TCCLI 无镜像推送/拉取能力，docker 命令属非 tccli 边界）。
+> 用 TCCLI 获取访问凭证、docker CLI 推送/拉取镜像、TCCLI 验证。跨工具操作——TCCLI 管 TCR 侧（Token/镜像元数据），docker 管 Registry 登录与镜像传输。**为什么 tccli 做不到**：TCR API 无 `docker login`/`push`/`pull` 等价 Action，不操作本地 daemon 与镜像层；能力终止处才接 docker。
 
 ## 触发条件
 
@@ -28,7 +28,7 @@ fused: true
 | 拉取镜像 | docker | `docker pull` |
 | 验证 | TCCLI | `DescribeImages` 确认镜像版本存在 |
 
-> 镜像地址格式：`<REGISTRY_DOMAIN>/<NAMESPACE>/<REPO>:<TAG>`，其中 `REGISTRY_DOMAIN` 是实例的 `PublicDomain`（如 `xxx.tencentcloudcr.com`）。
+> 镜像地址格式：`<REGISTRY_DOMAIN>/<NAMESPACE>/<REPO>:<TAG>`，其中 `REGISTRY_DOMAIN` 是实例的 `PublicDomain`（如 `xxx.tencentcloudcr.com`）。**内网推拉仍使用该域名**，依赖 VPC 内网接入 + 私有域解析（非另换域名）；仅本地/外网路径才须公网 Opened + 白名单。访问顺序见 [访问管理](../instances/manage-access.md)（先内网后公网）。
 
 ## 准备工作
 
@@ -51,10 +51,14 @@ tccli tcr DescribeInstanceStatus --region <REGION> --RegistryIds '["<REGISTRY_ID
   --filter "RegistryStatusSet[0].Status"
 # expected: "Running"
 
-# 2. 公网访问已开启（push/pull 前提）
+# 2. 访问端点已开：优先内网，本地/外网再公网（见 [访问管理](../instances/manage-access.md)）
+tccli tcr DescribeInternalEndpoints --region <REGION> --RegistryId "<REGISTRY_ID>" \
+  --filter "AccessVpcSet[].{vpc:VpcId,status:Status}"
+# expected: VPC 内推拉时 AccessVpcSet 含目标 VPC
+
 tccli tcr DescribeExternalEndpointStatus --region <REGION> --RegistryId "<REGISTRY_ID>" \
   --filter "Status"
-# expected: "Opened"（未开启见 [访问管理](../instances/manage-access.md)）
+# expected: 公网路径时 "Opened"；仅内网时可为 Closed
 
 # 3. 命名空间与仓库存在
 tccli tcr DescribeNamespaces --region <REGION> --RegistryId "<REGISTRY_ID>" \
@@ -71,7 +75,7 @@ tccli tcr DescribeNamespaces --region <REGION> --RegistryId "<REGISTRY_ID>" \
 | 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
 |:------|------|:--------:|------------|---------------|
 | RegistryId | string | 是 | `tcr-xxxxxxxx` | `ResourceNotFound` |
-| TokenType | string | 否 | `temp`（默认，临时 1 小时）/ `longterm`（长期，CI/CD）；
+| TokenType | string | 否 | `temp`（默认，临时 1 小时）/ `longterm`（长期，CI/CD） | `InvalidParameter`（非法枚举如 `long`） |
 | Desc | string | 否 | 凭证描述 | — |
 
 > 响应字段：`Username`（docker login 用户名）、`Token`（docker login 密码）、`ExpTime`（过期时间戳）、`TokenId`。`temp` 时常 `TokenId: ""` 且通常不进 `DescribeInstanceToken` 列表；`longterm` 的 Create.`TokenId` = 列表项 `Tokens[].Id`（删除/禁用入参仍用 `--TokenId`）。临时 Token 约 1 小时过期，CI/CD 用长期凭证见 [访问管理](../instances/manage-access.md)。
@@ -97,7 +101,7 @@ tccli tcr CreateInstanceToken --region <REGION> \
 
 ```json
 {
-    "Username": "100049208872",
+    "Username": "<ACCOUNT_UIN>",
     "Token": "eyJhbGciOiJSUzI1NiIsImtpZCI6...",
     "ExpTime": 1782479695904,
     "TokenId": "",
@@ -182,7 +186,7 @@ tccli tcr DescribeImages --region <REGION> \
 | 镜像版本存在 | `DescribeImages` → `ImageInfoList[].ImageVersion` | 含推送的 tag |
 | digest 一致 | `DescribeImages` → `Digest` | 与 docker push 返回的 digest 一致 |
 | docker 本地镜像 | `docker images <REGISTRY_DOMAIN>/<NS>/<REPO>` | 含拉取/推送的 tag |
-| 公网可达 | `DescribeExternalEndpointStatus` → `Status` | `Opened` |
+| 访问路径 | 内网 `DescribeInternalEndpoints` 或公网 `DescribeExternalEndpointStatus` | AccessVpcSet 含目标 VPC **或** `Status=Opened` |
 
 > ⚠️ push 后立即 `DescribeImages` 可能返回空（服务端索引延迟约 5 秒）。若空，等 5 秒重查。
 
@@ -215,7 +219,7 @@ tccli tcr DescribeImages --region <REGION> \
 
 | 现象 | 诊断 | 根因 | 修复 |
 |:--------|:----------|:------------|:-----|
-| `InvalidParameter` (CreateInstanceToken) | 检查 `TokenType` | `TokenType` 非法（如 `long`/`permanent`） | 用 `temp` 或 `longterm`（
+| `InvalidParameter` (CreateInstanceToken) | 检查 `TokenType` | `TokenType` 非法（如 `long`/`permanent`） | 用 `temp` 或 `longterm` |
 | `unauthorized: authentication required` (docker) | `DescribeInstanceToken` 查状态 | Token 过期或未 login | 重新 `CreateInstanceToken` + `docker login` |
 | `denied: requested access to the resource is denied` (docker push) | `DescribeNamespaces` 查权限 | 命名空间 Private 且 Token 无 push 权限 | 配置访问策略，见 [访问控制](../access/manage.md) |
 | `unknown: repository not found` (docker push) | `DescribeRepositories` 查仓库 | 仓库不存在 | 先 `CreateRepository` |

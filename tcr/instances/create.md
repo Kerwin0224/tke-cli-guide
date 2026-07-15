@@ -26,9 +26,11 @@ TCR 实例是镜像存储的容器 —— 每个实例有独立的域名、存�
 | standard (标准版) | 中小团队生产 | 100 / 3000 / 3000 / 10 | 可升级为 premium |
 | premium (高级版) | 大规模 / 完整同步与企业能力 | 500 / 5000 / 5000 / 20 | 当前最高规格 |
 
+> 配额与功能差异以官方 [产品服务层级与容量限制](https://cloud.tencent.com/document/product/1141/104731) 为准；本仓数字汇总见 [配额与限制](../reference/quotas.md)。地域级默认最多 **10** 个企业版实例（`LimitExceeded.InstanceQuota`）。
+
 镜像与 Chart 数据落在关联 COS 桶，按 COS 用量计费（非上表「存储配额」）。**规格选择**: 初次使用从 `basic` 开始，后续按需升级。
 
-操作是**异步**的: `CreateInstance` 返回 `RegistryId` 后实例进入 `Deploying`，须轮询 `DescribeInstanceStatus` 直到 `Status: "Running"` 才可使用（约 30-60 秒，见 [实例状态](../reference/states.md)）。
+操作是**异步**的: `CreateInstance` 返回 `RegistryId` 后实例进入 `Creating`，须轮询 `DescribeInstanceStatus` 直到 `Status: "Running"` 才可使用（约 3-5 分钟，见 [实例状态](../reference/states.md)）。
 
 ## 准备工作
 
@@ -193,7 +195,7 @@ tccli tcr DescribeInstances --region ap-guangzhou --Registryids '["<REGISTRY_ID>
 | 现象 | 诊断 | 根因 | 修复 |
 |---------|----------|------------|-----|
 | `Status` 不是 `Running` | `tccli tcr DescribeInstanceStatus --RegistryIds '["<REGISTRY_ID>"]'` | 初始化未完成 | 轮询 `DescribeInstanceStatus` 直到 `Running`（创建是异步操作。注意 `DescribeInstanceStatus` 用 `--RegistryIds` 大写 D，与 `DescribeInstances` 的 `--Registryids` 小写 d 不同） |
-| 无法 `docker login` | `tccli tcr ManageExternalEndpoint --RegistryId "<ID>" --Operation Open` | 公网访问未开启 | 开启公网访问端点 |
+| 无法 `docker login` | `DescribeInternalEndpoints` / `DescribeExternalEndpointStatus` | 访问端点未开（默认全拒绝） | 优先内网 `ManageInternalEndpoint`；本地/外网再 `ManageExternalEndpoint --Operation Create`，见 [访问管理](manage-access.md) |
 | 创建成功但未出现在列表 | 检查 `--region` 是否与创建时一致 | 查看的地域错误 | 切换到创建时的地域 |
 
 ## 实例生命周期管理
@@ -229,24 +231,22 @@ tccli tcr DescribeInstanceAllNamespaces --Limit 50 --region <REGION>
 
 ## 收尾确认
 
-> docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）
 ```bash
-# 衔接下一步前置：实例 Running 可进入创建命名空间/仓库（Verify 查字段存在，这里查能否进入下一阶段）
+# 衔接下一步前置：实例 Running 可进入创建命名空间/仓库
 tccli tcr DescribeInstances --region ap-guangzhou --Registryids '["<REGISTRY_ID>"]' \
   --filter "Registries[0].{status:Status,name:RegistryName,type:RegistryType,protect:DeletionProtection}"
-# expected: status="Running", name/type 与创建参数一致, protect=true
-
-# 业务可用性边界：公网端点开启后才能 docker login（Verify 查 PublicDomain 格式，这里查端点实际状态=Opened）
-tccli tcr DescribeExternalEndpointStatus --region ap-guangzhou --RegistryId "<REGISTRY_ID>"
-# expected: Status: "Opened"  → 公网可达，可 docker login（未开启则 ManageExternalEndpoint --Operation Open）
+# expected: status="Running", name/type 与创建参数一致, protect 与创建参数一致
 ```
 
-> 实例 Running + 删除保护已开 + 公网端点 Opened = 创建闭环完成，可进入创建命名空间/仓库（`DescribeNamespaces` 须在 Running 后调用，Deploying 中调用返回空）。空实例无镜像，须先建命名空间才能 push。
+> 实例 `Running` = 创建闭环完成，可进入 [访问管理](manage-access.md) 与 [命名空间/仓库](../repositories/manage.md)。`DescribeNamespaces` 须在 `Running` 后调用（`Creating` 中调用返回空）。空实例无镜像，须先建命名空间才能 push。
+>
+> 访问端点**不在本篇强制开启**：默认拒绝全部公网/内网访问。生产优先内网 VPC；本地或外网 CI 再开公网并配白名单——见 [访问管理](manage-access.md)。docker login/push/pull 属 docker CLI（非 tccli；TCCLI 无镜像传输能力），在端点+Token 配好后于 [推送拉取镜像](../images/push-pull.md) 执行。
 
 ---
 
 ## 下一步
 
-- [管理实例访问](manage-access.md) — 开启公网/内网访问、创建 Token
+- [管理实例访问](manage-access.md) — **优先内网**再按需公网、创建 Token
 - [创建命名空间和仓库](../repositories/manage.md) — 实例内首项操作
 - [推送镜像](../images/push-pull.md) — docker push 你的第一个镜像
+- [配额与限制](../reference/quotas.md) — 规格配额与 `LimitExceeded` 对照

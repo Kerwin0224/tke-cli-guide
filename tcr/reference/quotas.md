@@ -24,11 +24,11 @@ subtype: 8C
 
 个人版无独立企业版实例，限额由 `DescribeUserQuotaPersonal` 返回（账号级）。`DescribeUserQuotaPersonal` 返回字段 `Data.LimitInfo[].Type` / `Value`：
 
-| Type | 含义 | 示例账号 Value |
+| Type | 含义 | 示例账号 Value（以 `DescribeUserQuotaPersonal` 实时返回为准） |
 |:-----|:-----|:---------------------:|
-| `namespace` | 命名空间上限 | 2000 |
-| `repo` | 仓库上限 | 10000 |
-| `tag` | 版本上限 | 9999 |
+| `namespace` | 命名空间上限 | 10 |
+| `repo` | 仓库上限 | 500 |
+| `tag` | 版本上限 | 100 |
 | `trigger` | 触发器上限 | 10 |
 
 > 个人版适合临时测试；生产与独立存储/SLA 选企业版。控制台入口已与企业版合并，API 面仍用 `*Personal` Action。

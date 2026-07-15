@@ -150,6 +150,8 @@ tccli tke DescribeClusterEndpoints --region ap-guangzhou --ClusterId "<CLUSTER_I
 
 > **域名 NXDOMAIN**：部分环境对 `cls-*.ccs.tencent-cloud.com` **无法解析**（`dig`/`nslookup` 返回 NXDOMAIN），此时 kubeconfig 里的 `server: https://cls-....ccs.tencent-cloud.com` 会直接导致 `Unable to connect to the server: dial tcp: lookup ... no such host`。**以 `ClusterExternalEndpoint` 为准**改写 kubeconfig 的 `server`（保留 `https://` 前缀；值已含端口则勿再拼 `:443`），再跑 kubectl。
 
+<!-- kubectl 验证 apiserver 可达，tccli 只到端点/地址出参，非 tccli 边界 -->
+> kubectl（K8s 原生命令，非 tccli；TCCLI 管端点开通与地址，不提供 `get --raw`/节点列表）
 ```bash
 # 探测域名是否可解析（可选）
 # dig +short cls-<ID>.ccs.tencent-cloud.com

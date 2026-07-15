@@ -52,6 +52,7 @@ TCR 个人版是腾讯云容器镜像服务的免费版本，提供基础的镜�
 
 个人版与企业版是独立服务，**无自动迁移**。已有镜像需手动搬迁：
 
+> docker CLI（本地镜像传输，非 tccli；TCCLI 不提供镜像层传输）
 ```bash
 # 1. 拉取个人版镜像
 docker pull <PERSONAL_DOMAIN>/<NAMESPACE>/<REPO>:<TAG>
@@ -81,9 +82,10 @@ tccli tcr DescribeUserQuotaPersonal
 # 查看个人版命名空间（必填 Namespace/Limit/Offset）
 tccli tcr DescribeNamespacePersonal --Namespace "" --Limit 10 --Offset 0
 # expected: Data.NamespaceInfo（数组，空则无命名空间）+ Data.NamespaceCount
+# 若账号尚未初始化个人版用户：ResourceNotFound.ErrNoUser → 先 CreateUserPersonal
 ```
 
-> 个人版是全局服务，**不传 `--region`**。`DescribeNamespacePersonal` 的 `--Namespace`/`--Limit`/`--Offset` 全部必填。
+> 个人版是全局服务，**不传 `--region`**。`DescribeNamespacePersonal` 的 `--Namespace`/`--Limit`/`--Offset` 全部必填。未初始化个人版用户时返回 `ResourceNotFound.ErrNoUser`（先 `CreateUserPersonal`）。
 
 ## 文档
 

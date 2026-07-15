@@ -79,19 +79,30 @@ tccli tke DescribeClusterKubeconfig --region ap-guangzhou --ClusterId "<CLUSTER_
 
 ## 关键字段
 
+> 两套 Action 入参不同，勿混装：`UpdateClusterVersion` 只升 Master 控制面；`UpgradeClusterInstances` 升节点并带任务生命周期。
+
+### UpdateClusterVersion（Master 控制面）
+
 | 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
 |:------|------|:--------:|------------|---------------|
 | ClusterId | string | 是 | `cls-xxxxxxxx` | `ResourceNotFound` |
-| Operation | string | 是 | 升级任务生命周期控制：`create` 开始一次升级任务 / `pause` 停止 / `resume` 继续 / `abort` 终止（api 层 required） | `InvalidParameter` 缺失报 `arguments are required: --Operation` |
 | DstVersion | string | 是 | 目标版本，如 `1.34.1`，须在 `DescribeAvailableClusterVersion` 返回列表中 | `InvalidParameterValue` / `FailedOperation` |
-| UpgradeType | string | 否（`UpgradeClusterInstances` 的 `Operation=create` 时需设置） | 枚举：`reset`（重装升级，支持大/小版本，节点系统盘重装）/ `hot`（原地滚动**小版本**热升级）/ `major`（原地滚动**大版本**升级）。`CheckInstancesUpgradeAble` 前置检查须传同一值 | `InvalidParameterValue`（如对大版本升级传 `hot`） |
 | MaxNotReadyPercent | float | 否 | 升级容忍度，0-100，默认低值（保守） | `InvalidParameterValue` |
 | SkipPreCheck | boolean | 否 | 跳过前置检查，**危险**，默认 false | 跳过后可能升级失败 |
 | ExtraArgs | object | 否 | Master 组件自定义参数（Etcd/KubeAPIServer/KubeControllerManager/KubeScheduler） | 各子字段校验 |
 
-> `DstVersion` 必须是 `DescribeAvailableClusterVersion` 返回的版本之一，不能用 `DescribeVersions` 的全量版本——后者含不可升级到的版本。
+### UpgradeClusterInstances（节点跟随 / 任务生命周期）
 
-> `UpgradeType` 三值代表三条独立升级路径（非可互换）：`reset` 重装节点系统盘（风险最高，但兼容性最强，大小版本都支持）；`hot` 原地滚动小版本（风险低，仅小版本）；`major` 原地滚动大版本（API 弃用风险，需先 `CheckInstancesUpgradeAble --UpgradeType major` 核兼容）。选错（如大版本传 `hot`）报 `InvalidParameterValue`。三条路径的决策见 [步骤 1](#步骤-1决策-—-选升级策略)。
+| 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
+|:------|------|:--------:|------------|---------------|
+| ClusterId | string | 是 | `cls-xxxxxxxx` | `ResourceNotFound` |
+| Operation | string | 是 | 升级任务生命周期：`create` 开始 / `pause` 停止 / `resume` 继续 / `abort` 终止（缺失报 `arguments are required: --Operation`） | `InvalidParameter` |
+| UpgradeType | string | 否（`Operation=create` 时需设置） | 枚举：`reset`（重装，大/小版本）/ `hot`（原地滚动**小版本**）/ `major`（原地滚动**大版本**）。`CheckInstancesUpgradeAble` 前置检查须传同一值 | `InvalidParameterValue`（如对大版本传 `hot`） |
+| InstanceIds | list | 否（`create` 时常需） | 待升级节点 CVM ID 列表 | `ResourceNotFound` |
+| MaxNotReadyPercent | float | 否 | 升级容忍度，0-100 | `InvalidParameterValue` |
+| SkipPreCheck | boolean | 否 | 跳过前置检查，**危险**，默认 false | 跳过后可能升级失败 |
+
+> `DstVersion` 必须是 `DescribeAvailableClusterVersion` 返回的版本之一，不能用 `DescribeVersions` 的全量版本——后者含不可升级到的版本。`UpdateClusterVersion` **无** `Operation`/`UpgradeType`；节点路径的 `UpgradeType` 三值不可互换：`reset` 重装系统盘（兼容性最强）；`hot` 仅小版本原地滚动；`major` 仅大版本原地滚动。选错（如大版本传 `hot`）报 `InvalidParameterValue`。三条路径的决策见 [步骤 1](#步骤-1决策-—-选升级策略)。
 
 ## 操作步骤
 

@@ -66,10 +66,10 @@ tccli tcr DescribeTagRetentionRules --region <REGION> --RegistryId "<REGISTRY_ID
 |:------|------|:--------:|------------|---------------|
 | RegistryId | string | 是 | `tcr-xxxxxxxx` | `ResourceNotFound` |
 | NamespaceId | int | 是 | 命名空间 ID | `ResourceNotFound` |
-| CronSetting | string | 是 | Cron 表达式，如 `0 2 * * *`（每天 2 点） | `InvalidParameterValue` |
-| RetentionRule | object | 是 | `{Key, Value}` | `InvalidParameterValue` |
-| RetentionRule.Key | string | 是 | `latestPushedK` / `nDays` | `InvalidParameterValue` |
-| RetentionRule.Value | int | 是 | 保留数量或天数 | `InvalidParameterValue` |
+| CronSetting | string | 是 | Cron 表达式，如 `0 2 * * *`（每天 2 点）；也可 `manual` | `InvalidParameterValue` |
+| RetentionRule | object | 否 | `{Key, Value}`；省略时须配合 `AdvancedRuleItems` 或 `manual` 场景 | `InvalidParameterValue` |
+| RetentionRule.Key | string | 传对象时是 | `latestPushedK` / `nDays` | `InvalidParameterValue` |
+| RetentionRule.Value | int | 传对象时是 | 保留数量或天数 | `InvalidParameterValue` |
 | AdvancedRuleItems | list | 否 | 高级规则（按 tag/仓库过滤） | `InvalidParameterValue` |
 | Disabled | boolean | 否 | 是否禁用规则 | — |
 
@@ -99,7 +99,7 @@ tccli tcr ModifyTagRetentionRule --region <REGION> \
 
 ### 步骤 2：创建保留规则
 
-`CreateTagRetentionRule` 必传 `RegistryId`/`NamespaceId`/`CronSetting`/`RetentionRule`。按场景**二选一**：A 最小化（命名空间级全仓库）或 B 增强（按仓库过滤）。
+`CreateTagRetentionRule` 必传 `RegistryId`/`NamespaceId`/`CronSetting`；`RetentionRule` 为常用可选对象（命名空间级全仓库时传 `{Key,Value}`，高级过滤用 `AdvancedRuleItems`）。按场景**二选一**：A 最小化（命名空间级全仓库）或 B 增强（按仓库过滤）。
 
 > ⚠️ **A 与 B 是二选一变体，不是先做 A 再做 B**——两者各调一次 `CreateTagRetentionRule` 会建**两条规则**。规则创建后改配置用 `ModifyTagRetentionRule`（覆盖式，须含原值），**禁用第二次 `CreateTagRetentionRule` 改配置**。
 

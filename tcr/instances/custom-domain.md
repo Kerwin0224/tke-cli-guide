@@ -17,11 +17,15 @@ fused: false
 
 ## 准备工作
 
-- 已创建 TKE 集群 (见 [创建集群](../../tke/clusters/create.md))
-- 已配置 tccli 凭证 (见 [配置凭证](../../getting-started/credentials.md))
+- 已创建 **Running** 的 TCR 企业版实例（见 [创建实例](create.md)）
+- 已配置 tccli 凭证（见 [配置凭证](../../getting-started/credentials.md)）
+- 自有域名已备案（中国大陆实例）且 SSL 证书覆盖该域名
 
-
-
+```bash
+tccli tcr DescribeInstances --region <REGION> --Registryids '["<REGISTRY_ID>"]' \
+  --filter "Registries[0].Status"
+# expected: "Running"
+```
 ## 概述
 
 默认情况下 TCR 实例通过 `*.tencentcloudcr.com` 域名访问。绑定自定义域名后，可用 `registry.company.com` 等自有域名推拉镜像，便于企业内网 DNS 统一管理与证书管控。
@@ -139,7 +143,7 @@ tccli tcr DeleteInstanceCustomizedDomain --region <REGION> \
 
 ## 收尾确认
 
-> docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）
+> docker CLI（Registry 登录可用性确认，非 tccli）。**为什么 tccli 做不到**：自定义域名绑定由 TCCLI 完成；登录/推拉仍依赖 docker，TCR API 无 Registry 协议登录 Action。
 ```bash
 # 域名绑定记录已生效
 tccli tcr DescribeInstanceCustomizedDomain --region ap-guangzhou --RegistryId "<REGISTRY_ID>" \

@@ -74,8 +74,8 @@ tccli tcr DescribeInternalEndpoints --region <REGION> --RegistryId "<REGISTRY_ID
 |:------|------|:--------:|------------|---------------|
 | RegistryId | string | 是 | `tcr-xxxxxxxx` | `ResourceNotFound` |
 | Operation | string | 是 | `Create`/`Delete` | `InvalidParameterValue` |
-| VpcId | string | Create 必填 | VPC ID | `ResourceNotFound` |
-| SubnetId | string | Create 必填 | 子网 ID | `ResourceNotFound` |
+| VpcId | string | 是 | VPC ID（Create/Delete 均必填） | `ResourceNotFound` |
+| SubnetId | string | 是 | 子网 ID（Create/Delete 均必填） | `ResourceNotFound` |
 | RegionId | int | 否 | 地域 ID | — |
 | RegionName | string | 否 | 地域名 | — |
 
@@ -87,7 +87,7 @@ tccli tcr DescribeInternalEndpoints --region <REGION> --RegistryId "<REGISTRY_ID
 |:------|------|:--------:|------------|---------------|
 | RegistryId | string | 是 | `tcr-xxxxxxxx` | `ResourceNotFound` |
 | CidrBlock | string | 是 | CIDR，如 `1.2.3.4/32` | `InvalidParameterValue` |
-| Description | string | 否 | 描述 | — |
+| Description | string | 是 | 描述（不可省略） | `InvalidParameter` / 客户端缺参 |
 
 ### CreateServiceAccount
 
@@ -116,7 +116,7 @@ tccli tcr DescribeInternalEndpoints --region <REGION> --RegistryId "<REGISTRY_ID
 
 ### 步骤 2：VPC 内网接入
 
-> VPC 内网接入（`ManageInternalEndpoint` 开启实例内网访问 VPC 链接）属实例级访问开关，完整命令见 [实例访问管理 — 开启内网访问](../instances/manage-access.md#步骤-5开启内网访问-可选)。本篇聚焦访问策略层（白名单/服务账号/DNS），端点开关归实例访问篇，避免双篇重复。VPC 内网开通后，本篇 [内网 DNS 解析](#内网-dns-解析) 配置私有域名。
+> VPC 内网接入（`ManageInternalEndpoint` 开启实例内网访问 VPC 链接）属实例级访问开关，完整命令见 [实例访问管理 — 开启内网访问](../instances/manage-access.md#步骤-2开启内网访问推荐优先)。本篇聚焦访问策略层（白名单/服务账号/DNS），端点开关归实例访问篇，避免双篇重复。VPC 内网开通后，本篇 [内网 DNS 解析](#内网-dns-解析) 配置私有域名。
 
 > VPC 内网开通是异步操作，DNS 生效需等待。用 `DescribeInternalEndpoints` 轮询直到出现接入记录。
 
@@ -160,7 +160,7 @@ tccli tcr DescribeInternalEndpoints --region <REGION> --RegistryId "<REGISTRY_ID
 # 白名单列表（公网端点须 Opened；Closed 时报 ResourceNotFound: Failed to get security group id from registry）
 tccli tcr DescribeSecurityPolicies --region <REGION> --RegistryId "<REGISTRY_ID>" \
   --filter "SecurityPolicySet[].{cidr:CidrBlock,desc:Description}"
-# expected: Status=Opened 时含白名单；Closed → ResourceNotFound（先 ManageExternalEndpoint Open）
+# expected: Status=Opened 时含白名单；Closed → ResourceNotFound（先 ManageExternalEndpoint --Operation Create）
 
 # 服务账号列表（RegistryId + EmbedPermission=true 带权限，Filters 按名过滤）
 tccli tcr DescribeServiceAccounts --region <REGION> --RegistryId "<REGISTRY_ID>" \
@@ -182,7 +182,7 @@ tccli tcr DescribeServiceAccounts --region <REGION> --RegistryId "<REGISTRY_ID>"
 ```bash
 # 关闭 VPC 内网（端点开关归实例访问篇）
 tccli tcr ManageInternalEndpoint --region <REGION> \
-  --RegistryId "<REGISTRY_ID>" --Operation Delete --VpcId "<VPC_ID>"  # 见 instances/manage-access.md
+  --RegistryId "<REGISTRY_ID>" --Operation Delete --VpcId "<VPC_ID>" --SubnetId "<SUBNET_ID>"  # Delete 亦必填 SubnetId；见 instances/manage-access.md
 # expected: exit 0
 
 # 删除白名单

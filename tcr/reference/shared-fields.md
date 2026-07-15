@@ -66,8 +66,9 @@ tccli tcr DescribeNamespaces --region <REGION> \
 tccli tcr CreateNamespace --region <REGION> \
   --RegistryId "<REGISTRY_ID>" \
   --NamespaceName "<NAMESPACE>" \
+  --IsPublic false \
   --CVEWhitelistItems '[{"CVEID":"CVE-2024-12345"},{"CVEID":"CVE-2024-67890"}]'
-# expected: { "RequestId": "..." }
+# expected: { "RequestId": "..." }；IsPublic 为必填（true 公开 / false 私有）
 ```
 
 > 漏洞扫描阻断等级（`Severity`）在创建命名空间时配置（`low`/`medium`/`high`），白名单是补充——命中白名单的 CVE 即使达阻断等级也不阻断推送。

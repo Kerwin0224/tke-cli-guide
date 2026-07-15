@@ -10,6 +10,7 @@ fused: false
 > 官方文档: [容器镜像服务个人版](https://cloud.tencent.com/document/product/1141/57780) · [个人版迁移至企业版完全指南](https://cloud.tencent.com/document/product/1141/52292)
 
 > 个人版 API 形态与企业版不同——所有 Action 带 `Personal` 后缀。`RepoName` 格式是 `<namespace>/<repo>`（含斜杠）。
+> 镜像层 push/pull 仍走 docker CLI（非 tccli；TCCLI 不提供 docker daemon 能力）；本篇只覆盖个人版高级 API。
 
 ## 触发条件
 

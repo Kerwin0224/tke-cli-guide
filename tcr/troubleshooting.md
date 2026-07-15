@@ -90,7 +90,7 @@ curl -v https://<REGISTRY_DOMAIN>/v2/
 # 如果 Status 不是 "Opened"
 tccli tcr ManageExternalEndpoint --region ap-guangzhou \
   --RegistryId "<REGISTRY_ID>" \
-  --Operation Open
+  --Operation Create
 # expected: exit 0
 ```
 
@@ -120,7 +120,7 @@ curl -s -o /dev/null -w "%{http_code}" https://<REGISTRY_DOMAIN>/v2/
 ```bash
 # 0. 先确认公网端点（Closed 时 DescribeSecurityPolicies 报 ResourceNotFound: Failed to get security group id）
 tccli tcr DescribeExternalEndpointStatus --region ap-guangzhou --RegistryId "<REGISTRY_ID>"
-# expected: Status=Opened；若 Closed → 先 ManageExternalEndpoint --Operation Open
+# expected: Status=Opened；若 Closed → 先 ManageExternalEndpoint --Operation Create
 
 # 1. 检查白名单
 tccli tcr DescribeSecurityPolicies --region ap-guangzhou --RegistryId "<REGISTRY_ID>"
@@ -218,10 +218,13 @@ tccli tcr DescribeImages --region ap-guangzhou \
 ```bash
 # 1. 实例信息
 tccli tcr DescribeInstances --region ap-guangzhou --Registryids '["<REGISTRY_ID>"]' > tcr-info.json
+# expected: 文件写入成功，JSON 含 Registries[]
 
 # 2. 访问配置
 tccli tcr DescribeExternalEndpointStatus --region ap-guangzhou --RegistryId "<ID>" > tcr-endpoint.json
+# expected: 文件写入成功，含 Status（Opened/Closed）
 tccli tcr DescribeSecurityPolicies --region ap-guangzhou --RegistryId "<ID>" > tcr-policies.json
+# expected: 文件写入成功；公网 Closed 时可能 ResourceNotFound
 
 # 3. 操作日志 (CloudAudit)
 # 从控制台获取或: tccli cloudaudit LookUpEvents --LookupAttributes '[{"AttributeKey":"ResourceName","AttributeValue":"<REGISTRY_ID>"}]'

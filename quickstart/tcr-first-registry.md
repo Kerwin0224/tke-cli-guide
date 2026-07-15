@@ -50,6 +50,7 @@ tccli --version
 3.1.126.1
 ```
 
+> docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）
 ```bash
 docker --version
 # expected: Docker version 24.x.x 或更高
@@ -67,11 +68,11 @@ Docker version 29.6.0
 
 ```bash
 tccli tcr DescribeRegions --output json
-# expected: TotalCount=27, Regions[] 含 ap-guangzhou 且 Status=alluser
+# expected: TotalCount 为当前账号可见地域数（随账号/产品开通变化，勿写死）；Regions[] 含 ap-guangzhou 且 Status=alluser
 ```
 ```json
 {
-    "TotalCount": 11,
+    "TotalCount": 19,
     "Regions": [
         {
             "RegionName": "ap-guangzhou",
@@ -89,14 +90,15 @@ tccli tcr DescribeRegions --output json
 tccli tcr DescribeRegions \
     --filter "Regions[?Status=='alluser'].{name:RegionName,alias:Alias}" \
     --output text
-# expected: Tab 分隔的地域名与别名
+# expected: Tab 分隔；--output text 多键投影列序按投影 key 名字母序（alias,name），
+# 非书写序。要固定列序请用 --output json
 ```
 ```text
-ap-beijing    bj
-ap-guangzhou  gz
-ap-hongkong   hk
-ap-chengdu    cd
-ap-nanjing    nj
+bj	ap-beijing
+gz	ap-guangzhou
+hk	ap-hongkong
+cd	ap-chengdu
+nj	ap-nanjing
 ```
 
 > 本文使用 **ap-guangzhou**（`Status: alluser`，所有用户可用）。

@@ -99,7 +99,7 @@ tccli tke CreateBackupStorageLocation --region <REGION> \
 
 ```bash
 tccli tke DescribeBackupStorageLocations --region <REGION>
-# expected: exit 0, BackupStorageLocationSet 含新建位置, State=Available
+# expected: exit 0；无位置时 BackupStorageLocationSet 可能为 null（非 []）；有位置时为数组，含新建项且 State=Available
 ```
 ```json
 {
@@ -118,7 +118,7 @@ tccli tke DescribeBackupStorageLocations --region <REGION>
 }
 ```
 
-> `State` 状态机：创建后 `Available`（桶可达且权限正常）/ `Unavailable`（桶不存在或无权限，查 `Message`）。**创建初期 `State` 可能为空**（异步校验未完成），稍后重查才有 `Available`/`Unavailable` 值——勿据空 `State` 判断创建失败。
+> `State` 状态机：创建后 `Available`（桶可达且权限正常）/ `Unavailable`（桶不存在或无权限，查 `Message`）。**创建初期 `State` 可能为空**（异步校验未完成），稍后重查才有 `Available`/`Unavailable` 值——勿据空 `State` 判断创建失败。空账号无仓库时响应常为 `"BackupStorageLocationSet": null`（非空数组 `[]`），JMESPath 取 `[0]` 前须先判空。
 
 ## 验证
 
@@ -232,6 +232,6 @@ tccli tke DescribeBackupStorageLocations --region <REGION> \
 
 ## 下一步
 
-- 集群创建/删除（备份对象）：[创建集群](../clusters/create.md)
-- 集群升级（升级前备份）：[升级集群版本](../clusters/upgrade.md)
-- 集群状态查询：[查询集群](../clusters/query.md)
+- 集群创建/删除（备份对象）：[创建集群](create.md)
+- 集群升级（升级前备份）：[升级集群版本](upgrade.md)
+- 集群状态查询：[查询集群](query.md)

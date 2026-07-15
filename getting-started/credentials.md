@@ -120,7 +120,7 @@ tccli auth login
 # expected: exit 0，触发 CAM 登录流程（浏览器交互，仅接受 --profile 参数）
 ```
 
-> `tccli auth login` 触发 CAM 登录获取临时凭证，用系统默认浏览器打开授权页（源码 `login.py` 调 `webbrowser.open`，无 `--browser` 参数可选）。具体交互行为（浏览器/扫码）因环境而异——首次使用建议直接运行观察提示。临时凭证会过期，过期后重新 `tccli auth login`。适合本地交互、不想长期存密钥。
+> `tccli auth login` 触发 CAM 登录获取临时凭证，用系统默认浏览器打开授权页（无 `--browser` 参数可选）。具体交互行为（浏览器/扫码）因环境而异——首次使用建议直接运行观察提示。临时凭证会过期，过期后重新 `tccli auth login`。适合本地交互、不想长期存密钥。
 
 ## 验证
 
@@ -293,7 +293,7 @@ tccli cam AttachRolePolicy --AttachRoleName TKE_QCSRole \
 
 - **控制台一次授权**：首次进 TKE 控制台「同意授权」仍是官方主路径（尤其主账号引导创建多策略）。
 - **子账号**：可能无 `cam:CreateRole`，CLI 补角色会失败 → 主账号控制台授权或提升 CAM 权限。
-- **策略名大小写**：以 `ListPolicies` / 控制台为准；真机曾见 `QcloudAccessFortkeRoleInMetricsbyLog` 与 `QcloudAccessForTKERole` 混用大小写，挂载失败时用 `tccli cam ListPolicies` 搜精确名。
+- **策略名大小写**：以 `ListPolicies` / 控制台为准；账号侧可见 `QcloudAccessFortkeRoleInMetricsbyLog` 与 `QcloudAccessForTKERole` 混用大小写，挂载失败时用 `tccli cam ListPolicies` 搜精确名。
 
 多 profile 验证（查看已配置的 profile 与 region）：
 
@@ -302,7 +302,7 @@ tccli configure list
 # expected: 列出各 profile 的 region/output，凭证字段（secretId/secretKey）明文显示
 ```
 
-> ⚠️ **安全红线**：`tccli configure list` **明文打印 secretId/secretKey**（源码 `configure.py` 的 `ConfigureListCommand._run_main` 直接输出 `cred[config]` 原值，未做脱敏；命令 `--help` 示例里的 `****` 仅为文档演示，非实际行为）。禁止在共享环境、截图、工单、会话记录中运行该命令；共享测试账号下严禁运行任何可能暴露凭证的命令。仅在自己的隔离终端核查 profile 配置时使用。
+> ⚠️ **安全红线**：`tccli configure list` **明文打印 secretId/secretKey**（不做脱敏；命令 `--help` 示例里的 `****` 仅为文档演示，非实际行为）。禁止在共享环境、截图、工单、会话记录中运行该命令；共享测试账号下严禁运行任何可能暴露凭证的命令。仅在自己的隔离终端核查 profile 配置时使用。
 
 ## 故障恢复
 

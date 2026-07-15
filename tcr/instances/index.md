@@ -12,7 +12,7 @@ TCR 实例是独立的镜像仓库服务后端。企业版实例有独立存储�
 ## 触发条件
 
 - 你要创建企业版镜像仓库实例（选 `RegistryType` 规格/地域/后端存储）— 用 `CreateInstance`，见 [创建实例](create.md)
-- 你要配置 `docker login` 访问（公网/内网端点、Token、访问白名单）— 见 [访问管理](manage-access.md)
+- 你要配置 `docker login` 访问（**先内网 VPC，再按需公网**、Token、白名单）— 见 [访问管理](manage-access.md)
 - 你要绑定自有域名 + 证书访问实例 — 见 [自定义域名](custom-domain.md)
 - 你遇到实例状态非 `Running` 无法 push/pull — 看 [实例状态](#实例状态)
 
@@ -45,7 +45,7 @@ TCR 实例是独立的镜像仓库服务后端。企业版实例有独立存储�
 | standard（标准） | 100 | 3000 | 10 | + 镜像部署阻断 | 中型企业 |
 | premium（高级） | 500 | 5000 | 20 | + 签名验签 + 按需加载 | 大规模、安全敏感 |
 
-> 个人版免费但限额（命名空间 **10**/地域；仓库 **广州 500 / 其他 100**；Tag **100**），无 SLA，不可调额，无独立后端。生产环境用企业版。详见 [产品服务层级](https://cloud.tencent.com/document/product/1141/104731)。
+> 个人版免费但限额（命名空间 **10**/地域；仓库 **广州 500 / 其他 100**；Tag **100**），无 SLA，不可调额，无独立后端。生产环境用企业版。官方权威表：[产品服务层级](https://cloud.tencent.com/document/product/1141/104731)；本仓数字与用量查询见 [配额与限制](../reference/quotas.md)。地域级企业版实例默认最多 **10** 个。
 
 ## 企业版 vs 个人版
 
@@ -86,9 +86,10 @@ tccli tcr DescribeInstances --region <REGION> \
 
 ## 文档
 
-- [创建实例](create.md) — 规格选择、地域、后端存储
-- [访问管理](manage-access.md) — 公网/内网端点、Token、白名单
+- [创建实例](create.md) — 规格选择、地域、后端存储；配额见 [quotas](../reference/quotas.md) / 官方 104731
+- [访问管理](manage-access.md) — **先内网后公网**、Token、白名单
 - [自定义域名](custom-domain.md) — 绑定自有域名 + 证书
-- [状态机](../reference/states.md) — 实例状态枚举
+- [状态机](../reference/states.md) — 实例状态枚举（Creating/Running/Deleting）
 - [错误码](../reference/error-codes.md) — docker login/push 失败码
+- [配额与限制](../reference/quotas.md) — 规格配额与用量查询
 - [个人版](../personal/index.md) — 免费个人版（API 形态不同）

@@ -64,10 +64,8 @@ tccli cam DescribeRoleList --Page 1 --Rp 100 \
 ```bash
 tccli tke DescribeVersions --region <REGION> \
     --filter "VersionInstanceSet[-3:].Version" --output text
-# expected (示例):
-# 1.30.0
-# 1.32.2
-# 1.34.1
+# expected (示例，text 为 tab 分隔单行；json 才是数组分行):
+# 1.30.0	1.32.2	1.34.1
 ```
 
 | 占位符 | 含义 | 约束 | 获取方式 |
@@ -265,9 +263,11 @@ tccli tke DescribeClusters --region <REGION> \
     --filter "Clusters[?ClusterStatus=='Running'].{id:ClusterId,name:ClusterName,ver:ClusterVersion,type:ClusterType}" \
     --output text
 # expected: Tab 分隔的集群列表
+# 注意：--output text 多键投影列序按投影 key 名字母序（id,name,type,ver），
+# 非书写序；要固定列序请用 --output json
 ```
 ```text
-cls-xxxxxxxx    <CLUSTER_NAME>    1.34.1    MANAGED_CLUSTER
+cls-xxxxxxxx	<CLUSTER_NAME>	MANAGED_CLUSTER	1.34.1
 ```
 
 ### 单集群详情
@@ -314,7 +314,7 @@ false
 若输出 `true`，先关闭保护：
 
 ```bash
-tccli tke DisableClusterDeletionProtection --ClusterId <CLUSTER_ID>
+tccli tke DisableClusterDeletionProtection --region <REGION> --ClusterId <CLUSTER_ID>
 # expected: {"RequestId":"..."}
 ```
 
@@ -362,7 +362,7 @@ tccli tke DescribeClusters --region <REGION> --ClusterIds '["<CLUSTER_ID>"]' \
 | `InvalidParameter.CidrConflictWithVpcCidr` | 对比 `ServiceCIDR` 与 VPC CIDR | Service 网段与 VPC CIDR 重叠 | 换不重叠 CIDR（如 `10.100.0.0/17`） |
 | `EniSubnetIds must be set` | 检查是否传了 `EniSubnetIds` | VPC-CNI 模式缺弹性网卡子网 | 在 `ClusterCIDRSettings` 中加 `"EniSubnetIds":["<SUBNET_ID>"]` |
 | `DeleteCluster` 返回 exit 252 | 检查命令是否含 `--InstanceDeleteMode` | 缺少必填参数 `InstanceDeleteMode` | 补 `--InstanceDeleteMode terminate` 或 `retain` |
-| 删除被 API 拒绝 | `DescribeClusterStatus` 查 `ClusterDeletionProtection` | 删除保护开启中 | 先执行 `tccli tke DisableClusterDeletionProtection --ClusterId <CLUSTER_ID>` |
+| 删除被 API 拒绝 | `DescribeClusterStatus` 查 `ClusterDeletionProtection` | 删除保护开启中 | 先执行 `tccli tke DisableClusterDeletionProtection --region <REGION> --ClusterId <CLUSTER_ID>` |
 | 集群卡 `Creating` > 10min | `DescribeTasks --region <REGION> --ClusterId <CLUSTER_ID>` 查任务状态 | 子网 IP 不足或后端异常 | 换子网重试；若持续失败则提工单并附 `RequestId` |
 
 ### 命令成功但状态不对 (exit = 0)

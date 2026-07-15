@@ -12,7 +12,7 @@ fused: true
 
 ## 概述
 
-查询集群有两种入口，用途不同：
+查询集群有三类入口，用途不同：
 
 | 查询 | 接口 | 用途 | 返回 |
 |:-----|:-----|:-----|:-----|
@@ -116,8 +116,8 @@ tccli tke DescribeClusters --region ap-guangzhou --version 2022-05-01 --Limit 10
 {
     "TotalCount": 2,
     "Clusters": [
-        {"ClusterId": "cls-example1", "ClusterName": "prod", "ClusterStatus": "Running", "ClusterVersion": "1.34.1", "ClusterType": "MANAGED_CLUSTER", "ClusterLevel": "L20", "VpcId": "vpc-example", "CreatedTime": "2026-01-01 00:00:00", "TagSpecification": []},
-        {"ClusterId": "cls-example2", "ClusterName": "test", "ClusterStatus": "Running", "ClusterVersion": "1.30.0", "ClusterType": "INDEPENDENT_CLUSTER", "ClusterLevel": "L5", "VpcId": "vpc-example", "CreatedTime": "2026-02-01 00:00:00", "TagSpecification": []}
+        {"ClusterId": "cls-example1", "ClusterName": "prod", "ClusterStatus": "Running", "ClusterVersion": "1.34.1", "ClusterType": "MANAGED_CLUSTER", "ClusterLevel": "L20", "VpcId": "vpc-example", "CreatedTime": "2026-01-01 00:00:00", "TagSpecification": null},
+        {"ClusterId": "cls-example2", "ClusterName": "test", "ClusterStatus": "Running", "ClusterVersion": "1.30.0", "ClusterType": "INDEPENDENT_CLUSTER", "ClusterLevel": "L5", "VpcId": "vpc-example", "CreatedTime": "2026-02-01 00:00:00", "TagSpecification": null}
     ],
     "Errors": [],
     "RequestId": "xxx"
@@ -142,7 +142,7 @@ cls-example1	prod	MANAGED_CLUSTER	1.34.1
 cls-example2	test	INDEPENDENT_CLUSTER	1.30.0
 ```
 
-> ⚠️ `--output text` 的列序由 JMESPath 投影字段最终序列化决定，**非投影声明顺序**。声明 `{id,name,ver,type}` 与 `{ver,type,id,name}` 输出列序相同（均为 `id,name,type,ver`）。若需固定列顺序，改用 `--output json` 或在投影外用 `sort_by`/显式拼接。
+> ⚠️ `--output text` 的列序按投影 key **名字母序**，**非书写序**。声明 `{id,name,ver,type}` 与 `{ver,type,id,name}` 输出列序相同（均为 `id,name,type,ver`）。若需固定列顺序，改用 `--output json`；多字段 text 适合人眼看 tab 分隔，不适合按列号机器解析。
 
 > `--filter`（JMESPath）和 `--Filters`（API 入参）是两回事：`--Filters` 让服务端按条件返回，`--filter` 让 CLI 本地裁剪。两者可叠加——先 `--Filters` 服务端过滤，再 `--filter` 本地投影。
 

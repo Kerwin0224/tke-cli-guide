@@ -52,7 +52,7 @@ subtype: 8D
 ```bash
 # 验证凭证
 tccli tke DescribeRegions
-# expected: RegionSet 列表返回
+# expected: RegionInstanceSet 列表返回（字段名是 RegionInstanceSet，不是 RegionSet）
 
 # 核对集群 ID 与地域
 tccli tke DescribeClusters --region <REGION> --ClusterIds '["<CLUSTER_ID>"]'

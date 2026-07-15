@@ -7,7 +7,7 @@ doc_type: Overview
 > 控制台: [容器镜像服务 - AI 模型 / AI Skills](https://console.cloud.tencent.com/tcr)
 > 官方文档: [AI 模型管理](https://cloud.tencent.com/document/product/1141/129812) · [AI Skills 管理](https://cloud.tencent.com/document/product/1141/129802)
 
-TCR 企业版将 AI 模型与 AI Skill 作为一类特殊制品托管：模型以模型仓库（含多版本与元数据）形式管理，Skill 以可下载的智能体工具包形式管理。二者均挂载在企业版实例下，通过 `RegistryId` 定位。TCR AI 无独立 Create Action，模型内容通过 `docker push` 推送创建。
+TCR 企业版将 AI 模型与 AI Skill 作为一类特殊制品托管：模型以模型仓库（含多版本与元数据）形式管理，Skill 以可下载的智能体工具包形式管理。二者均挂载在企业版实例下，通过 `RegistryId` 定位。TCR AI 无独立 Create Action，模型内容通过 `docker push` 推送创建（镜像层传输非 tccli；TCCLI 不提供 docker daemon 能力）。
 
 ## 触发条件
 

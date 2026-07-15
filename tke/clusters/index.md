@@ -77,7 +77,7 @@ tccli tke DescribeClusters --region <REGION> --Limit 5 \
 | 2. 连接 | [集群认证](../security/auth.md) | `DescribeClusterKubeconfig` 获取 kubeconfig | kubectl 可连控制面 |
 | 3. 加节点 | [创建节点池](../nodes/nodepool-create.md) | 给集群加工作节点（节点从子网分配 IP） | ClusterRunningNodeNum ≥ 1，可运行 Pod |
 | 4. 查询 | [查询和过滤集群](query.md) | 列表查询、JMESPath 投影、单集群健康全貌 | 集群状态全貌 |
-| 5. 运行时 | [配置集群属性与运行时](configure.md) + [升级集群版本](upgrade.md) | 集群运行时行为：版本升级/运行时配置/Master 组件/OS 镜像/自定义参数（22 Action 独立概念） | ClusterVersion/运行时/Master 配置变更 |
+| 5. 运行时 | [配置集群属性与运行时](configure.md) + [升级集群版本](upgrade.md) | 集群运行时行为：版本升级/运行时配置/Master 组件/OS 镜像/自定义参数 | ClusterVersion/运行时/Master 配置变更 |
 | 6. 网络 | [管理端点](../networking/endpoints.md) | 公网/内网访问端点（kubectl 远程连接的前置） | ClusterExternalEndpoint |
 | 7. 维护 | [维护窗口](maintenance-window.md) | 控制自动升级时段与排除项 | 维护窗口配置 |
 | 8. 调度 | [调度策略](scheduling.md) | 调度器插件配置（Pod 调度行为） | SchedulerPolicy |

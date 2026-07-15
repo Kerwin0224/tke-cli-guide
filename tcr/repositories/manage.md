@@ -26,7 +26,9 @@ TCR 的两级结构：实例 → 命名空间 → 仓库 → 镜像版本。
 | 仓库 | 镜像存放单元 | 命名空间内唯一 | 1000 / 3000 / 5000 |
 | 镜像版本 | 具体镜像 tag | 仓库内唯一 | 无限制 |
 
-> 命名空间名直接用于镜像地址：`<domain>/<namespace>/<repo>:<tag>`。命名空间创建后**不可改名**，只能删除重建。
+> 配额以官方 [104731](https://cloud.tencent.com/document/product/1141/104731) 为准，本仓汇总见 [配额与限制](../reference/quotas.md)。命名空间名直接用于镜像地址：`<domain>/<namespace>/<repo>:<tag>`。命名空间创建后**不可改名**，只能删除重建。
+>
+> **为什么本篇可能出现 docker**：仓库 CRUD 纯 tccli；`docker login`/`push` 仅在收尾衔接下一步时作为能力边界提示——TCCLI 无 Registry 协议与镜像层传输 Action。
 
 ## 准备工作
 
@@ -121,11 +123,12 @@ tccli tcr DescribeNamespaces --region <REGION> --RegistryId "<REGISTRY_ID>" \
   --filter "NamespaceList[].{name:Name,public:Public}" --output text
 # expected: 命名空间名 + 可见性；条数可用 --filter TotalCount
 
-# 仓库列表（顶层 RepositoryList[]；Name 常为 ns/repo，另有 Namespace 字段）
+# 仓库列表（顶层 RepositoryList[]；Name 常为 `ns/repo` 全路径，另有 Namespace 字段）
 tccli tcr DescribeRepositories --region <REGION> --RegistryId "<REGISTRY_ID>" \
   --NamespaceName "<NAMESPACE_NAME>" --Limit 20 \
   --filter "RepositoryList[].{name:Name,ns:Namespace}" --output text
-# expected: 仓库列表；全实例条数 --filter TotalCount（可不传 NamespaceName）
+# expected: 仓库列表；text 多键投影列序按投影 key 名字母序（name 在 ns 前），与书写序无关——勿用 awk 按书写序取列；机器解析用 `--output json`（见 [agent-optimization](../../appendix/agent-optimization.md)）
+# expected: 全实例条数 --filter TotalCount（可不传 NamespaceName）
 ```
 
 ## 验证
@@ -241,15 +244,14 @@ tccli tcr DescribeNamespaces --region ap-guangzhou --RegistryId "<REGISTRY_ID>" 
 
 tccli tcr DescribeRepositories --region ap-guangzhou --RegistryId "<REGISTRY_ID>" \
   --NamespaceName "<NAMESPACE_NAME>" --Limit 20 \
-  --filter "RepositoryList[?Name=='<REPOSITORY_NAME>'].{name:Name,ns:Namespace}"
-# expected: 含目标仓库, ns=<NAMESPACE_NAME>
+  --filter "RepositoryList[?Namespace=='<NAMESPACE_NAME>' && (Name=='<REPOSITORY_NAME>' || Name=='<NAMESPACE_NAME>/<REPOSITORY_NAME>')].{name:Name,ns:Namespace}"
+# expected: 含目标仓库；`Name` 响应常为 `ns/repo` 全路径，过滤时两种写法都兼容
 
-# ④ 衔接下一步前置：命名空间/仓库已建，docker login 可达（进推送镜像前须确认凭证+仓库可达）
-docker login <REGISTRY_DOMAIN> --username <USERNAME> --password <TOKEN>
-# expected: Login Succeeded（命名空间/仓库建好后即可 docker push）
+# ④ 衔接下一步前置：命名空间/仓库已建后，访问端点+Token 就绪即可 docker push（见访问管理/推送篇）
+# docker login 属能力边界（非 tccli）；此处不强制执行，仅确认资源就绪
 ```
 
-> 命名空间存在 + 仓库存在 + docker Login Succeeded = 仓库管理闭环完成，可进入推送镜像。
+> 命名空间存在 + 仓库存在 = 仓库管理闭环完成。推送前再确认访问路径（先内网后公网）与 Token，见 [访问管理](../instances/manage-access.md) / [推送拉取镜像](../images/push-pull.md)。
 
 ---
 

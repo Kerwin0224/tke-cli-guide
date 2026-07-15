@@ -47,11 +47,11 @@ fused: false
 |:------|------|:--------:|:-----|:-----------|
 | RegistryId | string | 是 | 实例 ID | `ResourceNotFound` |
 | NamespaceName | string | 是 | 命名空间名 | `ResourceNotFound` |
-| Rule | object | 是 | 规则对象 | `InvalidParameterValue` |
-| Rule.RepositoryPattern | string | 否 | 仓库匹配模式，如 `**`（全部）/`prod-*` | 作用范围错 |
-| Rule.TagPattern | string | 否 | Tag 匹配模式，如 `latest`/`v*` | 作用范围错 |
-| Rule.RepositoryDecoration | string | 否 | `matches`/`excludes` | 匹配逻辑错 |
-| Rule.TagDecoration | string | 否 | `matches`/`excludes` | 匹配逻辑错 |
+| Rule | object | 是 | 规则对象（四字段均须给出） | `InvalidParameterValue` |
+| Rule.RepositoryPattern | string | 是 | 仓库匹配模式，如 `**`（全部）/`prod-*` | 作用范围错 |
+| Rule.TagPattern | string | 是 | Tag 匹配模式，如 `latest`/`v*` | 作用范围错 |
+| Rule.RepositoryDecoration | string | 是 | `matches`/`excludes` | 匹配逻辑错 |
+| Rule.TagDecoration | string | 是 | `matches`/`excludes` | 匹配逻辑错 |
 | Rule.Disabled | boolean | 否 | 是否禁用 | 规则不生效 |
 
 > `Pattern` 支持 glob：`**` 匹配全部，`prod-*` 匹配前缀，`v*` 匹配 v 开头。`Decoration=matches` 表示匹配 Pattern 的生效；`excludes` 表示排除。

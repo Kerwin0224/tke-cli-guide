@@ -65,7 +65,7 @@ tccli tke CreateNodePool --version 2022-05-01 --region <REGION> \
   --Native.SubnetIds '["<SUBNET_ID>"]' --Native.InstanceTypes '["S5.MEDIUM4"]' \
   --Native.InstanceChargeType POSTPAID_BY_HOUR \
   --Native.SystemDisk '{"DiskType":"CLOUD_PREMIUM","DiskSize":50}' \
-  --Native.Scaling '{"MinReplicas":1,"MaxReplicas":1,"CreatePolicy":"manual"}' \
+  --Native.Scaling '{"MinReplicas":1,"MaxReplicas":1,"CreatePolicy":"ZoneEquality"}' \
   --Labels.0.Name env --Labels.0.Value production \
   --Taints.0.Key dedicated --Taints.0.Value gpu --Taints.0.Effect NoSchedule
 # expected: { "NodePoolId": "np-xxxxxxxx", "RequestId": "..." }

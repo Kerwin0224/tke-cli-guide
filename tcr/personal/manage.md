@@ -37,7 +37,10 @@ fused: false
 ```bash
 tccli --version
 # expected: tccli 版本号
+```
 
+> docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）
+```bash
 docker --version
 # expected: Docker version 20+
 ```
@@ -51,6 +54,7 @@ tccli tcr DescribeUserQuotaPersonal
 
 # 查看已有命名空间（必填 Namespace/Limit/Offset）
 tccli tcr DescribeNamespacePersonal --Namespace "" --Limit 10 --Offset 0
+# 未初始化个人版用户 → ResourceNotFound.ErrNoUser（先 CreateUserPersonal）
 # expected: Data.NamespaceInfo（数组）+ Data.NamespaceCount
 ```
 

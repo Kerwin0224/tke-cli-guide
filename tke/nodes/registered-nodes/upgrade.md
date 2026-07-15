@@ -51,7 +51,17 @@ kubectl cordon <NODE_NAME>
 
 ### 步骤 3：重新执行注册脚本升级组件
 
-在目标机器上重新执行节点池的注册脚本（从控制台或 `DescribeExternalNodeScript` 获取），脚本会更新节点组件版本。
+用 TCCLI 取注册脚本，再在目标机器上重新执行；脚本会拉取并更新节点的 kubelet 与运行时组件，使其与集群控制面版本对齐。
+
+```bash
+tccli tke DescribeExternalNodeScript \
+  --ClusterId "<CLUSTER_ID>" \
+  --NodePoolId "<NODEPOOL_ID>" \
+  --region ap-guangzhou
+# expected: 返回 Command（可执行脚本）/ Link / Token；在目标机器上执行 Command 完成组件升级
+```
+
+> 无 NodePoolId 时先 `DescribeExternalNodePools` 取池 ID。脚本获取失败见[创建注册节点（专线版）](dedicated-line.md) 故障恢复。
 
 ### 步骤 4：恢复调度并校验
 

@@ -62,7 +62,7 @@ basic 实例不能作主也不能作从。需先 [创建实例](../instances/cre
 |:-----|:-----------|:----:|:-----|
 | `SourceRegistryId` | ManageReplication | 是 | 主实例 ID |
 | `DestinationRegistryId` | ManageReplication | 是 | 从实例 ID |
-| `DestinationRegionId` | ManageReplication | 是 | 从实例地域数字 ID（如 `4`=ap-shanghai） |
+| `DestinationRegionId` | ManageReplication | 否 | 从实例地域数字 ID（如 `4`=ap-shanghai）；可选，建议与从实例地域一致 |
 | `Rule.Name` | ManageReplication | 是 | 规则名 |
 | `Rule.DestNamespace` | ManageReplication | 是 | 目标命名空间 |
 | `RegistryId` | CreateReplicationInstance | 是 | 主实例 ID |
