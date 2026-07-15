@@ -134,7 +134,21 @@ tccli tke ModifyClusterEndpointSP --region ap-guangzhou \
 
 > 公网端点未配白名单时默认拒绝所有。先查出口 IP（如 `curl -s https://api.ipify.org`），再写入 `/32`。
 
+> **时序（agent 易错）**：
+> 1. 先 `DescribeClusterEndpointStatus --IsExtranet true` 等到 **`Created`**，再 `ModifyClusterEndpointSP`。  
+> 2. 若返回 `FailedOperation.LbCommon`：等待 15–60s 后重试；可用 `DescribeClusterEndpoints` 看 `ClusterExternalEndpoint` 是否已非空。  
+> 3. 改完 ACL 后查 `ClusterExternalACL`：若仍为 `[]` 或未含你的 CIDR，**不要**假定 kubectl 会通。  
+> 4. **禁止**把 `SecurityGroupId` 当作 `SecurityPolicies` 的替代字段传入 `ModifyClusterEndpointSP`。
+
+```bash
+# 核对 ACL 是否生效（公网端点）
+tccli tke DescribeClusterEndpoints --region ap-guangzhou --ClusterId "<CLUSTER_ID>"   --filter "{ext:ClusterExternalEndpoint,acl:ClusterExternalACL}" --output json
+# expected: ext 非空；acl 含 "<YOUR_EGRESS_IP>/32"（或你放行的 CIDR）
+```
+
 ### 步骤 5：取 kubeconfig 并验证连通
+
+> **本机默认动作**：写出 kubeconfig 后，**优先**用 `ClusterExternalEndpoint` 作为 `server`（`https://` + 该字段）。不要假设 `ClusterDomain`（`cls-*.ccs.tencent-cloud.com`）一定能解析。
 
 ```bash
 # 取 kubeconfig
@@ -142,13 +156,13 @@ tccli tke DescribeClusterKubeconfig --region ap-guangzhou --ClusterId "<CLUSTER_
   --filter "Kubeconfig" --output text > kubeconfig.yaml
 # expected: 文件非空 YAML
 
-# 取真实公网入口（CLB host:port，以实际响应为准）
+# 取真实公网入口（CLB host:port）与 ACL
 tccli tke DescribeClusterEndpoints --region ap-guangzhou --ClusterId "<CLUSTER_ID>" \
-  --filter "{ext:ClusterExternalEndpoint,domain:ClusterDomain}" --output json
-# expected: ext 非空（形如 lb-xxxx.clb.*.tencentclb.com:443）；domain 常为 cls-xxx.ccs.tencent-cloud.com
+  --filter "{ext:ClusterExternalEndpoint,domain:ClusterDomain,acl:ClusterExternalACL}" --output json
+# expected: ext 非空（形如 lb-xxxx.clb.*.tencentclb.com:443）；acl 含你的 CIDR；domain 可能 NXDOMAIN
 ```
 
-> **域名 NXDOMAIN**：部分环境对 `cls-*.ccs.tencent-cloud.com` **无法解析**（`dig`/`nslookup` 返回 NXDOMAIN），此时 kubeconfig 里的 `server: https://cls-....ccs.tencent-cloud.com` 会直接导致 `Unable to connect to the server: dial tcp: lookup ... no such host`。**以 `ClusterExternalEndpoint` 为准**改写 kubeconfig 的 `server`（保留 `https://` 前缀；值已含端口则勿再拼 `:443`），再跑 kubectl。
+> **域名 NXDOMAIN**：部分环境对 `cls-*.ccs.tencent-cloud.com` **无法解析**，kubeconfig 默认 `server` 会导致 `no such host`。**以 `ClusterExternalEndpoint` 为准**改写 `server`（保留 `https://`；值已含端口则勿再拼 `:443`），再跑 kubectl。
 
 <!-- kubectl 验证 apiserver 可达，tccli 只到端点/地址出参，非 tccli 边界 -->
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管端点开通与地址，不提供 `get --raw`/节点列表）
@@ -254,7 +268,7 @@ tccli tke DescribeClusterEndpointStatus --region ap-guangzhou \
 | `ResourceNotFound.SubnetId` | `tccli vpc DescribeSubnets` | 内网端点未指定子网或子网不在集群 VPC | 用集群 VPC 内的子网 |
 | `ResourceNotFound.SecurityGroup` | `tccli vpc DescribeSecurityGroups` | 安全组不存在 | 重建安全组或换一个 |
 | `FailedOperation` | `DescribeClusterEndpointStatus` → `ErrorMsg` | 端点创建中或 CLB 资源不足 | 等待；超时查 ErrorMsg |
-| `FailedOperation.LbCommon` / SecurityGroupId 格式错（`ModifyClusterEndpointSP`） | 读 Error 消息 | 部分账号/时序下 ACL 修改与 CLB 绑定未就绪 | 确认端点 `Created` 后再改 ACL；若默认 `ClusterExternalACL` 已含 `0.0.0.0/0` 或已可达可暂不改 |
+| `FailedOperation.LbCommon`（`ModifyClusterEndpointSP`） | `DescribeClusterEndpointStatus` 是否已 `Created`；`DescribeClusterEndpoints` → ext/acl | CLB 未绑定完成就改 ACL，或参数非 CIDR 字符串数组 | **等 `Created` 且 ext 非空后再改**；间隔 15–60s 重试；确认 `SecurityPolicies` 为 `'["x.x.x.x/32"]'`；成功后核对 `ClusterExternalACL` 非空 |
 | `UnsupportedOperation` | `DescribeClusterStatus` 查看状态 | 集群非 Running | 等集群 Running 后重试 |
 | `ResourceInUse` | `DescribeClusterEndpointStatus` | 端点已存在 | 先 `DeleteClusterEndpoint` 再建 |
 
