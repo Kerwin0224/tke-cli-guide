@@ -247,40 +247,83 @@ tccli tke DescribeClusterKubeconfig --region <REGION> --ClusterId <CLUSTER_ID> \
 
 ### 本机 kubectl 可达（必做，若目标是本机/公网 CI 操作集群）
 
-空集群 `Running` 后，按顺序完成（**不可跳步**；细节与故障码见 [管理端点](../tke/networking/endpoints.md)）：
+空集群 `Running` 后，按顺序完成（**不可跳步**）。**现行唯一路径**：`CreateClusterEndpoint --IsExtranet true` → `ModifyClusterEndpointSP` → 用 `ClusterExternalEndpoint` 改写 kubeconfig `server`。  
+**禁止** `CreateClusterEndpointVip`（官方废弃）。细节与故障码：[管理端点](../tke/networking/endpoints.md)。
 
 | 步 | 动作 | 成功判据 |
 |:---|:-----|:---------|
 | 1 | 添加 ≥1 worker（节点池或 `CreateClusterInstances`） | 节点 Ready；**无 worker 不能开公网端点** |
 | 2 | `CreateClusterEndpoint --IsExtranet true`（常需 `--SecurityGroup` + `ExtensiveParameters`） | `DescribeClusterEndpointStatus --IsExtranet true` → **`Status=Created`**（不是 `Running`） |
-| 3 | `ModifyClusterEndpointSP --SecurityPolicies '["<出口IP>/32"]'`（**CIDR 字符串数组**） | `DescribeClusterEndpoints` → `ClusterExternalACL` 含该 CIDR；**不要**用 `SecurityGroupId` 替代 ACL |
+| 3 | `ModifyClusterEndpointSP --SecurityPolicies '["<出口IP>/32"]'`（**CIDR 字符串数组**） | `DescribeClusterEndpoints` → **`ClusterExternalACL` 非空且含该 CIDR**；**不要**用 `SecurityGroupId` 替代 ACL |
 | 4 | 读取 **`ClusterExternalEndpoint`**（CLB `host:port`） | 字段非空 |
 | 5 | 将 kubeconfig 的 `server` 改为 `https://` + `ClusterExternalEndpoint` | 不依赖可能 NXDOMAIN 的 `cls-*.ccs.tencent-cloud.com` |
-| 6 | `kubectl get --raw=/healthz` 与 `get nodes` | `ok`；节点列表或空列表但命令成功 |
+| 6 | `kubectl get --raw=/healthz` 与 `get nodes` | **`ok`**；节点列表或空列表但命令成功 |
 
 ```bash
-# 出口 IP 示例
-# curl -s https://api.ipify.org
+# 占位符：REGION / CLUSTER_ID / SECURITY_GROUP_ID / 已有 worker
+REGION=ap-guangzhou
+CLUSTER_ID="<CLUSTER_ID>"
+SECURITY_GROUP_ID="<SECURITY_GROUP_ID>"
+KUBECONFIG_PATH="${KUBECONFIG_PATH:-kubeconfig-qs.yaml}"
 
-# 开公网端点（须已有 worker；完整参数与 waiter 见 endpoints.md）
-# tccli tke CreateClusterEndpoint --region <REGION> \
-#   --ClusterId "<CLUSTER_ID>" --IsExtranet true \
-#   --SecurityGroup "<SECURITY_GROUP_ID>" \
-#   --ExtensiveParameters '{"InternetAccessible":{"InternetChargeType":"TRAFFIC_POSTPAID_BY_HOUR","InternetMaxBandwidthOut":1}}'
-# tccli tke DescribeClusterEndpointStatus --region <REGION> \
-#   --ClusterId "<CLUSTER_ID>" --IsExtranet true \
-#   --waiter '{"expr":"Status","to":"Created","timeout":300,"interval":10}'
+# 0) 出口 IP（写入 ACL）
+EGRESS_IP="$(curl -s --max-time 10 https://api.ipify.org)"
+echo "EGRESS_IP=$EGRESS_IP"
+test -n "$EGRESS_IP"
 
-# ACL：仅在 Status=Created 后再改
-# tccli tke ModifyClusterEndpointSP --region <REGION> \
-#   --ClusterId "<CLUSTER_ID>" --SecurityPolicies '["<YOUR_EGRESS_IP>/32"]'
+# 1) 开公网端点（须已有 worker）
+tccli tke CreateClusterEndpoint --region "$REGION" \
+  --ClusterId "$CLUSTER_ID" --IsExtranet true \
+  --SecurityGroup "$SECURITY_GROUP_ID" \
+  --ExtensiveParameters '{"InternetAccessible":{"InternetChargeType":"TRAFFIC_POSTPAID_BY_HOUR","InternetMaxBandwidthOut":1}}'
+# expected: exit 0
 
-# 取 CLB 地址；若 dig cls-*.ccs.tencent-cloud.com 失败，必须用此地址改写 kubeconfig server
-# tccli tke DescribeClusterEndpoints --region <REGION> --ClusterId "<CLUSTER_ID>" \
-#   --filter "{ext:ClusterExternalEndpoint,acl:ClusterExternalACL}" --output json
+tccli tke DescribeClusterEndpointStatus --region "$REGION" \
+  --ClusterId "$CLUSTER_ID" --IsExtranet true \
+  --waiter '{"expr":"Status","to":"Created","timeout":300,"interval":10}'
+# expected: Status=Created
+
+# 2) ACL：仅在 Created 后；若 FailedOperation.LbCommon → 等 15–60s 重试本命令
+tccli tke ModifyClusterEndpointSP --region "$REGION" \
+  --ClusterId "$CLUSTER_ID" --SecurityPolicies "[\"${EGRESS_IP}/32\"]"
+# expected: exit 0
+
+# 3) 核对地址 + ACL（ACL 仍 [] 则不要 kubectl）
+tccli tke DescribeClusterEndpoints --region "$REGION" --ClusterId "$CLUSTER_ID" \
+  --filter "{ext:ClusterExternalEndpoint,acl:ClusterExternalACL}" --output json
+# expected: ext 非空；acl 含 ${EGRESS_IP}/32
+
+# 4) kubeconfig + 改写 server 为 ClusterExternalEndpoint
+tccli tke DescribeClusterKubeconfig --region "$REGION" --ClusterId "$CLUSTER_ID" \
+  --filter "Kubeconfig" --output text > "$KUBECONFIG_PATH"
+
+EXT="$(tccli tke DescribeClusterEndpoints --region "$REGION" --ClusterId "$CLUSTER_ID" \
+  --filter "ClusterExternalEndpoint" --output text | tr -d '[:space:]')"
+test -n "$EXT"
+case "$EXT" in
+  https://*) SERVER="$EXT" ;;
+  *) SERVER="https://${EXT}" ;;
+esac
+python3 - "$KUBECONFIG_PATH" "$SERVER" <<'PY'
+import re, sys
+path, server = sys.argv[1], sys.argv[2]
+text = open(path, encoding="utf-8").read()
+new, n = re.subn(r"(?m)^(\s*server:\s*).*$", r"\1" + server, text, count=1)
+if n != 1:
+    raise SystemExit(f"rewrite server failed: replacements={n}")
+open(path, "w", encoding="utf-8").write(new)
+print("server ->", server)
+PY
+
+# 5) Confirm 强制：/healthz=ok（ACL 空或未改写 server 时不要宣称完成）
+kubectl --kubeconfig "$KUBECONFIG_PATH" get --raw=/healthz --request-timeout=20s
+# expected: ok
+kubectl --kubeconfig "$KUBECONFIG_PATH" get nodes --request-timeout=20s
+# expected: 命令成功
 ```
 
-> 完整可复制命令与 `LbCommon` / CAM / 空集群错误码：[管理端点](../tke/networking/endpoints.md)。  
+> **Confirm（缺一不可）**：`Status=Created` + `ClusterExternalEndpoint` 非空 + **`ClusterExternalACL` 含出口 IP** + **`/healthz=ok`**。  
+> `LbCommon` / CAM / 空集群错误码与反模式：[管理端点](../tke/networking/endpoints.md)。  
 > 加节点：[创建节点池](../tke/nodes/nodepool-create.md) · [新建 CVM 作节点](../tke/nodes/instance-ops.md)。  
 > kubeconfig 证书面：[认证配置](../tke/security/auth.md)。
 

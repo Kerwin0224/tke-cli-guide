@@ -8,11 +8,41 @@ fused: true
 > 控制台: [容器服务控制台 - 集群访问地址](https://console.cloud.tencent.com/tke2/cluster)
 > 开启/关闭集群的公网或内网访问端点。端点是 kubectl/API 访问 API Server 的入口。异步操作。
 
+## 本机 / 公网 CI 唯一路径（优先照抄）
+
+> **目标**：本机或公网 CI 上 `kubectl` 能连 API Server。  
+> **现行唯一推荐 API 链**：`CreateClusterEndpoint --IsExtranet true` → `ModifyClusterEndpointSP` → 用 `ClusterExternalEndpoint` 改写 kubeconfig `server`。  
+> **不要**用已废弃的 `CreateClusterEndpointVip` 绕路；**不要**只开内网端点（本机必超时）。
+
+| 步 | 动作 | 成功判据 |
+|:--:|:-----|:---------|
+| 0 | 集群 `Running` 且 **≥1 worker** | `DescribeClusterInstances` / 节点数 ≥1；无 worker 不能开公网端点 |
+| 1 | `CreateClusterEndpoint --IsExtranet true`（常需 `--SecurityGroup` + `ExtensiveParameters`） | 返回 RequestId |
+| 2 | waiter `DescribeClusterEndpointStatus --IsExtranet true` | **`Status=Created`**（不是 `Running`） |
+| 3 | 查出口 IP → `ModifyClusterEndpointSP --SecurityPolicies '["<IP>/32"]'` | exit 0；若 `FailedOperation.LbCommon`：等 15–60s 重试 |
+| 4 | `DescribeClusterEndpoints` | `ClusterExternalEndpoint` **非空**；`ClusterExternalACL` **含**你的 CIDR |
+| 5 | `DescribeClusterKubeconfig` 写盘，**把 `server` 改成** `https://` + `ClusterExternalEndpoint` | 不依赖可能 NXDOMAIN 的 `cls-*.ccs.tencent-cloud.com` |
+| 6 | `kubectl --kubeconfig … get --raw=/healthz` 与 `get nodes` | `/healthz` → `ok`；`get nodes` 成功 |
+
+**反模式（禁止）**
+
+| 禁止 | 原因 |
+|:-----|:-----|
+| 用 `CreateClusterEndpointVip` 代替公网端点 / 绕 `LbCommon` | 官方 **不再维护、准备下线**，请用 `CreateClusterEndpoint`（[39413](https://cloud.tencent.com/document/product/457/39413)） |
+| `Status` 未到 `Created` 或 `ClusterExternalEndpoint` 仍空就 `ModifyClusterEndpointSP` | 易 `FailedOperation.LbCommon`；ACL 未生效 |
+| `ClusterExternalACL` 为 `[]` 或未含本机出口 IP 就跑 kubectl | 公网 ACL **默认拒绝所有** |
+| 把 `SecurityGroup` / `SecurityGroupId` 当成 `SecurityPolicies` | ACL 只认 CIDR **字符串数组** |
+| 本机场景只开 `IsExtranet false` 内网端点 | 本机不在 VPC 时必超时 |
+| 端点 `Created` 后不改写 kubeconfig `server` | 域名 NXDOMAIN / 指到内网 VIP → `no such host` 或超时 |
+
+可复制完整命令见下文 [步骤 2–5](#步骤-2开启公网端点本机--公网-ci)；Quickstart 摘要：[tke-first-cluster — 本机 kubectl 可达](../../quickstart/tke-first-cluster.md#本机-kubectl-可达必做若目标是本机公网-ci-操作集群)。
+
 ## 触发条件
 
 - `DescribeClusterEndpointStatus` 返回 `Status=NotFound`，需从公网或 VPC 内网访问 API Server
 - `kubectl get nodes` <!-- kubectl验证端点连通性，非tccli边界 --> 报 `Unable to connect to the server` / `context deadline exceeded` / `connection refused`，集群端点未开启，或本机不在端点可达网络（内网 VIP 从公网不可达）
 - 公网端点已 `Created` 但 `ModifyClusterEndpointSP` 未放行你的出口 IP，kubectl 被 ACL 拒绝 — 看 [故障恢复]段
+- 本机/公网 CI 需要 kubectl：走文首 **唯一路径**（公网端点 + ACL + 改写 `server`）
 
 ## 概述
 
@@ -20,14 +50,15 @@ fused: true
 
 | 端点 | 接口 | 本机/公网 CI 能否直连 | 安全 |
 |:-----|:-----|:---------------------|:-----|
-| 公网端点 | `CreateClusterEndpoint --IsExtranet true` | **能**（再配 ACL 白名单） | `ModifyClusterEndpointSP` 放行出口 IP `/32`；未配默认拒绝 |
-| 内网端点 | `CreateClusterEndpoint --IsExtranet false` | **不能**（仅同 VPC / 专线 / VPN） | VPC 隔离 |
+| **公网端点（本机/公网 CI 必选）** | `CreateClusterEndpoint --IsExtranet true` | **能**（再配 ACL 白名单） | `ModifyClusterEndpointSP` 放行出口 IP `/32`；未配默认拒绝 |
+| 内网端点（仅同 VPC / 专线 / VPN） | `CreateClusterEndpoint --IsExtranet false` | **不能**（本机不在 VPC 时） | VPC 隔离 |
+| ~~VIP 外网端口~~ | ~~`CreateClusterEndpointVip`~~ | **禁止新用** | 官方废弃，见 [独立 VIP 端点](#独立-vip-端点已废弃禁止新用) |
 
 操作是**异步**的：`CreateClusterEndpoint` 返回即提交；就绪时 `DescribeClusterEndpointStatus` 的 `Status` 为 **`Created`**（不是 `Running`）。关闭后回到 `NotFound`。
 
 > **本机 kubectl**：必须走公网端点（或本机已接入集群 VPC）。只开内网端点时，`DescribeClusterKubeconfig` 里的 `server` 是内网 VIP，本机访问会超时。
 
-> 官方文档：[容器网络概述](https://cloud.tencent.com/document/product/457/50353) · [网络方案选型](https://cloud.tencent.com/document/product/457/106561) · [容器服务安全组设置](https://cloud.tencent.com/document/product/457/9084)
+> 官方文档：[创建集群访问端口 CreateClusterEndpoint](https://cloud.tencent.com/document/api/457/39414) · [修改外网端口安全策略 ModifyClusterEndpointSP](https://cloud.tencent.com/document/api/457/39408) · [容器网络概述](https://cloud.tencent.com/document/product/457/50353) · [网络方案选型](https://cloud.tencent.com/document/product/457/106561) · [容器服务安全组设置](https://cloud.tencent.com/document/product/457/9084)
 > 配额：单地域集群数 20、安全组数限制等。[配额限制](https://cloud.tencent.com/document/product/457/9087)
 > ⚠️ **高危操作**：公网端点 ACL 白名单配置错误致 API Server 暴露；安全组 0.0.0.0/0 开放致公网可发现。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
 
@@ -77,12 +108,13 @@ tccli vpc DescribeSubnets --region <REGION> --Filters '[{"Name":"vpc-id","Values
 
 ### 步骤 1：决策 — 公网 vs 内网
 
-#### 为什么选内网端点
+| 你的位置 | 必选端点 | 说明 |
+|:---------|:---------|:-----|
+| **本机 / 公网 CI**（评测、本地开发、公网流水线） | **公网** `IsExtranet true` | 走文首 [唯一路径](#本机--公网-ci-唯一路径优先照抄)；**不要**选内网 |
+| **生产 / 同 VPC 内**（CVM、同 VPC Pod、专线/VPN 已接入） | **内网** `IsExtranet false` | VPC 隔离、不暴露公网；本机不在 VPC 时**不可**用内网冒充「推荐」 |
 
-- **公网端点**: 本地开发、CI/CD 从公网访问。需 ACL 白名单限定源 IP，否则暴露 API Server 到公网
-- **内网端点（推荐）**: 同 VPC 的 CVM/kubectl 访问。VPC 隔离，不暴露公网，低延迟
-- **默认推荐**: 生产用内网端点；本地开发临时用公网端点 + 白名单
-- **能切换吗?**: 能。`SwitchClusterEndpoint` 切换公网/内网，或先 `DeleteClusterEndpoint` 再建
+- **能切换吗?**：能。`SwitchClusterEndpoint` 切换公网/内网，或先 `DeleteClusterEndpoint` 再建。
+- **禁止**：把「生产用内网」当成默认，导致本机场景只开内网 → kubectl 超时。
 
 ### 步骤 2：开启公网端点（本机 / 公网 CI）
 
@@ -107,7 +139,7 @@ tccli tke DescribeClusterEndpointStatus --region ap-guangzhou \
 # expected: Status="Created"
 ```
 
-> 部分账号对公网端点有 CAM 条件拒绝（消息含 `tke:clusterExtranetEndpoint` = `true` 的 deny）→ `InvalidParameter.Param` / `ACTION_NO_AUTH`，须改 CAM，非参数拼写问题。**公网端点**（`CreateClusterEndpoint --IsExtranet true`）与 **VIP 端点**（`CreateClusterEndpointVip`）均要求集群已有 worker 节点，否则 `ResourceUnavailable.ClusterState`（`cluster without worker Node is not allowed to enable extranet access`）——先加节点再开端点。
+> 部分账号对公网端点有 CAM 条件拒绝（消息含 `tke:clusterExtranetEndpoint` = `true` 的 deny）→ `InvalidParameter.Param` / `ACTION_NO_AUTH`，须改 CAM，非参数拼写问题。**公网端点**（`CreateClusterEndpoint --IsExtranet true`）要求集群已有 worker 节点，否则 `ResourceUnavailable.ClusterState`（`cluster without worker Node is not allowed to enable extranet access`）——先加节点再开端点。已废弃的 VIP 接口同样有 worker 约束，但**禁止新用 VIP**。
 
 ### 步骤 3：开启内网端点（同 VPC）
 
@@ -146,42 +178,55 @@ tccli tke DescribeClusterEndpoints --region ap-guangzhou --ClusterId "<CLUSTER_I
 # expected: ext 非空；acl 含 "<YOUR_EGRESS_IP>/32"（或你放行的 CIDR）
 ```
 
-### 步骤 5：取 kubeconfig 并验证连通
+### 步骤 5：取 kubeconfig、改写 server、验证连通
 
-> **本机默认动作**：写出 kubeconfig 后，**优先**用 `ClusterExternalEndpoint` 作为 `server`（`https://` + 该字段）。不要假设 `ClusterDomain`（`cls-*.ccs.tencent-cloud.com`）一定能解析。
+> **本机默认动作（必做）**：写出 kubeconfig 后，**必须**用 `ClusterExternalEndpoint` 作为 `server`（`https://` + 该字段）。不要假设 `ClusterDomain`（`cls-*.ccs.tencent-cloud.com`）一定能解析。
 
 ```bash
-# 取 kubeconfig
-tccli tke DescribeClusterKubeconfig --region ap-guangzhou --ClusterId "<CLUSTER_ID>" \
-  --filter "Kubeconfig" --output text > kubeconfig.yaml
+REGION=ap-guangzhou
+CLUSTER_ID="<CLUSTER_ID>"
+KUBECONFIG_PATH=kubeconfig.yaml
+
+# 1) 取 kubeconfig
+tccli tke DescribeClusterKubeconfig --region "$REGION" --ClusterId "$CLUSTER_ID" \
+  --filter "Kubeconfig" --output text > "$KUBECONFIG_PATH"
 # expected: 文件非空 YAML
 
-# 取真实公网入口（CLB host:port）与 ACL
-tccli tke DescribeClusterEndpoints --region ap-guangzhou --ClusterId "<CLUSTER_ID>" \
+# 2) 取公网入口与 ACL（ACL 仍空则先回到步骤 4，禁止直接 kubectl）
+tccli tke DescribeClusterEndpoints --region "$REGION" --ClusterId "$CLUSTER_ID" \
   --filter "{ext:ClusterExternalEndpoint,domain:ClusterDomain,acl:ClusterExternalACL}" --output json
-# expected: ext 非空（形如 lb-xxxx.clb.*.tencentclb.com:443）；acl 含你的 CIDR；domain 可能 NXDOMAIN
-```
+# expected: ext 非空（形如 lb-xxxx.clb.*.tencentclb.com:443）；acl 含你的 CIDR
 
-> **域名 NXDOMAIN**：部分环境对 `cls-*.ccs.tencent-cloud.com` **无法解析**，kubeconfig 默认 `server` 会导致 `no such host`。**以 `ClusterExternalEndpoint` 为准**改写 `server`（保留 `https://`；值已含端口则勿再拼 `:443`），再跑 kubectl。
+# 3) 用 ClusterExternalEndpoint 改写 server（可执行；macOS/Linux 通用 python 改写）
+EXT="$(tccli tke DescribeClusterEndpoints --region "$REGION" --ClusterId "$CLUSTER_ID" \
+  --filter "ClusterExternalEndpoint" --output text | tr -d '[:space:]')"
+# expected: EXT 非空
+test -n "$EXT"
+case "$EXT" in
+  https://*) SERVER="$EXT" ;;
+  *) SERVER="https://${EXT}" ;;
+esac
+python3 - "$KUBECONFIG_PATH" "$SERVER" <<'PY'
+import re, sys
+path, server = sys.argv[1], sys.argv[2]
+text = open(path, encoding="utf-8").read()
+new, n = re.subn(r"(?m)^(\s*server:\s*).*$", r"\1" + server, text, count=1)
+if n != 1:
+    raise SystemExit(f"rewrite server failed: replacements={n}")
+open(path, "w", encoding="utf-8").write(new)
+print("server ->", server)
+PY
+# expected: 打印 server -> https://...
 
-<!-- kubectl 验证 apiserver 可达，tccli 只到端点/地址出参，非 tccli 边界 -->
-> kubectl（K8s 原生命令，非 tccli；TCCLI 管端点开通与地址，不提供 `get --raw`/节点列表）
-```bash
-# 探测域名是否可解析（可选）
-# dig +short cls-<ID>.ccs.tencent-cloud.com
-# 空 / NXDOMAIN → 必须 patch server
-
-# 将 kubeconfig 的 server 换成 ClusterExternalEndpoint（示例用 sed；值取自上一步 ext 字段）
-# EXT="$(tccli tke DescribeClusterEndpoints --region ap-guangzhou --ClusterId "<CLUSTER_ID>" --filter ClusterExternalEndpoint --output text)"
-# 若 EXT 无 scheme，写成 https://$EXT
-# sed -i.bak "s|server: https://cls-.*|server: https://${EXT}|" kubeconfig.yaml
-
-kubectl --kubeconfig kubeconfig.yaml get --raw=/healthz --request-timeout=20s
+# 4) kubectl 验证（K8s 原生命令，非 tccli）
+kubectl --kubeconfig "$KUBECONFIG_PATH" get --raw=/healthz --request-timeout=20s
 # expected: ok
 
-kubectl --kubeconfig kubeconfig.yaml get nodes --request-timeout=20s
-# expected: 节点列表；空集群无 worker 时列表可为空但命令成功即 reach 成功
+kubectl --kubeconfig "$KUBECONFIG_PATH" get nodes --request-timeout=20s
+# expected: 节点列表；命令成功即 reach 成功
 ```
+
+> **域名 NXDOMAIN**：部分环境对 `cls-*.ccs.tencent-cloud.com` **无法解析**，未改写 `server` 会 `no such host`。以 `ClusterExternalEndpoint` 为准（值已含端口则勿再拼 `:443`）。
 
 ### 步骤 6：验证端点状态
 
@@ -199,28 +244,21 @@ tccli tke DescribeClusterEndpointStatus --region ap-guangzhou \
 | DNS | `dig +short` 对 `ClusterDomain` | 可解析 **或** 不可解析时已改用 `ClusterExternalEndpoint` |
 | kubectl | `kubectl --kubeconfig kubeconfig.yaml get --raw=/healthz` | `ok` |
 
-### 独立 VIP 端点
+### 独立 VIP 端点（已废弃，禁止新用）
 
-> 除普通端点外，可创建独立 VIP 端点（`CreateClusterEndpointVip`），用独立 CLB VIP 暴露 API Server，配 `SecurityPolicies` 白名单。区别于普通端点的 `IsExtranet` 模式。
-
-```bash
-# 创建 VIP 端点 (配白名单源 IP)
-tccli tke CreateClusterEndpointVip --region <REGION> \
-  --ClusterId "<CLUSTER_ID>" --SecurityPolicies '["<YOUR_IP>/32"]'
-# expected: exit 0
-
-# 查询 VIP 端点状态
-tccli tke DescribeClusterEndpointVipStatus --ClusterId "<CLUSTER_ID>" --region <REGION>
-# expected: exit 0；无 worker 节点时 ResourceUnavailable.ClusterState
-```
+> ⚠️ **官方状态**：`CreateClusterEndpointVip` / `DeleteClusterEndpointVip` / `DescribeClusterEndpointVipStatus` **不再维护，准备下线**。请使用新接口 **`CreateClusterEndpoint`**（[官方 39413](https://cloud.tencent.com/document/product/457/39413) · [CreateClusterEndpoint 39414](https://cloud.tencent.com/document/api/457/39414)）。
+>
+> **禁止**：在 `ModifyClusterEndpointSP` 报 `FailedOperation.LbCommon` 时改走 VIP「绕路」；正确做法是等公网端点 `Created` + `ClusterExternalEndpoint` 非空后，间隔 15–60s **重试** `ModifyClusterEndpointSP`（见文首反模式与 [故障恢复](#故障恢复)）。
+>
+> 以下命令仅供**存量 VIP 清理/查询**历史兼容，**新集群不要创建 VIP**。
 
 ```bash
-# 删除 VIP 端点
-tccli tke DeleteClusterEndpointVip --ClusterId "<CLUSTER_ID>" --region <REGION>
-# expected: exit 0
-```
+# （历史兼容）查询存量 VIP 状态 — 新开通请用 CreateClusterEndpoint
+# tccli tke DescribeClusterEndpointVipStatus --ClusterId "<CLUSTER_ID>" --region <REGION>
 
-> VIP 端点与 `IsExtranet` 普通公网端点不同；空集群（无 worker）不可开 VIP 外网访问。`DeleteClusterEndpointVip` 仅需 `ClusterId`。
+# （历史兼容）删除存量 VIP
+# tccli tke DeleteClusterEndpointVip --ClusterId "<CLUSTER_ID>" --region <REGION>
+```
 
 ### 切换公网/内网端点
 
@@ -268,7 +306,8 @@ tccli tke DescribeClusterEndpointStatus --region ap-guangzhou \
 | `ResourceNotFound.SubnetId` | `tccli vpc DescribeSubnets` | 内网端点未指定子网或子网不在集群 VPC | 用集群 VPC 内的子网 |
 | `ResourceNotFound.SecurityGroup` | `tccli vpc DescribeSecurityGroups` | 安全组不存在 | 重建安全组或换一个 |
 | `FailedOperation` | `DescribeClusterEndpointStatus` → `ErrorMsg` | 端点创建中或 CLB 资源不足 | 等待；超时查 ErrorMsg |
-| `FailedOperation.LbCommon`（`ModifyClusterEndpointSP`） | `DescribeClusterEndpointStatus` 是否已 `Created`；`DescribeClusterEndpoints` → ext/acl | CLB 未绑定完成就改 ACL，或参数非 CIDR 字符串数组 | **等 `Created` 且 ext 非空后再改**；间隔 15–60s 重试；确认 `SecurityPolicies` 为 `'["x.x.x.x/32"]'`；成功后核对 `ClusterExternalACL` 非空 |
+| `FailedOperation.LbCommon`（`ModifyClusterEndpointSP`） | `DescribeClusterEndpointStatus` 是否已 `Created`；`DescribeClusterEndpoints` → ext/acl | CLB 未绑定完成就改 ACL，或参数非 CIDR 字符串数组 | **等 `Created` 且 ext 非空后再改**；间隔 15–60s 重试；确认 `SecurityPolicies` 为 `'["x.x.x.x/32"]'`；成功后核对 `ClusterExternalACL` 非空。**禁止**改走 `CreateClusterEndpointVip`（已废弃） |
+| 想用 VIP 绕过 LbCommon / 公网开通失败 | 查官方 39413 | VIP 接口不再维护 | **只用** `CreateClusterEndpoint` + 重试 SP；见文首反模式 |
 | `UnsupportedOperation` | `DescribeClusterStatus` 查看状态 | 集群非 Running | 等集群 Running 后重试 |
 | `ResourceInUse` | `DescribeClusterEndpointStatus` | 端点已存在 | 先 `DeleteClusterEndpoint` 再建 |
 
@@ -284,28 +323,38 @@ tccli tke DescribeClusterEndpointStatus --region ap-guangzhou \
 
 ## 收尾确认
 
-> kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
+> 公网/本机场景：**四条件全部满足**才算任务完成（缺一不可）。
+
+| # | 条件 | 命令 / 字段 | 预期 |
+|:--|:-----|:------------|:-----|
+| 1 | 公网端点就绪 | `DescribeClusterEndpointStatus --IsExtranet true` → `Status` | `Created` |
+| 2 | 公网地址非空 | `DescribeClusterEndpoints` → `ClusterExternalEndpoint` | 非空 CLB host:port |
+| 3 | **ACL 已放行** | `DescribeClusterEndpoints` → `ClusterExternalACL` | **非空**且含本机/CI 出口 CIDR（如 `x.x.x.x/32`） |
+| 4 | **kubectl 可达** | `kubectl --kubeconfig … get --raw=/healthz` | **`ok`**（另建议 `get nodes` 成功） |
+
 ```bash
-tccli tke DescribeClusterEndpointStatus --region ap-guangzhou \
-  --ClusterId "<CLUSTER_ID>" --IsExtranet true \
+REGION=ap-guangzhou
+CLUSTER_ID="<CLUSTER_ID>"
+KUBECONFIG_PATH=kubeconfig.yaml
+
+tccli tke DescribeClusterEndpointStatus --region "$REGION" \
+  --ClusterId "$CLUSTER_ID" --IsExtranet true \
   --filter "{status:Status}"
-# expected: status=Created（公网）
+# expected: status=Created
 
-tccli tke DescribeClusterEndpoints --region ap-guangzhou --ClusterId "<CLUSTER_ID>" \
-  --filter "{ext:ClusterExternalEndpoint,domain:ClusterDomain}" --output json
-# expected: ext 非空；若 domain 不可 dig 通则 kubeconfig server 须用 ext
+tccli tke DescribeClusterEndpoints --region "$REGION" --ClusterId "$CLUSTER_ID" \
+  --filter "{ext:ClusterExternalEndpoint,acl:ClusterExternalACL,domain:ClusterDomain}" --output json
+# expected: ext 非空；acl 为非空数组且含你的 CIDR；若 domain 不可 dig 通则 kubeconfig server 须已用 ext
 
-tccli tke DescribeClusterKubeconfig --region ap-guangzhou --ClusterId "<CLUSTER_ID>" \
-  --filter "Kubeconfig" --output text > kubeconfig.yaml
-# 若 dig domain 失败：将 server 改为 https://<ClusterExternalEndpoint>
-<!-- kubectl验证tccli开启端点后API Server可达，非tccli边界 -->
-kubectl --kubeconfig kubeconfig.yaml get --raw=/healthz --request-timeout=20s
+# 若尚未改写 server，先执行步骤 5 的 python 改写，再：
+kubectl --kubeconfig "$KUBECONFIG_PATH" get --raw=/healthz --request-timeout=20s
 # expected: ok
-kubectl --kubeconfig kubeconfig.yaml get nodes --request-timeout=20s
+kubectl --kubeconfig "$KUBECONFIG_PATH" get nodes --request-timeout=20s
 # expected: 节点列表或空列表但命令成功（本机须走公网端点；仅内网 VIP 时本机超时）
 ```
 
-> 端点 `Status=Created` + `ClusterExternalEndpoint` 非空 + kubectl `/healthz=ok` = 闭环（域名不可解析时以 CLB 地址为准）。
+> **闭环公式**：`Status=Created` + `ClusterExternalEndpoint` 非空 + **`ClusterExternalACL` 含出口 IP** + **`/healthz=ok`**。  
+> ACL 仍为 `[]` 或未改写 `server` 时，**不得**宣称端点任务完成。
 
 ---
 
