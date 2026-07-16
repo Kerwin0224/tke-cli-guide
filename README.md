@@ -4,7 +4,7 @@ doc_type: Overview
 # TKE + TCR: TCCLI 文档
 
 > 腾讯云容器服务 (TKE) 和容器镜像服务 (TCR) 的 TCCLI 命令行操作指南。
-> 零基础知识即可入门，每条命令可复制执行。
+> 覆盖安装、凭证与常用操作，每条命令可复制执行。
 
 ## 是什么
 
@@ -46,7 +46,7 @@ doc_type: Overview
 
 ## 本指南不覆盖哪些操作？
 
-并非所有 `tccli tke` / `tccli tcr` 的 Action 都在本指南范围内。以下 Action 不在本指南——遇到它们时直接去对应去向：
+并非所有 `tccli tke` / `tccli tcr` 的 Action 都在本指南范围内。以下 Action 不在本指南——遇到它们时按对应去向处理：
 
 | 类别 | Action | 去向 |
 |:-----|:-------|:-----|
@@ -65,5 +65,5 @@ doc_type: Overview
 
 ```bash
 tccli tke DescribeClusters --region ap-guangzhou --Limit 1
-# expected: { "TotalCount": ..., "Clusters": [...] }（tccli 默认剥离 Response 包装层）
+# expected: { "TotalCount": ..., "Clusters": [...] }（TCCLI 默认剥离 Response 包装层）
 ```

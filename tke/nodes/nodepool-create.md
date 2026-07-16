@@ -377,21 +377,21 @@ tccli tke ModifyNodePoolInstanceTypes --ClusterId "<CLUSTER_ID>" --region <REGIO
 ## 收尾确认
 
 ```bash
-# ②业务可用性端到端: Native.Replicas=0（或未扩容）时无节点加入，需扩容/设 Replicas 后才有节点可调度
+# 端到端核对：Native.Replicas=0（或未扩容）时无节点加入，需扩容/设 Replicas 后才有节点可调度
 tccli tke DescribeClusterInstances --version 2018-05-25 --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" \
   --InstanceIds '["<INSTANCE_ID>"]' \
   --filter "InstanceSet[].{id:InstanceId,state:InstanceState}" --output text
 # expected: 若已扩容，扩容节点 InstanceState=running；未扩容时无节点（Replicas=0 时需进扩缩容）
 
-# ④衔接下一步前置就绪: 节点池 LifeState=Running 且扩容后 ≥1 节点 ready 才可进扩缩容
+# 下一步前置：节点池 LifeState=Running 且扩容后 ≥1 节点 ready 才可进扩缩容
 tccli tke DescribeNodePools --version 2022-05-01 --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" --Filters '[{"Name":"NodePoolsId","Values":["<NODE_POOL_ID>"]}]' \
   --filter "NodePools[0].{name:Name,state:LifeState,desired:Native.Replicas}"
 # expected: LifeState=Running；Native.Replicas 反映期望副本数（Replicas=0 时需 [扩缩容](nodepool-scale.md) 设值才建节点）
 ```
 
-> 节点池 `LifeState=Running`（2022-05-01 Native）= 创建闭环完成。但 `Native.Replicas=0` 时无节点加入集群（业务可用性边界），须进 [扩缩容](nodepool-scale.md) 设期望副本（`ScaleNodePool` / `ModifyNodePool`）触发建 CVM，待节点 InstanceState=running 后方可调度 Pod。
+> 节点池 `LifeState=Running`（2022-05-01 Native）= 创建闭环完成。但 `Native.Replicas=0` 时无节点加入集群（能力边界），须进 [扩缩容](nodepool-scale.md) 设期望副本（`ScaleNodePool` / `ModifyNodePool`）触发建 CVM，待节点 InstanceState=running 后方可调度 Pod。
 
 ## 下一步
 

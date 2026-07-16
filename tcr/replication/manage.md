@@ -143,7 +143,7 @@ tccli tcr DescribeReplicationInstances --region <SOURCE_REGION> --RegistryId <SO
 }
 ```
 
-> 上图为空结果示例（未创建从实例时）。
+> 上例为空结果示例（未创建从实例时）。
 
 | 占位符 | 含义 | 约束 | 获取方式 |
 |--------|------|------|---------|
@@ -213,7 +213,7 @@ tccli tcr DescribeReplicationInstanceCreateTasks --region <SOURCE_REGION> \
 
 > docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）
 ```bash
-# ③ 跨步骤汇总：从实例创建 + 同步规则就绪 + 同步状态完成 一次性核对（Verify 逐项查，这里汇总三步产物）
+# 汇总核对：从实例创建 + 同步规则就绪 + 同步状态完成
 tccli tcr DescribeReplicationInstances --region <SOURCE_REGION> --RegistryId "<SOURCE_REGISTRY_ID>" \
   --filter "{total:TotalCount,regs:ReplicationRegistries[].{dest:ReplicationRegistryId,region:ReplicationRegionId}}"
 # expected: total>=1, 含目标从实例（字段名 ReplicationRegistries 非 ReplicationInstances）
@@ -224,12 +224,12 @@ tccli tcr DescribeReplicationInstanceSyncStatus --region <SOURCE_REGION> \
   --ReplicationRegionId <DEST_REGION_ID>
 # expected: 同步状态=完成（无 Pending/InProgress）
 
-# ② 业务可用性端到端：镜像真从从实例拉取成功（跨地域复制的终极证明，Verify 查记录存在，这里查端到端可达）
+# 端到端：镜像可从从实例拉取
 docker pull <DEST_REGISTRY_DOMAIN>/<DEST_NAMESPACE>/<IMAGE>:<TAG>
 # expected: Pull complete（从从实例公网端点拉取，DEST_REGISTRY_DOMAIN 从从实例 DescribeInstances 取 PublicDomain）
 ```
 
-> 从实例已建 + 同步状态完成 + 从实例 docker pull 成功 = 实例同步闭环完成，主实例镜像已跨地域复制可达。
+> 从实例已建 + 同步状态完成 + 从实例 docker pull 成功 = 实例同步配置完成，主实例镜像已跨地域复制可达。
 
 ---
 

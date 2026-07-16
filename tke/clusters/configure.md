@@ -249,7 +249,7 @@ tccli tke ModifyMasterComponent --ClusterId "<CLUSTER_ID>" --Component "kube-api
 >
 > ⚠️ **多层前置约束**（按拦截顺序，写操作 `ModifyMasterComponent`）：
 > 1. **CAM 标签授权**（首个拦截点）：与 [维护窗口](maintenance-window.md)/[Master 扩缩容](master-ops.md) 相同，要求目标集群带 `billing` 标签（CAM 匹配 `qcs:resource_tag`）。不带标签的集群调用返回 `AuthFailure.UnauthorizedOperation`（消息含 `has no permission` + 要求的标签 key/value），到不了业务校验层。错误样本：`code:AuthFailure.UnauthorizedOperation ... resource (qcs::tke:<REGION>::cluster/<ID>) has no permission with or without condition:[{"condition":{"key":"qcs:resource_tag","value":["billing&<标签值>"],...}}]`。
-> 2. **混沌演练标记**（CAM 放行后的业务约束）：`ModifyMasterComponent` 用于 Master 组件停机故障演练，**仅对标記为「混沌演练」（Chaos Experiment）的集群放行**，普通集群返回 `FailedOperation.OperationForbidden`（`this operation is only allowed for clusters marked with 'Chaos Experiment' or '混沌演练'`）。
+> 2. **混沌演练标记**（CAM 放行后的业务约束）：`ModifyMasterComponent` 用于 Master 组件停机故障演练，**仅对标记为「混沌演练」（Chaos Experiment）的集群放行**，普通集群返回 `FailedOperation.OperationForbidden`（`this operation is only allowed for clusters marked with 'Chaos Experiment' or '混沌演练'`）。
 >
 > ⚠️ **`DescribeMasterComponent`（只读）约束不同**：它不要求混沌演练标记——普通托管集群（组件 workload 就绪）调用返回 `Status: Running`，exit 0 成功。仅在组件 workload 未就绪/不存在时返回 `FailedOperation.KubeCommon`（`get workload failed, please try again later`）——非 CAM 拒绝，是组件未就绪，稍后重试即可。注意写操作 `ModifyMasterComponent`（停机演练）仍受混沌演练标记约束，见上条。
 >
@@ -336,7 +336,7 @@ tccli tke UpdateClusterKubeconfig --ClusterId "<CLUSTER_ID>" --region <REGION> \
 ## 收尾确认
 
 ```bash
-# 跨步骤汇总：按所改步骤核对配置值落到预期（Verify 分维度查字段存在，此处核对所改步骤的配置值协同生效）
+# 按所改步骤核对配置值落到预期（分项查字段存在后，再核对配置值协同生效）
 tccli tke DescribeClusters --region <REGION> --ClusterIds '["<CLUSTER_ID>"]' --version 2018-05-25 \
   --filter "Clusters[0].{name:ClusterName,tags:TagSpecification[0].Tags,rt:ContainerRuntime,rtver:RuntimeVersion}"
 # expected: name/标签/运行时按所改步骤落到预期值（如 Tags 含 billing 标签 + 新标签）
@@ -346,7 +346,7 @@ tccli tke DescribeClusterExtraArgs --ClusterId "<CLUSTER_ID>" --region <REGION> 
 # expected: 若步骤 4 改了 ExtraArgs，此处含新参数且原有保留参数未丢失（覆盖式副作用核查）
 ```
 
-> 配置项落到预期值 + 集群 `Running`（步骤 8 Verify 已核）= 配置变更闭环完成。**副作用核查**：① `ModifyClusterTags` 是覆盖式——核对 `billing` 标签仍在（丢失会被 CAM 拒后续写操作，见 [§步骤 2](#步骤-2修改集群标签) 警告）；② `ModifyClusterExtraArgs` 是覆盖式——核对原参数未丢失（传空数组会清空，见 [§步骤 4](#步骤-4修改组件额外参数覆盖式) 警告）。
+> 配置项落到预期值 + 集群 `Running`（步骤 8 已核）= 配置变更闭环完成。**副作用核查**：① `ModifyClusterTags` 是覆盖式——核对 `billing` 标签仍在（丢失会被 CAM 拒后续写操作，见 [§步骤 2](#步骤-2修改集群标签) 警告）；② `ModifyClusterExtraArgs` 是覆盖式——核对原参数未丢失（传空数组会清空，见 [§步骤 4](#步骤-4修改组件额外参数覆盖式) 警告）。
 
 ## 下一步
 

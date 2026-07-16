@@ -28,7 +28,7 @@ TCR 的两级结构：实例 → 命名空间 → 仓库 → 镜像版本。
 
 > 配额以官方 [104731](https://cloud.tencent.com/document/product/1141/104731) 为准，本仓汇总见 [配额与限制](../reference/quotas.md)。命名空间名直接用于镜像地址：`<domain>/<namespace>/<repo>:<tag>`。命名空间创建后**不可改名**，只能删除重建。
 >
-> **为什么本篇可能出现 docker**：仓库 CRUD 纯 tccli；`docker login`/`push` 仅在收尾衔接下一步时作为能力边界提示——TCCLI 无 Registry 协议与镜像层传输 Action。
+> **为什么本篇可能出现 docker**：仓库 CRUD 纯 tccli；`docker login`/`push` 仅在收尾时作为能力边界提示——TCCLI 无 Registry 协议与镜像层传输 Action。
 
 ## 准备工作
 
@@ -239,7 +239,7 @@ tccli tcr DownloadHelmChart --RegistryId "<REGISTRY_ID>" --region <REGION> \
 
 > docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）
 ```bash
-# ③ 跨步骤汇总：命名空间 + 仓库 一次性核对（Verify 逐项查，这里汇总两步产物）
+# 命名空间 + 仓库 核对（汇总两步产物）
 tccli tcr DescribeNamespaces --region ap-guangzhou --RegistryId "<REGISTRY_ID>" \
   --filter "NamespaceList[?Name=='<NAMESPACE_NAME>'].{name:Name,public:Public}"
 # expected: 含目标命名空间, public 与创建参数一致
@@ -249,11 +249,11 @@ tccli tcr DescribeRepositories --region ap-guangzhou --RegistryId "<REGISTRY_ID>
   --filter "RepositoryList[?Namespace=='<NAMESPACE_NAME>' && (Name=='<REPOSITORY_NAME>' || Name=='<NAMESPACE_NAME>/<REPOSITORY_NAME>')].{name:Name,ns:Namespace}"
 # expected: 含目标仓库；`Name` 响应常为 `ns/repo` 全路径，过滤时两种写法都兼容
 
-# ④ 衔接下一步前置：命名空间/仓库已建后，访问端点+Token 就绪即可 docker push（见访问管理/推送篇）
+# 命名空间/仓库已建后，访问端点+Token 就绪即可 docker push（见访问管理/推送篇）
 # docker login 属能力边界（非 tccli）；此处不强制执行，仅确认资源就绪
 ```
 
-> 命名空间存在 + 仓库存在 = 仓库管理闭环完成。推送前再确认访问路径（先内网后公网）与 Token，见 [访问管理](../instances/manage-access.md) / [推送拉取镜像](../images/push-pull.md)。
+> 命名空间存在 + 仓库存在 = 仓库管理完成。推送前再确认访问路径（先内网后公网）与 Token，见 [访问管理](../instances/manage-access.md) / [推送拉取镜像](../images/push-pull.md)。
 
 ---
 

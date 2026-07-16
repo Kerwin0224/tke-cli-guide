@@ -5,7 +5,7 @@ fused: true
 
 # TKE: 5 分钟创建第一个集群
 
-> **Traceability**: [TKE 产品文档](https://cloud.tencent.com/document/product/457) | 控制台: [TKE 集群创建](https://console.cloud.tencent.com/tke2/cluster/create?rid=1)
+> 官方文档: [TKE 产品文档](https://cloud.tencent.com/document/product/457) | 控制台: [TKE 集群创建](https://console.cloud.tencent.com/tke2/cluster/create?rid=1)
 >
 > ⚠️ **计费警告**: 创建托管集群（MANAGED_CLUSTER）即开始计收**集群管理费**（L5 为最低等级）。
 > 完成本 Quickstart 后须执行 [Step 3: 删除集群](#step-3-删除集群清理) 以避免持续计费。
@@ -317,14 +317,14 @@ open(path, "w", encoding="utf-8").write(new)
 print("server ->", server)
 PY
 
-# 5) Confirm 强制：/healthz=ok（ACL 空或未改写 server 时不要宣称完成）
+# 5) 强制确认：/healthz=ok（ACL 空或未改写 server 时本机仍不可达）
 kubectl --kubeconfig "$KUBECONFIG_PATH" get --raw=/healthz --request-timeout=20s
 # expected: ok
 kubectl --kubeconfig "$KUBECONFIG_PATH" get nodes --request-timeout=20s
 # expected: 命令成功
 ```
 
-> **Confirm（缺一不可）**：`Status=Created` + `ClusterExternalEndpoint` 非空 + **`ClusterExternalACL` 含出口 IP** + **`/healthz=ok`**。  
+> **完成判据（缺一不可）**：`Status=Created` + `ClusterExternalEndpoint` 非空 + **`ClusterExternalACL` 含出口 IP** + **`/healthz=ok`**。  
 > `LbCommon` / CAM / 空集群错误码与反模式：[管理端点](../tke/networking/endpoints.md)。  
 > 加节点：[创建节点池](../tke/nodes/nodepool-create.md) · [新建 CVM 作节点](../tke/nodes/instance-ops.md)。  
 > kubeconfig 证书面：[认证配置](../tke/security/auth.md)。
@@ -474,11 +474,11 @@ tccli clb DescribeLoadBalancers --region <REGION> --filter "TotalCount" --output
 
 ## 下一步
 
-### 上线前检查（弱校验）
+### 上线前检查
 
 Quickstart 闭环后、生产部署前，对照下列项（完整表见 [容器应用部署 Check List](https://cloud.tencent.com/document/product/457/41497)）：
 
-| 类别 | 检查项 | 未做的后果 | 本仓库入口 |
+| 类别 | 检查项 | 未做的后果 | 本指南入口 |
 |:-----|:-------|:-----------|:-----------|
 | 网络 | 创建前规划节点网段与容器网段容量 | 扩容时节点/Pod IP 不足 | [创建集群 — 创建前必读](../tke/clusters/create.md#创建前必读创建后改不了) · [网络管理](../tke/networking/index.md) |
 | 网络 | 专线/对等连接/VPN 场景避免网段冲突 | 跨网互通失败 | [准备 VPC](../getting-started/prepare-vpc.md) |

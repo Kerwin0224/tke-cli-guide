@@ -14,7 +14,7 @@ Worker 节点是容器集群的基本元素（虚拟机或物理机），含运�
 - 你要给集群添加工作节点、选普通/原生/超级/注册节点类型 — [创建节点池](nodepool-create.md)（原生节点须 `--version 2022-05-01`）
 - 你要调整节点池期望容量、安全缩容不丢 Pod — [扩缩容节点池](nodepool-scale.md)（`ModifyClusterNodePool`）
 - 你要查询单节点状态、启停/驱逐/删除某台 CVM — [节点实例运维](instance-ops.md)（跨 TKE 双版本 Action）
-- 你要在标准集群内免 CVM 容量跑 Pod，或接入自建 IDC 机器做混合云调度 — [虚拟节点](virtual-nodes.md) / [注册节点概述](registered-nodes/overview.md)
+- 你要在标准集群内免 CVM 容量运行 Pod，或接入自建 IDC 机器做混合云调度 — [虚拟节点](virtual-nodes.md) / [注册节点概述](registered-nodes/overview.md)
 - 你遇到节点池 `LifeState`（creating/normal/updating/deleting）或单节点 `InstanceState` 枚举困惑，或要做健康检测与自动隔离 — 看 [节点池生命周期](#节点池生命周期) / [节点健康检查](health-check.md) / [状态机](../reference/states.md)
 
 ## 核心概念

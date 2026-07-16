@@ -16,7 +16,7 @@ fused: true
 
 - `DescribePrometheusInstancesOverview` 返回空，需创建独立 Prometheus 实例采集集群指标
 - `DescribePrometheusClusterAgents` 不含目标集群，Prometheus 实例已建但集群未装 Agent
-- `DescribePrometheusTargets` → 目标全 down 或无数据，Agent 已关联但采集未生效 — 看 [故障恢复]段
+- `DescribePrometheusTargets` → 目标全 down 或无数据，Agent 已关联但采集未生效 — 看 [故障恢复](#故障恢复)
 
 
 ## 概述

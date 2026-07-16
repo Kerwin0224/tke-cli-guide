@@ -18,7 +18,7 @@ fused: false
 
 - `DescribePrometheusClusterAgents` 不含目标 `ClusterId`，需为本集群安装 Agent 上报指标
 - `DescribePrometheusTargets` → 采集目标 `lastError` 非空，Agent 已装但采集失败
-- 多集群指标无法区分来源，`DescribePrometheusClusterAgents` → `ExternalLabels` 缺 `cluster` 标签 — 看 [故障恢复]段
+- 多集群指标无法区分来源，`DescribePrometheusClusterAgents` → `ExternalLabels` 缺 `cluster` 标签 — 看 [故障恢复](#故障恢复)
 
 
 ## 概述
@@ -193,23 +193,23 @@ tccli tke DescribePrometheusClusterAgents --region <REGION> --InstanceId <PROM_I
 ## 收尾确认
 
 ```bash
-# Agent 已接入集群（Verify 查 Agent 列表与 target lastError，此处查指标真上报 + 衔接前置）
+# Agent 已接入集群（上文已查 Agent 列表与 target lastError，此处查指标真上报 + 衔接前置）
 tccli tke DescribePrometheusClusterAgents --region <REGION> --InstanceId <PROM_INSTANCE_ID> \
   --filter "Agents[].{cluster:ClusterId,region:Region,status:Status}"
 # expected: 目标集群 Status=Running
 
-# 业务可用性端到端：指标真可查（Verify 查 target lastError，此处查指标数据已写入）
+# 端到端：指标真可查（上文已查 target lastError，此处查指标数据已写入）
 tccli tke DescribePrometheusRecordRules --region <REGION> --InstanceId <PROM_INSTANCE_ID>
 # expected: 返回记录规则列表（说明 Agent 采集的指标已入库可查）
 
-# 衔接下一步前置：Agent Status=Running 是配告警规则/采集配置的前置
+# 下一步前置：Agent Status=Running 是配告警规则/采集配置的前置
 tccli tke DescribePrometheusTargets --region <REGION> \
   --InstanceId <PROM_INSTANCE_ID> --ClusterType tke --ClusterId <CLUSTER_ID> \
   --filter "Targets[].{job:ScrapeJob,lastError:LastError}" --output text | head -5
 # expected: lastError 均为空 → Agent 管理闭环完成
 ```
 
-> Agent Status=Running + 指标可查 + target lastError 全空 = 端到端闭环。Verify 段查 Agent 列表与 target 状态，此处确认 Agent 就绪是进下一阶段（配采集规则/告警策略）的前置。
+> Agent Status=Running + 指标可查 + target lastError 全空 = 端到端闭环。上文验证段查 Agent 列表与 target 状态，此处确认 Agent 就绪是进下一阶段（配采集规则/告警策略）的前置。
 
 ---
 

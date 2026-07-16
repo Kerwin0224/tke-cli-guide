@@ -20,8 +20,8 @@ fused: false
 
 - 需自动发现节点故障（kubelet 不健康/文件系统只读/内核 oops）并在允许时自动修复 — 创建健康检查策略
 - DescribeHealthCheckPolicies 返回空或不含目标规则，需新增策略覆盖 `KubeletUnhealthy`/`RuntimeUnhealthy` 等规则
-- `DescribeHealthCheckTemplate` / `CreateHealthCheckPolicy` 报 CAM 拒绝 `tke:CreateHealthCheckPolicy` — 看 [故障恢复]段
-- 创建策略后绑定未生效（`DescribeHealthCheckPolicyBindings` 无记录）— 看 [验证]段与 [收尾确认]
+- `DescribeHealthCheckTemplate` / `CreateHealthCheckPolicy` 报 CAM 拒绝 `tke:CreateHealthCheckPolicy` — 看 [故障恢复](#故障恢复)
+- 创建策略后绑定未生效（`DescribeHealthCheckPolicyBindings` 无记录）— 看 [验证](#验证) 与 [收尾确认](#收尾确认)
 
 
 ## 概述
@@ -131,7 +131,7 @@ tccli tke DescribeHealthCheckPolicies --version 2022-05-01 --region <REGION> --C
 }
 ```
 
-> 上图是空结果示例（策略未创建时）。创建成功后 `TotalCount` 应 ≥ 1，`HealthCheckPolicies` 含策略对象。
+> 上方是空结果示例（策略未创建时）。创建成功后 `TotalCount` 应 ≥ 1，`HealthCheckPolicies` 含策略对象。
 
 ## 验证
 
@@ -185,7 +185,7 @@ tccli tke ModifyHealthCheckPolicy --version 2022-05-01 --region <REGION> \
 ## 收尾确认
 
 ```bash
-# ②业务可用性端到端: 策略绑定生效（Verify 只查策略存在，未核对绑定关系是否真命中节点）
+# 端到端核对：策略绑定生效（仅查策略存在不够，还须核对绑定是否命中节点）
 tccli tke DescribeHealthCheckPolicyBindings --version 2022-05-01 --region <REGION> \
   --ClusterId "<CLUSTER_ID>" \
   --Filter '[{"Name":"HealthCheckPolicyName","Values":["<POLICY_NAME>"]}]' \
@@ -199,7 +199,7 @@ tccli tke DescribeHealthCheckPolicies --version 2022-05-01 --region <REGION> \
 # expected: name=<POLICY_NAME>; Rules 含目标规则，Enabled=true 且可修复规则 AutoRepairEnabled 符合预期
 ```
 
-> 策略绑定生效（DescribeHealthCheckPolicyBindings 返回绑定且节点匹配规则）+ 规则配置正确（Rules[].Enabled/AutoRepairEnabled）= 节点健康检查闭环完成。入参契约无顶层 `Enable` 字段（只有 `Rules[].Enabled`/`AutoRepairEnabled`），故确认改为查绑定生效而非顶层 Enable。
+> 策略绑定生效（DescribeHealthCheckPolicyBindings 返回绑定且节点匹配规则）+ 规则配置正确（Rules[].Enabled/AutoRepairEnabled）= 节点健康检查闭环完成。入参契约无顶层 `Enable` 字段（只有 `Rules[].Enabled`/`AutoRepairEnabled`），确认时查绑定生效，勿查不存在的顶层 Enable。
 
 ---
 

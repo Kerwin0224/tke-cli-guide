@@ -26,11 +26,11 @@ fused: false
 | 签名策略 | 绑定 KMS 密钥+命名空间，push 时自动签名 | premium 专属，tccli `CreateSignaturePolicy` |
 | 验签 | 拉取时验证签名 | TKE 集成（非 tccli，见下） |
 
-> **产品边界**：tcr API 落地签名策略与手动签名；**自动签名**由策略触发（push 时 TCR 服务侧执行，无需 tccli 调用）；**验签**在 TKE 侧部署签名准入控制器（K8s 准入 webhook，非 tccli）。tcr 文档覆盖签名侧闭环，验签侧见 TKE 集成文档。
+> **产品边界**：TCR API 落地签名策略与手动签名；**自动签名**由策略触发（push 时 TCR 服务侧执行，无需 tccli 调用）；**验签**在 TKE 侧部署签名准入控制器（K8s 准入 webhook，非 tccli）。TCR 文档覆盖签名侧闭环，验签侧见 TKE 集成文档。
 
 > 签名是 **premium（高级版）** 专属；basic/standard 不支持。
 >
-> **前提半常量**：
+> **前提**：
 > - KMS 密钥用途须为 **非对称签名验签**，算法 **RSA_2048**（其他用途/算法不可用于本功能）
 > - 建议 KMS 密钥与 TCR 实例**同地域**（可跨地域，跨地域有额外开销）
 > - 服务角色 `TCR_QCSRole` 须关联 **QcloudKMSFullAccess**（或等价 KMS 权限），否则签名失败——见下 [服务角色（TCR/KMS）](#服务角色tcrkms)
@@ -139,15 +139,15 @@ tccli tcr CreateSignature --region <REGION> \
 
 ### 步骤 4：验证
 
-> ⚠️ TCR 无 `DescribeSignaturePolicies` 接口查询签名策略——通过控制台或 `CreateSignature` 不报错反证策略存在。
+> ⚠️ TCR 无 `DescribeSignaturePolicies` 接口查询签名策略——通过控制台查看，或用 `CreateSignature` 成功（exit 0、无策略缺失类错误）确认策略存在。
 
 ```bash
 # 验证签名已生成：DescribeSignature 个人版无此接口，企业版用控制台查看；
-# CreateSignature 成功（exit 0）即反证签名策略有效且签名已生成
+# CreateSignature 成功（exit 0）可确认签名策略有效且签名已生成
 tccli tcr CreateSignature --region <REGION> \
   --RegistryId "<REGISTRY_ID>" --NamespaceName "<NAMESPACE_NAME>" \
   --RepositoryName "<REPOSITORY_NAME>" --ImageVersion "<TAG>"
-# expected: exit 0（重复签名不报错，反证策略有效）
+# expected: exit 0（重复签名不报错，策略有效）
 ```
 
 | 维度 | 命令 | 预期 |
@@ -187,25 +187,25 @@ tccli tcr DeleteSignaturePolicy --region <REGION> \
 | 签名成功但验签失败 | TKE 侧验签配置 | 验签策略未在 TKE 集群配置 | 在 TKE 集群配置镜像验签 |
 | 证书过期 | `tccli kms ListKeys` 看密钥状态 | KMS 密钥被禁用或过期 | 启用密钥或换新密钥 |
 
-> 签名涉及 TCR + KMS 跨产品。TCR 无查询签名策略的 API（gap），管理主要靠控制台。
+> 签名涉及 TCR + KMS 跨产品。TCR 无查询签名策略的 API，管理主要靠控制台。
 
 ## 收尾确认
 
 ```bash
-# ③ 跨步骤汇总：签名策略有效 + 签名已生成 + KMS 证书未过期 一次性核对（TCR 无 DescribeSignaturePolicies，用 CreateSignature exit 0 反证策略有效；Verify 查单步，这里汇总三步产物）
-# 签名命令成功 = 反证策略有效 + 签名已生成（字段名 RepositoryName/ImageVersion，非 RepoName/Tag）
+# 汇总核对：签名策略有效 + 签名已生成 + KMS 密钥可用（TCR 无 DescribeSignaturePolicies，用 CreateSignature exit 0 确认策略有效）
+# 签名命令成功 = 策略有效 + 签名已生成（字段名 RepositoryName/ImageVersion，非 RepoName/Tag）
 tccli tcr CreateSignature --region <REGION> \
   --RegistryId "<REGISTRY_ID>" --NamespaceName "<NAMESPACE_NAME>" \
   --RepositoryName "<REPOSITORY_NAME>" --ImageVersion "<TAG>"
-# expected: exit 0（重复签名不报错，反证策略有效）
+# expected: exit 0（重复签名不报错，策略有效）
 
-# ② 业务可用性：KMS 证书未过期/未禁用（签名密钥可用，Verify 查 KMS 密钥存在，这里查 KeyState 保证证书有效）
+# KMS 密钥未禁用（签名密钥可用）
 tccli kms DescribeKey --region <REGION> --KeyId "<KMS_KEY_ID>" \
   --filter "KeyMetadata.{id:KeyId,state:KeyState,usage:KeyUsage}"
-# expected: state=Enabled, usage 含签名用途（state=Enabled 密钥可用，签名验签才有效；Disabled/PendingDelete 证书不可用）
+# expected: state=Enabled, usage 含签名用途（state=Enabled 密钥可用，签名验签才有效；Disabled/PendingDelete 密钥不可用）
 ```
 
-> CreateSignature exit 0（策略有效+签名已生成）+ KMS 密钥 Enabled（证书未过期）= 签名闭环完成，镜像可被验签。密钥禁用后已签名镜像仍可验签，但新镜像无法再签名。
+> CreateSignature exit 0（策略有效+签名已生成）+ KMS 密钥 Enabled（密钥可用）= 签名配置完成，镜像可被验签。密钥禁用后已签名镜像仍可验签，但新镜像无法再签名。
 
 ---
 

@@ -12,7 +12,7 @@ fused: false
 
 - `DescribeClusterStatus` → `ClusterAuditEnabled=false`，生产集群需开启审计满足合规要求
 - 合规审计要求追溯"谁在什么时候对什么资源做了什么操作"，当前集群无 API 操作记录可查
-- `ClusterAuditEnabled=true` 但 CLS 检索无日志，需排查投递链路 — 看 [故障恢复]段
+- `ClusterAuditEnabled=true` 但 CLS 检索无日志，需排查投递链路 — 看 [故障恢复](#故障恢复)
 
 
 ## 概述
@@ -256,7 +256,7 @@ tccli tke ModifyOpenPolicyList --ClusterId "<CLUSTER_ID>" --region <REGION> \
 ## 收尾确认
 
 ```bash
-# 跨步骤汇总三项合一：审计开关已开 + CLS 日志集/主题存在 + 投递可查
+# 汇总核对三项：审计开关已开 + CLS 日志集/主题存在 + 投递可查
 # 1. 审计开关（TKE 侧）
 tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet[?ClusterId=='<CLUSTER_ID>'] | [0].ClusterAuditEnabled"
 # expected: true
@@ -265,13 +265,13 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet
 tccli cls DescribeLogsets --region <REGION> --LogsetId "<LOGSET_ID>"
 # expected: 返回日志集，含 TopicId
 
-# 3. 业务可用性端到端：做一次操作后 CLS 能检索到该操作
+# 3. 端到端：做一次操作后 CLS 能检索到该操作
 tccli tke DescribeClusters --region ap-guangzhou --filter "TotalCount"
 tccli cls SearchLog --region <REGION> --TopicId "<TOPIC_ID>" --Content '"DescribeClusters"'
 # expected: 命中含 DescribeClusters 的审计记录 → 审计日志闭环完成
 ```
 
-> 审计开关 true + CLS 日志集/主题存在 + 操作可检索 = 端到端闭环。Verify 段查开关状态与日志投递维度，此处跨步骤汇总 TKE 侧开关 + CLS 侧资源存在 + 真实操作可检索三项，确认投递链路完整可用。
+> 审计开关 true + CLS 日志集/主题存在 + 操作可检索 = 配置完成。上文验证段查开关状态与日志投递维度，此处汇总 TKE 侧开关 + CLS 侧资源存在 + 真实操作可检索三项，确认投递链路完整可用。
 
 ---
 

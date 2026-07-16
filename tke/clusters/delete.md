@@ -202,7 +202,7 @@ tccli tke DescribeClusterStatus --region ap-guangzhou \
 ## 收尾确认
 
 ```bash
-# 残留资源核查：CBS/EIP/CLB 是否真清零（删除闭环真正标志——Verify 只查集群 TotalCount=0，不查关联计费资源）
+# 残留资源核查：CBS/EIP/CLB 是否真清零（删除闭环标志——仅查集群 TotalCount=0 不够，还须查关联计费资源）
 tccli cbs DescribeDisks --region ap-guangzhou \
   --filter "DiskSet[?DiskState=='UNATTACHED'].{id:DiskId,name:DiskName}" --output text
 # expected: 核对未挂载的 CBS 盘（集群销毁后节点 CVM 已终止，DeleteWithInstance=false 的盘变为 UNATTACHED，须清理；TKE 创建的盘 DiskName 含集群 ID 前缀如 cls-xxx/pvc-...）

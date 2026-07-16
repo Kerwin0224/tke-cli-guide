@@ -266,19 +266,19 @@ tccli tcr DuplicateImage --RegistryId "<REGISTRY_ID>" --region <REGION> \
 
 > docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）
 ```bash
-# ③ 跨步骤汇总：digest 双向核对（push 返回的 digest 与 TCR 侧 DescribeImages 返回的 digest 一致 = 推送产物真落地）
+# digest 双向核对：push 返回的 digest 与 TCR 侧 DescribeImages 返回的 digest 一致 = 推送产物已落地
 tccli tcr DescribeImages --region ap-guangzhou --RegistryId "<REGISTRY_ID>" \
   --NamespaceName "<NS>" --RepositoryName "<REPO>" \
   --filter "ImageInfoList[0].{tag:ImageVersion,digest:Digest}"
 # expected: tag=推送的 tag, digest 与 docker push 返回的 sha256:... 一致
 
-# ② 业务可用性端到端：docker pull 真正成功（push-pull 的终极证明，Verify 查 TCR 侧记录，这里查本地能拉下来）
+# docker pull 端到端：本地能拉下镜像（与上一步 TCR 侧记录对照）
 # docker CLI 端到端验证（非 tccli；TCCLI 不提供 docker daemon 拉取能力）
 docker pull <REGISTRY_DOMAIN>/<NAMESPACE_NAME>/<REPOSITORY_NAME>:<TAG>
 # expected: Pull complete / Status: Image is up to date
 ```
 
-> TCR 侧 digest 与 push 返回一致 + docker pull 成功 = 推送拉取镜像闭环完成。digest 不一致或 pull 失败说明 push 未真落地或网络/权限有问题。
+> TCR 侧 digest 与 push 返回一致 + docker pull 成功 = 推送拉取镜像闭环完成。digest 不一致或 pull 失败说明 push 未落地或网络/权限有问题。
 
 ---
 

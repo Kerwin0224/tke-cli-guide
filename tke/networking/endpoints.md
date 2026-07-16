@@ -41,7 +41,7 @@ fused: true
 
 - `DescribeClusterEndpointStatus` 返回 `Status=NotFound`，需从公网或 VPC 内网访问 API Server
 - `kubectl get nodes` <!-- kubectl验证端点连通性，非tccli边界 --> 报 `Unable to connect to the server` / `context deadline exceeded` / `connection refused`，集群端点未开启，或本机不在端点可达网络（内网 VIP 从公网不可达）
-- 公网端点已 `Created` 但 `ModifyClusterEndpointSP` 未放行你的出口 IP，kubectl 被 ACL 拒绝 — 看 [故障恢复]段
+- 公网端点已 `Created` 但 `ModifyClusterEndpointSP` 未放行你的出口 IP，kubectl 被 ACL 拒绝 — 看 [故障恢复](#故障恢复)
 - 本机/公网 CI 需要 kubectl：走文首 **唯一路径**（公网端点 + ACL + 改写 `server`）
 
 ## 概述
@@ -319,7 +319,7 @@ tccli tke DescribeClusterEndpointStatus --region ap-guangzhou \
 |:--------|:----------|:------------|:-----|
 | 长时间停在 `Creating` | `DescribeClusterEndpointStatus` → `ErrorMsg` | CLB 创建失败或子网 IP 不足 | 查 ErrorMsg，换子网或提工单 |
 | 端点 `Created` 但本机 kubectl 超时 | 看 kubeconfig `server` 是内网还是公网 | 只开了内网端点，本机不在 VPC | 开公网端点 + ACL，或从 VPC 内访问 |
-| 端点 `Created` 但 `lookup cls-*.ccs.tencent-cloud.com: no such host` / NXDOMAIN | `dig +short <ClusterDomain>`；`DescribeClusterEndpoints` → `ClusterExternalEndpoint` | kubeconfig 默认域名不可解析 | **把 kubeconfig `server` 改为 `https://` + `ClusterExternalEndpoint`**（见 [步骤 5](#步骤-5取-kubeconfig-并验证连通)） |
+| 端点 `Created` 但 `lookup cls-*.ccs.tencent-cloud.com: no such host` / NXDOMAIN | `dig +short <ClusterDomain>`；`DescribeClusterEndpoints` → `ClusterExternalEndpoint` | kubeconfig 默认域名不可解析 | **把 kubeconfig `server` 改为 `https://` + `ClusterExternalEndpoint`**（见 [步骤 5](#步骤-5取-kubeconfig改写-server验证连通)） |
 | 公网端点 `Created` 但 kubectl 被拒 | `kubectl get nodes --v=6` <!-- kubectl诊断端点ACL连通性，非tccli边界 --> | ACL 未放行出口 IP | `ModifyClusterEndpointSP` 加 `"<IP>/32"` |
 | 公网端点 `Created` 但 `ClusterExternalEndpoint` 为空 | `DescribeClusterEndpoints` | CLB VIP 分配延迟 | 等 1-2 分钟重查 |
 

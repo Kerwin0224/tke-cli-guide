@@ -19,7 +19,7 @@ fused: true
 
 - `DescribePrometheusConfig` 返回的 ServiceMonitors/PodMonitors 不含目标采集器，需创建采集配置
 - `DescribePrometheusRecordRules` 不含目标规则，或记录规则 PromQL 不生效，需创建/修改记录规则
-- 多实例需复用采集/告警规则，`DescribePrometheusTemp` 无合适模板，需建模板并 `Sync` 推送 — 看 [故障恢复]段
+- 多实例需复用采集/告警规则，`DescribePrometheusTemp` 无合适模板，需建模板并 `Sync` 推送 — 看 [故障恢复](#故障恢复)
 
 
 ## 概述
@@ -265,7 +265,7 @@ tccli tke DeletePrometheusTemp --region <REGION> --TemplateId <TEMPLATE_ID>
 |:-----|:-----|:-----|:-----|
 | `AuthFailure.UnauthorizedOperation` (tke:CreatePrometheusConfig 等) | 查账号 CAM | 写 Prometheus 配置需对应 `tke:ActionName` 权限 | 申请写权限。此为环境限制 |
 | `UnauthorizedOperation` 您未授权访问该接口 (DescribePrometheus*) | 同上 | 读操作在云 API 网关层被拦 | 申请 `tke:DescribePrometheus*` 读权限 |
-| `Unknown options` | `tccli tke <Action> --generate-cli-skeleton` | Create/Delete 同名入参类型不同（对象 vs 字符串数组）混用 | 按 [§关键字段](#关键字段) 区分对象/字符串数组 |
+| `Unknown options` | `tccli tke <Action> --generate-cli-skeleton` | Create/Delete 同名入参类型不同（对象 vs 字符串数组）混用 | 按 [关键字段](#关键字段) 区分对象/字符串数组 |
 | 模板同步失败 | `DescribePrometheusTempSync` | `Targets[].InstanceId`/`ClusterId` 不存在或地域不符 | 核对目标实例与集群 |
 
 ### 命令成功但状态不对（exit = 0）
@@ -280,8 +280,8 @@ tccli tke DeletePrometheusTemp --region <REGION> --TemplateId <TEMPLATE_ID>
 ## 收尾确认
 
 ```bash
-# 跨步骤汇总三项合一：采集配置下发 + 记录规则生效 + 模板同步成功
-# 1. 采集配置已下发（Verify 查配置存在，此处查时间戳为最新）
+# 汇总核对三项：采集配置下发 + 记录规则生效 + 模板同步成功
+# 1. 采集配置已下发（上文已查配置存在，此处查时间戳为最新）
 tccli tke DescribePrometheusConfig --region <REGION> \
   --InstanceId <PROM_INSTANCE_ID> --ClusterId <CLUSTER_ID> \
   --filter "{name:Name,update:LatestUpdateTimestamp}"
@@ -298,7 +298,7 @@ tccli tke DescribePrometheusTempSync --region <REGION> --TemplateId <TEMPLATE_ID
 # expected: 目标实例同步 Status=Succeeded → 配置闭环完成
 ```
 
-> 采集配置下发 + 记录规则生效 + 模板同步 Succeeded = 跨步骤闭环。Verify 段查各维度存在性，此处汇总五类配置（Config/RecordRule/Temp/Template/Dashboard）的产物一次性核对，确认全链路生效。
+> 采集配置下发 + 记录规则生效 + 模板同步 Succeeded = 跨步骤闭环。上文验证段查各维度存在性，此处汇总五类配置（Config/RecordRule/Temp/Template/Dashboard）的产物一次性核对，确认全链路生效。
 
 ---
 

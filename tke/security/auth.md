@@ -18,7 +18,7 @@ fused: false
 
 - `DescribeClusterKubeconfig` 返回的 kubeconfig 用 `kubectl get nodes` 报 `certificate expired`，需轮转证书
 - 多团队需企业 SSO 登录集群，`DescribeClusterAuthenticationOptions` → `OIDCConfig` 为空，需配 OIDC
-- 子账号 `kubectl` 连集群报 `Unauthorized`，`DescribeUserPermissions` 返回空，需授予 RBAC 权限 — 看 [故障恢复]段
+- 子账号 `kubectl` 连集群报 `Unauthorized`，`DescribeUserPermissions` 返回空，需授予 RBAC 权限 — 看 [故障恢复](#故障恢复)
 
 
 ## 概述
@@ -118,7 +118,7 @@ tccli tke GrantUserPermissions --region <REGION> \
 # expected: exit 0
 ```
 
-> ⚠️ **参数层级**: `GrantUserPermissions` 顶层参数是 `TargetUin`（非 `AccountUin`）+ `Permissions` 对象数组。`ClusterId`/`RoleName`/`RoleType`/`IsCustom`/`Namespace` 都在 `Permissions` 元素内（非顶层）。`RoleName` 取值见 [权限角色枚举](../index.md#核心概念)。Permission 结构见 [共享字段](../reference/shared-fields.md)。完整入参以 `tccli tke GrantUserPermissions help --detail` 为准。
+> ⚠️ **参数层级**: `GrantUserPermissions` 顶层参数是 `TargetUin`（非 `AccountUin`）+ `Permissions` 对象数组。`ClusterId`/`RoleName`/`RoleType`/`IsCustom`/`Namespace` 都在 `Permissions` 元素内（非顶层）。`RoleName` 取值见 [子账号权限管理](#子账号权限管理)。Permission 结构见 [共享字段](../reference/shared-fields.md)。完整入参以 `tccli tke GrantUserPermissions help --detail` 为准。
 
 ## 应用
 
@@ -225,8 +225,8 @@ tccli tke DeleteUserPermissions --TargetUin "<SUB_UIN>" --region <REGION> \
 
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
 ```bash
-# 跨步骤汇总三项合一：kubeconfig 可用 + OIDC 配置生效 + RBAC 权限授予
-# 1. kubeconfig 端到端可用（Verify 查 OIDC 配置，此处查 kubeconfig 真能连集群）
+# 汇总核对三项：kubeconfig 可用 + OIDC 配置生效 + RBAC 权限授予
+# 1. kubeconfig 端到端可用（上文已查 OIDC 配置，此处查 kubeconfig 真能连集群）
 <!-- kubectl端到端验证tccli认证配置可连通集群，非tccli边界 -->
 kubectl --kubeconfig kubeconfig.yaml get nodes
 # expected: 节点列表返回
@@ -242,7 +242,7 @@ tccli tke DescribeUserPermissions --TargetUin "<SUB_UIN>" --region <REGION> \
 # expected: 含目标集群与角色 → 认证配置闭环完成
 ```
 
-> kubeconfig 可连通 + OIDC 配置生效 + RBAC 权限授予 = 跨步骤闭环。Verify 段查各配置项字段存在，此处汇总三类认证方式（kubeconfig/OIDC/RBAC）端到端可用，是进下一阶段（部署应用/开启审计）的前置。
+> kubeconfig 可连通 + OIDC 配置生效 + RBAC 权限授予 = 跨步骤闭环。上文验证段查各配置项字段存在，此处汇总三类认证方式（kubeconfig/OIDC/RBAC）端到端可用，是进下一阶段（部署应用/开启审计）的前置。
 
 ---
 

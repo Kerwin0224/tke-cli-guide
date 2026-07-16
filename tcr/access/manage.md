@@ -12,7 +12,7 @@ fused: true
 ## 触发条件
 
 - `docker push <DOMAIN>/<NS>/<REPO>` 报 `denied: requested access to the resource is denied`，`DescribeSecurityPolicies` 返回的白名单不含当前出口 IP
-- `docker login` 报 `unauthorized`，`DescribeInstanceToken` 返回 `Tokens: []`（需创建 Token）或需长期凭证（CI/CD 场景 `temp` Token 1 小时过期不够用）
+- `docker login` 报 `unauthorized`，`DescribeInstanceToken` 返回 `Tokens: []`（需创建 Token）或需长期凭证（CI/CD 场景 `temp` Token 约 1 小时过期，无法覆盖长时任务）
 - VPC 内 TKE 集群拉取 TCR 镜像延迟高/走公网，`DescribeInternalEndpoints` 返回 `TotalCount: 0`（需开 VPC 内网接入）
 
 
@@ -110,7 +110,7 @@ tccli tcr DescribeInternalEndpoints --region <REGION> --RegistryId "<REGISTRY_ID
 #### 四种方式怎么选
 
 - **CI/CD 自动化**: Token（临时）或服务账号（长期）
-- **VPC 内 TKE 集群拉取**: VPC 内网（低延迟，免认证）
+- **VPC 内 TKE 集群拉取**: VPC 内网（低延迟；凭证仍须配置，见 [TKE 拉取 TCR](../../cross-product/tke-pull-tcr.md)）
 - **开发者本地推送**: 公网白名单（需固定 IP）
 - **默认推荐**: 生产用 VPC 内网 + 服务账号；本地临时用 Token
 - **能切换吗?**: 各方式独立，可同时开启
@@ -291,7 +291,7 @@ tccli tcr DeleteServiceAccount --RegistryId "<REGISTRY_ID>" --Name "<SA_NAME>" -
 
 > docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）
 ```bash
-# ③ 跨步骤汇总：白名单 + 服务账号 + VPC 内网 三步产物一次性核对（字段名 SecurityPolicySet 非 Policies；Verify 逐项查，这里汇总）
+# 汇总核对：白名单 + 服务账号 + VPC 内网（字段名 SecurityPolicySet 非 Policies）
 tccli tcr DescribeSecurityPolicies --region <REGION> --RegistryId "<REGISTRY_ID>" \
   --filter "SecurityPolicySet[].{ip:CidrBlock,desc:Description}"
 # expected: 含你的出口 IP（如 "203.0.113.10/32"）
@@ -305,12 +305,12 @@ tccli tcr DescribeInternalEndpoints --region <REGION> --RegistryId "<REGISTRY_ID
   --filter "AccessVpcSet[].{vpc:VpcId,subnet:SubnetId}"
 # expected: 含已接入的 VPC（未开内网则空，仅白名单场景可豁免此项）
 
-# ② 业务可用性端到端：用配置的访问方式 docker login 真正成功（Verify 查配置记录存在，这里查端到端登录可达）
+# 端到端：用配置的访问方式 docker login 成功
 docker login <REGISTRY_DOMAIN> --username <USERNAME> --password <TOKEN_OR_SA_PASSWORD>
 # expected: Login Succeeded
 ```
 
-> 白名单含 IP + 服务账号带权限 + VPC 内网接入（如开）+ docker Login Succeeded = 访问控制闭环完成。任一缺失则 docker login/push 失败。
+> 白名单含 IP + 服务账号带权限 + VPC 内网接入（如开）+ docker Login Succeeded = 访问控制配置完成。任一缺失则 docker login/push 失败。
 
 ---
 

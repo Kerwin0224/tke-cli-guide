@@ -237,22 +237,22 @@ tccli tcr BatchDeleteImagePersonal --RepoName "<NAMESPACE_NAME>/<REPO_NAME>" --T
 > 本篇是多功能文档（查询/复制/生命周期/触发器），按实际配置项选对应确认。下面以触发器+生命周期为例汇总。
 
 ```bash
-# ③ 跨步骤汇总：触发器已建 + 生命周期策略已设 一次性核对
+# 汇总核对：触发器已建 + 生命周期策略已设
 tccli tcr DescribeApplicationTriggerPersonal --RepoName "<NAMESPACE_NAME>/<REPO_NAME>" --Limit 10 \
   --filter "Data.TriggerInfo[].{name:TriggerName,action:InvokeAction,source:InvokeSource}"
 # expected: 含目标触发器（响应字段 TriggerInfo 非 Triggers；ClusterId/WorkloadName 是创建入参，响应不含，故只核对触发器名与触发动作）
 
 tccli tcr DescribeImageLifecycleGlobalPersonal \
   --filter "Data.StrategyInfo[].{type:Type}"
-# expected: 含设置的策略（如 type=global_keep_last_days；Val 不在响应字段，设后用 Type 反证策略已落地）
+# expected: 含设置的策略（如 type=global_keep_last_days；Val 不在响应字段，设后用 Type 确认策略已落地）
 
-# ② 业务可用性端到端：触发器真触发过部署（Verify 查触发器存在，这里查执行日志证明 push 后真联动 TKE）
+# 端到端：触发器在 push 后产生部署触发记录
 tccli tcr DescribeApplicationTriggerLogPersonal --RepoName "<NAMESPACE_NAME>/<REPO_NAME>" --Limit 5 \
   --filter "Data.LogInfo[].{result:InvokeResult,time:InvokeTime}"
 # expected: 有触发记录（需先 push 一次镜像才产生日志；InvokeResult 为触发执行结果）
 ```
 
-> 触发器存在 + 生命周期策略生效 + 触发日志有记录（`InvokeResult` 含 `returnCode`/`returnMsg`）= 个人版高级管理闭环完成。触发器未触发时日志为空，需 push 镜像后查。
+> 触发器存在 + 生命周期策略生效 + 触发日志有记录（`InvokeResult` 含 `returnCode`/`returnMsg`）= 个人版高级管理配置完成。触发器未触发时日志为空，需 push 镜像后查。
 
 ---
 

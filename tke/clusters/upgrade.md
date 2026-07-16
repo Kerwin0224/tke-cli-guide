@@ -330,7 +330,7 @@ tccli tke CancelUpgradePlan --region ap-guangzhou \
 ## 收尾确认
 
 ```bash
-# 跨步骤汇总：Master 版本 + 全节点版本 + 升级任务 Succeed 三项合一（Verify 分维度查，此处一次性核对三者协同达成）
+# Master 版本 + 全节点版本 + 升级任务 Succeed 三项合一（分项查状态/版本/任务后，再一次性核对三者协同达成）
 tccli tke DescribeClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]' \
   --filter "Clusters[0].{state:ClusterStatus,version:ClusterVersion}"
 # expected: state=Running, version=目标版本（如 1.34.1）
@@ -344,7 +344,7 @@ tccli tke DescribeUpgradeTasks --region ap-guangzhou --Offset 0 --Limit 20 \
 # expected: 取最新任务 ID，再 DescribeUpgradeTaskDetail --ID "<ID>" 核 UpgradePlans[].Status=Succeed
 ```
 
-> Master 版本=目标 + 全节点版本=目标 + 升级任务 `Succeed` 三项合一 = 升级闭环完成。Verify 已分维度查集群状态/版本号/任务/节点版本，此处汇总核对三项协同达成（单查任一项不足以证明升级闭环——Master 升级而节点未跟随，或任务未 Succeed，均非闭环）。**升级不可回滚**，失败只能 `DeleteCluster` 重建（见 [§清理](#清理)）。
+> Master 版本=目标 + 全节点版本=目标 + 升级任务 `Succeed` 三项合一 = 升级闭环完成。验证段已分项查集群状态/版本号/任务/节点版本，此处汇总核对三项协同达成（单查任一项不足以证明升级闭环——Master 升级而节点未跟随，或任务未 Succeed，均非闭环）。**升级不可回滚**，失败只能 `DeleteCluster` 重建（见 [§清理](#清理)）。
 
 ## 下一步
 

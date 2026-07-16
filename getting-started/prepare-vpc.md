@@ -238,13 +238,13 @@ tccli vpc DeleteVpc --region <REGION> --VpcId "<VPC_ID>"
 ## 收尾确认
 
 ```bash
-# 跨步骤汇总：VPC + 子网 + 可用区三要素一次性核对齐备（Verify 分查各维度，此处合一确认）
+# 汇总核对：VPC + 子网 + 可用区三要素齐备（上文分查各维度，此处合一确认）
 tccli vpc DescribeSubnets --region <REGION> \
   --Filters '[{"Name":"vpc-id","Values":["<VPC_ID>"]}]' \
   --filter "SubnetSet[0].{subnet:SubnetId,vpc:VpcId,zone:Zone,cidr:CidrBlock,avail:AvailableIpAddressCount}" --output text
 # expected: 返回创建的子网行，avail ≥ 10，zone 为目标可用区，三要素齐备
 
-# 衔接下一步前置：VPC + 子网可进入创建集群（CreateCluster 必传 VpcId/SubnetId 均就绪）
+# 下一步前置：VPC + 子网可进入创建集群（CreateCluster 必传 VpcId/SubnetId 均就绪）
 tccli tke DescribeRegions --filter "TotalCount" --output text
 # expected: 数字（如 19；随账号/产品开通变化）→ TKE 域可达，VPC+子网就绪可进入 [创建集群](../quickstart/tke-first-cluster.md)
 ```

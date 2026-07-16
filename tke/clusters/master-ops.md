@@ -245,7 +245,7 @@ tccli tke DescribeClusterStatus --region <REGION> --filter "ClusterStatusSet[?Cl
 ## 收尾确认
 
 ```bash
-# 跨步骤汇总：Master/etcd 节点数核对奇数 ≥3（etcd 多数派安全红线，Verify 查 ClusterState 但没查节点数与多数派）
+# Master/etcd 节点数核对奇数 ≥3（etcd 多数派安全红线；仅查 ClusterState 不够，还须核对节点数与多数派）
 tccli tke DescribeClusters --region <REGION> --ClusterIds '["<CLUSTER_ID>"]' --version 2018-05-25 \
   --filter "Clusters[0].{master:ClusterMaterNodeNum,etcd:ClusterEtcdNodeNum}"
 # expected: master/etcd 数量为奇数且 ≥3（如 3/3 或 5/5）→ etcd 多数派安全，扩缩容闭环完成
@@ -257,7 +257,7 @@ tccli tke DescribeClusterInstances --region <REGION> --version 2018-05-25 --Clus
 # expected: 列出的 Master 节点数与 ClusterMaterNodeNum 一致，且为奇数
 ```
 
-> `ClusterState=Running`（步骤 4 已核）+ Master 数奇数 ≥3 = 扩缩容闭环完成。**etcd 多数派是本文核心安全红线**——缩容破坏多数派会导致集群控制面不可用（etcd 读写仲裁失败）。缩容前核对剩余节点数，生产环境先扩后缩全程保持多数派。`retain` 模式保留的 CVM 须到 CVM 侧手动销毁（衔接下一步：计费清理），见 [§清理](#清理)。
+> `ClusterState=Running`（步骤 4 已核）+ Master 数奇数 ≥3 = 扩缩容闭环完成。**etcd 多数派是本文核心安全红线**——缩容破坏多数派会导致集群控制面不可用（etcd 读写仲裁失败）。缩容前核对剩余节点数，生产环境先扩后缩全程保持多数派。`retain` 模式保留的 CVM 须到 CVM 侧手动销毁（下一步做计费清理），见 [§清理](#清理)。
 
 ## 下一步
 

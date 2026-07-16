@@ -29,7 +29,7 @@ fused: false
 
 > 规则作用于命名空间级别。规则创建后立即生效，匹配的 Tag 被 push 覆盖时报 `denied`。
 >
-> **半常量**：单个命名空间内**仅支持一条**不可变规则；创建后**不可修改**生效的命名空间（只能改规则内容或删重建）。控制台「latest」预设语义：除 `latest` 外其余版本不可覆盖（以控制台/API 实际枚举为准）。
+> 单个命名空间内**仅支持一条**不可变规则；创建后**不可修改**生效的命名空间（只能改规则内容或删重建）。控制台「latest」预设语义：除 `latest` 外其余版本不可覆盖（以控制台/API 实际枚举为准）。
 
 ## 决策依据
 
@@ -147,17 +147,17 @@ tccli tcr DeleteImmutableTagRules --region <REGION> \
 
 > docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）
 ```bash
-# ② 业务可用性端到端：规则真正拦截覆盖行为（Verify 查规则字段存在，这里查实际 push 行为符合预期）
-# 覆盖已存在 latest 应被拒（证明规则生效）
+# 端到端：规则拦截已有 Tag 覆盖
+# 覆盖已存在 latest 应被拒（规则生效）
 docker push <REGISTRY_DOMAIN>/<NAMESPACE_NAME>/<REPO>:latest
 # expected: denied（不可变规则拦截）
 
-# 推新 Tag 应成功（证明规则不误伤正常推送，只拦覆盖）
+# 推新 Tag 应成功（规则只拦覆盖，不拦截新 Tag）
 docker push <REGISTRY_DOMAIN>/<NAMESPACE_NAME>/<REPO>:new-<TIMESTAMP>
 # expected: Push complete（新 Tag 不触发不可变规则）
 ```
 
-> 覆盖已存在 Tag 被拒 + 新 Tag 推送成功 = 不可变规则闭环完成，规则精准拦截覆盖不误伤新推。
+> 覆盖已存在 Tag 被拒 + 新 Tag 推送成功 = 不可变规则生效，只拦截覆盖、不拦截新推。
 
 ---
 

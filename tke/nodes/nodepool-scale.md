@@ -18,7 +18,7 @@ fused: true
 
 - DescribeClusterNodePools 返回 LifeState=normal 但 DesiredNodesNum 不满足业务容量（需扩容或缩容）
 - 集群节点数已达 MaxNodesNum 上限，或扩容报 `LimitExceeded`/`ResourceInsufficient.SpecifiedInstanceType`（机型售罄）需调区间或换机型
-- 你遇到扩缩容节点池问题需查诊断路径 — 看 [故障恢复]段
+- 你遇到扩缩容节点池问题需查诊断路径 — 看 [故障恢复](#故障恢复)
 
 
 ## 概述
@@ -288,12 +288,12 @@ tccli tke ModifyClusterNodePool --region ap-guangzhou \
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
 <!-- kubectl验证tccli扩缩容操作结果，kubectl get nodes观察K8s层节点Ready与Pod调度状态，非tccli边界 -->
 ```bash
-# ②业务可用性端到端: 扩容新节点不仅 InstanceState=running 须 K8s Ready（缩容后无 Pod Pending）
+# 端到端核对：扩容新节点不仅 InstanceState=running 须 K8s Ready（缩容后无 Pod Pending）
 # 扩容后 kubectl get nodes 看新节点真 Ready（InstanceState=running 不等于 K8s Ready，kubelet 注册需时间）
 kubectl get nodes --show-labels | grep -v NotReady | wc -l
 # expected: Ready 节点数 == 扩容后 DesiredCapacity（缩容后无 Pod Pending: kubectl get pods -A 看无 Pending）
 
-# ③跨步骤多资源汇总（新版 Native）: LifeState=Running + Replicas == ReadyReplicas == Ready 节点数
+# 多字段汇总（新版 Native）: LifeState=Running + Replicas == ReadyReplicas == Ready 节点数
 tccli tke DescribeNodePools --version 2022-05-01 --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" --Filters '[{"Name":"NodePoolsId","Values":["<NODE_POOL_ID>"]}]' \
   --filter "NodePools[0].{state:LifeState,desired:Native.Replicas,ready:Native.ReadyReplicas}"

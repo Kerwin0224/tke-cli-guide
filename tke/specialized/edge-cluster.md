@@ -20,7 +20,7 @@ fused: true
 
 - **新建边缘场景** → **禁止用本文创建**：改走标准集群 + [注册节点](../nodes/registered-nodes/overview.md)（注册节点公网版）
 - 存量：`DescribeTKEEdgeClusters` 已有边缘集群，需查询状态/凭证/注册脚本/升级 — 用本文运维段
-- `DescribeTKEEdgeClusterStatus` → `ClusterState` 非 `Running`，或节点未注册 — 看 [故障恢复]段
+- `DescribeTKEEdgeClusterStatus` → `ClusterState` 非 `Running`，或节点未注册 — 看 [故障恢复](#故障恢复)
 - 迁移存量边缘集群到注册节点公网版 — 先读官方迁移前置，再按注册节点流程接入
 
 ## 准备工作
@@ -146,7 +146,7 @@ tccli tke DescribeTKEEdgeClusters --region <EDGE_REGION> --ClusterIds '["<CLUSTE
 # expected: state=Running, id/name 与存量集群一致
 ```
 
-> 边缘集群 state=Running = 存量集群可用, 可进入 [关键操作]段运维。
+> 边缘集群 state=Running = 存量集群可用, 可进入 [关键操作](#关键操作) 运维。
 
 ## 故障恢复
 
@@ -184,7 +184,7 @@ tccli tke DescribeTKEEdgeClusters --region <EDGE_REGION>
 
 ## API 参考
 
-本篇覆盖边缘集群相关 **26** 个 Action（与 chapter-plan 一致；应用转发类 ForwardTKEEdgeApplicationRequestV3 为设计排除、不在正文主流程演示）：
+本篇覆盖边缘集群相关 **26** 个 Action（应用转发类 ForwardTKEEdgeApplicationRequestV3 不在正文主流程演示）：
 
 | 分类 | API | 说明 |
 |------|-----|------|
@@ -298,24 +298,24 @@ tccli tke DeleteECMInstances --ClusterID "<CLUSTER_ID>" --region <REGION> --EcmI
 ## 收尾确认
 
 ```bash
-# 集群已 Running（Verify 查状态，此处端到端核节点注册 + kubeconfig 可拉取）
+# 集群已 Running（上文已查状态，此处端到端核节点注册 + kubeconfig 可拉取）
 tccli tke DescribeTKEEdgeClusters --region <EDGE_REGION> --ClusterIds '["<CLUSTER_ID>"]' \
   --filter "Clusters[0].{state:ClusterStatus,name:ClusterName}"
 # expected: state=Running
 
-# 业务可用性端到端：边缘节点注册成功（Verify 查集群状态，此处查节点真在线）
+# 端到端：边缘节点注册成功（上文已查集群状态，此处查节点真在线）
 # 注意：DescribeEdgeClusterInstances 在 ap-guangzhou 返回 UnsupportedRegion，须在 <EDGE_REGION> 执行
 tccli tke DescribeEdgeClusterInstances --ClusterID "<CLUSTER_ID>" --region <EDGE_REGION> \
   --Offset 0 --Limit 20
 # expected: TotalCount ≥1，InstanceInfoSet 含已注册边缘节点
 
-# 衔接下一步前置：kubeconfig 可拉取（进部署应用前须能连通集群）
+# 下一步前置：kubeconfig 可拉取（进部署应用前须能连通集群）
 tccli tke DescribeTKEEdgeClusterCredential --region <EDGE_REGION> --ClusterId "<CLUSTER_ID>" \
   --filter "Kubeconfig" --output text | head -1
 # expected: apiVersion: v1 → 边缘集群闭环完成
 ```
 
-> 集群 Running + 边缘节点注册在线 + kubeconfig 可拉取 = 端到端闭环。Verify 段查集群状态，此处确认边缘节点真注册（业务可用性，Edge 地域须实际核实）+ kubeconfig 可连通集群是进下一阶段（部署应用）的前置。
+> 集群 Running + 边缘节点注册在线 + kubeconfig 可拉取 = 端到端闭环。上文验证段查集群状态，此处确认边缘节点真注册（业务可用性，Edge 地域须实际核实）+ kubeconfig 可连通集群是进下一阶段（部署应用）的前置。
 
 ---
 

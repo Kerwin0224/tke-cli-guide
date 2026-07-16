@@ -16,7 +16,7 @@ fused: true
 
 - `DescribeAddon` → `Phase=InstallFailed`/`UpgradFailed` 或长时间 `Installing`/`Upgrading`，插件安装/更新后状态异常
 - `GetTkeAppChartList` 含目标插件但集群未安装，需 `InstallAddon` 部署
-- `kubectl get pods -n kube-system -l app=<ADDON_NAME>` 显示 Pod `ImagePullBackOff` 或 `CrashLoopBackOff` — 看 [故障恢复]段
+- `kubectl get pods -n kube-system -l app=<ADDON_NAME>` 显示 Pod `ImagePullBackOff` 或 `CrashLoopBackOff` — 看 [故障恢复](#故障恢复)
 
 
 ## 概述
@@ -278,22 +278,22 @@ tccli tke DeleteImageCaches --region <REGION> --ImageCacheIds '["<CACHE_ID>"]'
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
 <!-- tccli管Addon生命周期，kubectl查Pod部署状态，非tccli边界 -->
 ```bash
-# 插件 Phase=Succeeded（Verify 查 Phase/版本/Reason，此处端到端核 Pod 真运行 + 衔接前置）
+# 插件 Phase=Succeeded（上文已查 Phase/版本/Reason，此处端到端核 Pod 真运行 + 衔接前置）
 tccli tke DescribeAddon --region ap-guangzhou --ClusterId "<CLUSTER_ID>" --AddonName "<ADDON_NAME>" \
   --filter "{name:AddonName,phase:Phase,version:AddonVersion}"
 # expected: phase=Succeeded
 
-# 业务可用性端到端：插件 Pod 真运行且 Ready（Verify 查 Phase=Succeeded 但未核 Pod Ready 数）
+# 端到端：插件 Pod 真运行且 Ready（上文查 Phase=Succeeded 但未核 Pod Ready 数）
 kubectl get pods -n kube-system -l app=<ADDON_NAME> -o wide \
   --no-headers | awk '{print $2, $3}'
 # expected: READY 列全为 1/1（或 N/N），STATUS=Running
 
-# 衔接下一步前置：插件就绪是使用其功能的前置（如 cbs-csi 就绪才能创建 PVC）
+# 下一步前置：插件就绪是使用其功能的前置（如 cbs-csi 就绪才能创建 PVC）
 kubectl get pods -n kube-system -l app=<ADDON_NAME> --no-headers | wc -l
 # expected: ≥1（插件 Pod 已调度运行）→ 插件管理闭环完成
 ```
 
-> 插件 Phase=Succeeded + Pod 全 Ready + Pod 数 ≥1 = 端到端闭环。Verify 段查 TKE 侧 Phase 与版本，此处用 kubectl 核 Pod 真运行（业务可用性），确认插件功能可被集群使用（如 cbs-csi 就绪才能创建 PVC，是进下一阶段的前置）。
+> 插件 Phase=Succeeded + Pod 全 Ready + Pod 数 ≥1 = 端到端闭环。上文验证段查 TKE 侧 Phase 与版本，此处用 kubectl 核 Pod 真运行（业务可用性），确认插件功能可被集群使用（如 cbs-csi 就绪才能创建 PVC，是进下一阶段的前置）。
 
 ---
 

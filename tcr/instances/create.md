@@ -179,7 +179,7 @@ tccli tcr DescribeInstances --region ap-guangzhou --Registryids '["<REGISTRY_ID>
 
 > 若 DescribeInstances 仍返回实例但状态为 `Deleting`（或删除失败相关 `DeleteFailed`/`DeleteBucketFailed`），属删除中或删除异常，稍候再查或见 [实例状态](../reference/states.md)。
 
-> **Billing warning**: 按量计费实例删除即停止计费。包年包月实例提前删除**不退费**。
+> **计费警告**：按量计费实例删除即停止计费。包年包月实例提前删除**不退费**。
 
 ## 故障恢复
 
@@ -239,13 +239,13 @@ tccli tcr DescribeInstanceAllNamespaces --Limit 50 --region <REGION>
 ## 收尾确认
 
 ```bash
-# 衔接下一步前置：实例 Running 可进入创建命名空间/仓库
+# 确认实例 Running，可进入创建命名空间/仓库
 tccli tcr DescribeInstances --region ap-guangzhou --Registryids '["<REGISTRY_ID>"]' \
   --filter "Registries[0].{status:Status,name:RegistryName,type:RegistryType,protect:DeletionProtection}"
 # expected: status="Running", name/type 与创建参数一致, protect 与创建参数一致
 ```
 
-> 实例 `Running` = 创建闭环完成，可进入 [访问管理](manage-access.md) 与 [命名空间/仓库](../repositories/manage.md)。`DescribeNamespaces` 须在 `Running` 后调用（`Pending`/`Deploying` 过渡态中调用通常返回空）。空实例无镜像，须先建命名空间才能 push。
+> 实例 `Running` = 创建完成，可进入 [访问管理](manage-access.md) 与 [命名空间/仓库](../repositories/manage.md)。`DescribeNamespaces` 须在 `Running` 后调用（`Pending`/`Deploying` 过渡态中调用通常返回空）。空实例无镜像，须先建命名空间才能 push。
 >
 > 访问端点**不在本篇强制开启**：默认拒绝全部公网/内网访问。生产优先内网 VPC；本地或外网 CI 再开公网并配白名单——见 [访问管理](manage-access.md)。docker login/push/pull 属 docker CLI（非 tccli；TCCLI 无镜像传输能力），在端点+Token 配好后于 [推送拉取镜像](../images/push-pull.md) 执行。
 >

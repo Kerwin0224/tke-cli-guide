@@ -83,7 +83,7 @@ tccli tcr DescribeTagRetentionRules --region <REGION> --RegistryId "<REGISTRY_ID
 
 - **latestPushedK（保留 N 个）**: 保留最近 N 个版本，数量固定。适合持续集成（每次推送保留最新 10 个）
 - **nDaysSinceLastPush（保留 N 天）**: 保留 N 天内版本，时间固定。适合按时间回滚的需求
-- **默认推荐**: `latestPushedK` + `Value=10`——多数场景保留最新 10 个够用
+- **默认推荐**: `latestPushedK` + `Value=10`——多数场景保留最新 10 个版本
 - **可修改**： 能，`ModifyTagRetentionRule` 修改规则
 
 ```bash
@@ -289,7 +289,7 @@ tccli tcr TerminateGCJob --RegistryId "<REGISTRY_ID>" --region <REGION>
 ## 收尾确认
 
 ```bash
-# ③ 跨步骤汇总：规则创建 + 执行记录 + 删除效果一次性核对（Verify 逐项查，这里汇总三步产物确认闭环）
+# 汇总核对：规则创建 + 执行记录 + 删除效果
 # 规则已创建且启用
 tccli tcr DescribeTagRetentionRules --region <REGION> --RegistryId "<REGISTRY_ID>" \
   --filter "RetentionPolicyList[0].{id:RetentionId,cron:CronSetting,disabled:Disabled}"
@@ -308,7 +308,7 @@ tccli tcr DescribeImages --region <REGION> --RegistryId "<REGISTRY_ID>" \
 # expected: ≤ RetentionRule.Value（保留数量上限）
 ```
 
-> 规则启用 + 执行 Succeed + 镜像数收敛到保留值 = 版本保留闭环完成，旧版本已按策略清理。
+> 规则启用 + 执行 Succeed + 镜像数收敛到保留值 = 版本保留配置完成，旧版本已按策略清理。
 
 ---
 

@@ -157,10 +157,10 @@ tccli tke DisableEventPersistence --region ap-guangzhou --ClusterId "<CLUSTER_ID
 
 ## 收尾确认
 
-> 独立维度（跨步骤汇总 + 删除保护终态）：除逐功能 Verify 外，确认三策略整体已生效且集群处于「删除受保护」安全终态（Verify 仅逐功能核对，未汇总安全终态）。
+> 独立维度（汇总核对 + 删除保护终态）：除上文各功能逐项验证外，确认三策略整体已生效且集群处于「删除受保护」安全终态（上文仅逐功能核对，未汇总安全终态）。
 
 ```bash
-# 汇总核对：加密 + 删除保护 + 事件持久化 + OPA 准入（Verify 未覆盖 OPA）
+# 汇总核对：加密 + 删除保护 + 事件持久化 + OPA 准入（上文验证未覆盖 OPA）
 tccli tke DescribeEncryptionStatus --region ap-guangzhou --ClusterId "<CLUSTER_ID>" \
   --filter "Status"
 tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet[?ClusterId=='<CLUSTER_ID>'] | [0].ClusterDeletionProtection"

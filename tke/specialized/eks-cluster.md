@@ -83,7 +83,7 @@ fused: true
 | `Containers[].GpuLimit` | 不传（CPU 实例无 GPU 概念） | 可选（该容器可用 GPU 上限，整数；须 ≤ `GpuCount`） | `Container.GpuLimit` 容器内 optional int |
 | 出参 `GpuType`/`GpuCount` | 空 / `0` | 与创建一致 | `DescribeEKSContainerInstances` 出参 |
 
-> **分叉铁律**：CPU 与 GPU 不是两个 Action、不是「先建 CPU 再升级 GPU」——同一 Action 调两次建**两个**实例；改规格走 `UpdateEKSContainerInstance`（`Containers[]` 覆盖式整体替换，须带上 `GpuLimit` 才能保留 GPU 配额）。GPU 库存不足时 Create 仍可能 exit 0 返回 `EksCiIds`，随后事件 `CreatePodSandboxFailed`（Message 含 `gpu instance types is empty` / `not found t4 gpu info`），须 `Describe`+`DescribeEKSContainerInstanceEvent` 确认 Running，勿凭 exit 码判可用。
+> **分叉约束**：CPU 与 GPU 不是两个 Action、不是「先建 CPU 再升级 GPU」——同一 Action 调两次建**两个**实例；改规格走 `UpdateEKSContainerInstance`（`Containers[]` 覆盖式整体替换，须带上 `GpuLimit` 才能保留 GPU 配额）。GPU 库存不足时 Create 仍可能 exit 0 返回 `EksCiIds`，随后事件 `CreatePodSandboxFailed`（Message 含 `gpu instance types is empty` / `not found t4 gpu info`），须 `Describe`+`DescribeEKSContainerInstanceEvent` 确认 Running，勿凭 exit 码判可用。
 
 ## 关键操作
 
@@ -339,7 +339,7 @@ tccli tke DescribeEKSClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>
 # expected: state=Running, id/name 与创建参数一致
 ```
 
-> EKS 集群 state=Running = 创建成功, 可进入 [关键操作]段管理。`DescribeEKSClusters` 入参是 `--ClusterIds`（数组 JSON），不是 `--ClusterId`。
+> EKS 集群 state=Running = 创建成功, 可进入 [关键操作](#关键操作) 管理。`DescribeEKSClusters` 入参是 `--ClusterIds`（数组 JSON），不是 `--ClusterId`。
 
 ---
 
@@ -362,7 +362,7 @@ tccli tke DescribeEKSClusters --region ap-guangzhou
 
 ## API 参考
 
-本篇覆盖 EKS / 容器实例相关 **15** 个 Action（与 chapter-plan 一致）:
+本篇覆盖 EKS / 容器实例相关 **15** 个 Action:
 
 | 分类 | API | 说明 |
 |------|-----|------|
@@ -378,12 +378,12 @@ tccli tke DescribeEKSClusters --region ap-guangzhou
 
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
 ```bash
-# 维度 1（跨步骤汇总）：集群 Running（Verify 已查 Status；此处再核名称与 ID 一致）
+# 维度 1（汇总核对）：集群 Running（上文已查 Status；此处再核名称与 ID 一致）
 tccli tke DescribeEKSClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]' \
   --filter "Clusters[0].{state:Status,name:ClusterName,id:ClusterId}"
 # expected: state=Running，id/name 与创建参数一致
 
-# 维度 2（衔接下一步前置）：kubeconfig 可拉取 → 可进入 kubectl / 容器实例管理
+# 维度 2（下一步前置）：kubeconfig 可拉取 → 可进入 kubectl / 容器实例管理
 tccli tke DescribeEKSClusterCredential --region ap-guangzhou --ClusterId "<CLUSTER_ID>" \
   --filter "Kubeconfig"
 # expected: 非空 kubeconfig 文本（含 apiVersion/clusters）→ EKS 集群闭环完成，可进容器实例或业务部署

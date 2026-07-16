@@ -92,7 +92,7 @@ tccli tcr DescribeNamespacePersonal --Namespace "" --Limit 10 --Offset 0
 
 ```bash
 tccli tcr CreateUserPersonal --Password "<PASSWORD>"
-# expected: exit 0, {"RequestId":"..."}（响应不含用户名；用户名=腾讯云账号 UIN，如 100031528779）
+# expected: exit 0, {"RequestId":"..."}（响应不含用户名；用户名=腾讯云账号 UIN，如 <UIN>）
 ```
 
 | 占位符 | 含义 | 约束 | 如何获取 |
@@ -213,19 +213,19 @@ tccli tcr DescribeNamespacePersonal --Namespace "<NAMESPACE_NAME>" --Limit 10 --
 
 > docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）
 ```bash
-# ② 业务可用性端到端：docker login + push 真正可达（Verify 查 TCR 侧记录存在，这里查端到端镜像传输成功）
+# 端到端：docker login + push 成功
 docker login ccr.ccs.tencentyun.com -u "<USERNAME>" -p "<PASSWORD>"
 # expected: Login Succeeded
 
 docker push ccr.ccs.tencentyun.com/<NAMESPACE_NAME>/<REPO_NAME>:v1
 # expected: digest: sha256:... Push complete
 
-# ④ 衔接下一步前置：镜像在个人版可被拉取（进高级管理/触发器前须确认镜像可用）
+# 镜像可被拉取（进入高级管理/触发器前确认镜像可用）
 docker pull ccr.ccs.tencentyun.com/<NAMESPACE_NAME>/<REPO_NAME>:v1
 # expected: Pull complete / Status: Image is up to date
 ```
 
-> docker login 成功 + push 成功 + pull 成功 = 个人版管理闭环完成，可进入高级管理（触发器/复制）。push 失败说明用户/命名空间/仓库配置有缺。
+> docker login 成功 + push 成功 + pull 成功 = 个人版管理配置完成，可进入高级管理（触发器/复制）。push 失败说明用户/命名空间/仓库配置有缺。
 
 ---
 

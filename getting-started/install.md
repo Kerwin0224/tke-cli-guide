@@ -40,7 +40,7 @@ TCCLI 是腾讯云 API 的命令行客户端，用 Python 写成。本指南统�
 > # expected: 最新版本或更高
 > ```
 >
-> 本指南命令示例基于近期 `tccli` 版本；tccli 持续新增/调整 Action 与字段，若你的版本不同，优先以 `tccli <service> help` / `help --detail` 的实时契约为准。
+> 本指南命令示例基于近期 `tccli` 版本；TCCLI 持续新增/调整 Action 与字段，若你的版本不同，优先以 `tccli <service> help` / `help --detail` 的实时契约为准。
 
 ## 准备工作
 
@@ -124,9 +124,9 @@ tccli tke help 2>&1 | head -3
 
 ## 下一步
 
-### 冷启动意图序（弱校验）
+### 新手操作顺序
 
-官方新手指引意图序（只对序、不抄操作流）：**注册实名 → 服务角色授权 → 创建标准集群 → 部署工作负载 → 运维（连接/升级/节点/网络/日志/监控/TCR）**。本仓库对应：
+官方新手指引顺序：**注册实名 → 服务角色授权 → 创建标准集群 → 部署工作负载 → 运维（连接/升级/节点/网络/日志/监控/TCR）**。本指南对应：
 
 | 序 | 意图 | 文档 |
 |:--:|:-----|:-----|
@@ -134,7 +134,7 @@ tccli tke help 2>&1 | head -3
 | 2 | 配凭证 + 首次 TKE 服务授权（`TKE_QCSRole`；VPC-CNI 另需 `IPAMDofTKE_QCSRole`） | [配置凭证](credentials.md) · [服务角色总表](credentials.md#服务角色tke--ipamd--as--tcr--可观测) · [服务授权 43416](https://cloud.tencent.com/document/product/457/43416) |
 | 3 | 备 VPC/子网 | [准备 VPC](prepare-vpc.md) |
 | 4 | 建托管标准集群 | [TKE Quickstart](../quickstart/tke-first-cluster.md) · [创建集群](../tke/clusters/create.md) |
-| 5 | 上线前检查 | [Quickstart — 上线前检查](../quickstart/tke-first-cluster.md#上线前检查弱校验) |
+| 5 | 上线前检查 | [Quickstart — 上线前检查](../quickstart/tke-first-cluster.md#上线前检查) |
 
 - [配置凭证](credentials.md) — 安装后配置 CAM 凭证
 - [TKE 快速入门](../quickstart/tke-first-cluster.md) — 创建第一个集群

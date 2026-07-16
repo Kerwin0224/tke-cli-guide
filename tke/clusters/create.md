@@ -266,7 +266,7 @@ tccli cam DescribeRoleList --Page 1 --Rp 100 \
 
 ## 操作步骤
 
-> ⚠️ **高危操作**：Region 选错不可迁移；NetworkType 创建后不可切换；IPVS 开启后不可关闭；删除保护未开 = 裸奔。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
+> ⚠️ **高危操作**：Region 选错不可迁移；NetworkType 创建后不可切换；IPVS 开启后不可关闭；删除保护未开则集群可被直接删除。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
 
 > ⚠️ **本文创建的是空集群（控制面）**：`CreateCluster` 后 `ClusterState=Running` 但 `ClusterRunningNodeNum=0`，**无法运行 Pod**。
 >
@@ -537,9 +537,9 @@ tccli tke DescribeClusterKubeconfig --region ap-guangzhou --ClusterId "<CLUSTER_
 
 ## 下一步
 
-> 集群 `Running` 只是第 1 步（空控制面）。若目标是「本机可操作、可跑 Pod」：
+> 集群 `Running` 只是第 1 步（空控制面）。若目标是「本机可操作、可运行 Pod」：
 
-- **[创建节点池](../nodes/nodepool-create.md)** / [新建 CVM 作节点](../nodes/instance-ops.md) — **必做**：无 worker 不能跑 Pod，也不能开公网端点
+- **[创建节点池](../nodes/nodepool-create.md)** / [新建 CVM 作节点](../nodes/instance-ops.md) — **必做**：无 worker 不能运行 Pod，也不能开公网端点
 - **[管理端点](../networking/endpoints.md)** — **本机/公网 CI 必做**：`CreateClusterEndpoint` → ACL → `ClusterExternalEndpoint` 改写 kubeconfig → `kubectl get --raw=/healthz`
 - [获取 kubeconfig](../security/auth.md) — 证书/凭证面（须配合端点）
 - [查询集群](query.md) — filter + JMESPath

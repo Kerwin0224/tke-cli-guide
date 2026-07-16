@@ -164,12 +164,12 @@ tccli tke DescribeExternalNode --ClusterId <CLUSTER_ID> \
 ## 收尾确认
 
 ```bash
-# 业务可用性：节点已注册上线（核心交付物）
+# 端到端核对：节点已注册上线（核心交付物）
 tccli tke DescribeExternalNode --ClusterId "<CLUSTER_ID>" \
   --NodePoolId "<NODEPOOL_ID>" --region ap-guangzhou
 # expected: 返回 Nodes[]+TotalCount>=1，节点对象非空
 
-# 跨步骤汇总：支持开启 → 池存在 → 节点注册 → 脚本可用
+# 汇总核对：支持开启 → 池存在 → 节点注册 → 脚本可用
 tccli tke DescribeExternalNodeSupportConfig --ClusterId "<CLUSTER_ID>" --region ap-guangzhou \
   --filter "{status:Status,network:NetworkType}" \
   && tccli tke DescribeExternalNodePools --ClusterId "<CLUSTER_ID>" --region ap-guangzhou \

@@ -137,7 +137,7 @@ kubectl describe pod -l app=my-app | /usr/bin/grep -A2 "Events:"
 
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
 ```bash
-# 业务可用性：Secret 仍在时再部署一次，确认链路可复现（Verify 已查首次 Running，此处不先删 Secret）
+# 业务可用性：Secret 仍在时再部署一次，确认链路可复现（步骤验证已查首次 Running，此处不先删 Secret）
 kubectl create deployment verify-app --image="<REGISTRY_DOMAIN>/<NAMESPACE>/<REPO>:<TAG>"
 # expected: deployment.apps/verify-app created
 
@@ -152,7 +152,7 @@ kubectl delete deployment verify-app
 # expected: deployment.apps "verify-app" deleted
 ```
 
-> Secret 仍在时二次部署 Pod ready=true = TKE 拉取 TCR 镜像链路可复现，端到端闭环完成。
+> Secret 仍在时二次部署 Pod ready=true = TKE 拉取 TCR 镜像链路可复现，端到端配置完成。
 
 ## 清理
 

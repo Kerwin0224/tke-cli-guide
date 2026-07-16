@@ -97,7 +97,7 @@ tccli tcr DescribeInstanceCustomizedDomain --region <REGION> --RegistryId <REGIS
 }
 ```
 
-> 上图为空结果示例（未绑定时，或 `RegistryId` 不存在时 API 亦可能返回空列表而非报错）。绑定成功后 `DomainInfoList` 含域名对象（字段含 `DomainName`/`CertId`/`Status`），`TotalCount >= 1`。`Status` 枚举：`SUCCESS` / `FAILURE` / `CREATING` / `DELETING`。
+> 以上为空结果示例（未绑定时，或 `RegistryId` 不存在时 API 亦可能返回空列表而非报错）。绑定成功后 `DomainInfoList` 含域名对象（字段含 `DomainName`/`CertId`/`Status`），`TotalCount >= 1`。`Status` 枚举：`SUCCESS` / `FAILURE` / `CREATING` / `DELETING`。
 
 ### 步骤 4：配置 DNS 解析
 
@@ -150,12 +150,12 @@ tccli tcr DescribeInstanceCustomizedDomain --region ap-guangzhou --RegistryId "<
   --filter "DomainInfoList[0].{domain:DomainName,cert:CertId,status:Status}"
 # expected: domain 与配置一致, cert 与绑定参数一致, status 正常
 
-# ② 业务可用性端到端：用自定义域名 docker login 真正成功（Verify 查绑定记录存在，这里查端到端通过自有域名可达仓库）
+# 用自定义域名 docker login 端到端确认可达（绑定记录存在后，再验证自有域名可登录仓库）
 docker login <DOMAIN_NAME> --username <USERNAME> --password <TOKEN>
 # expected: Login Succeeded（CNAME 已生效 + 证书校验通过 + TCR 侧路由命中）
 ```
 
-> 域名绑定记录正常 + docker login <DOMAIN_NAME> Login Succeeded = 自定义域名闭环完成。docker login 失败说明 DNS 未生效、证书不匹配或端点未开。
+> 域名绑定记录正常 + docker login <DOMAIN_NAME> Login Succeeded = 自定义域名配置完成。docker login 失败说明 DNS 未生效、证书不匹配或端点未开。
 
 ---
 

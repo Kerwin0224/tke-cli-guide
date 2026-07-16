@@ -16,7 +16,7 @@ fused: true
 
 - `DescribeClusterReleases` → 目标命名空间无应用 Release，需 `CreateClusterRelease` 部署 Chart
 - `DescribeClusterReleases` → `Status=failed` 或长时间 `pending-upgrade`，Release 创建/升级后状态异常
-- `DescribeClusterReleaseHistory` 显示需回滚到历史版本，`RollbackClusterRelease` 后版本未生效 — 看 [故障恢复]段
+- `DescribeClusterReleaseHistory` 显示需回滚到历史版本，`RollbackClusterRelease` 后版本未生效 — 看 [故障恢复](#故障恢复)
 
 
 ## 概述
@@ -248,7 +248,14 @@ tccli tke DescribeRollOutSequences --region <REGION> --Limit 10
 ```
 ```json
 {
-    "Sequences": [{"Name": "example-sequence", "SequenceFlows": [{"Tags": [{"Key": "Env", "Value": ["prod"]}]}]}]}
+    "Sequences": [
+        {
+            "Name": "example-sequence",
+            "SequenceFlows": [
+                {"Tags": [{"Key": "Env", "Value": ["prod"]}]}
+            ]
+        }
+    ]
 }
 ```
 
@@ -289,8 +296,8 @@ tccli tke ModifyClusterRollOutSequenceTags --region ap-guangzhou \
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
 <!-- tccli管Release生命周期，kubectl查部署资源状态；helm为能力边界（tccli无helm原生命令），非tccli边界 -->
 ```bash
-# 跨步骤汇总三项合一：Release Status=deployed + 历史版本数 + 关联资源 Ready
-# 1. Release 已部署（Verify 查 Status/版本/Revision，此处汇总）
+# 汇总核对三项：Release Status=deployed + 历史版本数 + 关联资源 Ready
+# 1. Release 已部署（上文已查 Status/版本/Revision，此处汇总）
 tccli tke DescribeClusterReleases --region ap-guangzhou --ClusterId "<CLUSTER_ID>" \
   --filter "ReleaseSet[?Name=='<RELEASE_NAME>'].{name:Name,status:Status,rev:Revision}"
 # expected: status=deployed
@@ -301,13 +308,13 @@ tccli tke DescribeClusterReleaseHistory --region ap-guangzhou \
   --filter "Total"
 # expected: Total ≥1（创建=1，升级/回滚后递增）
 
-# 3. 关联资源 Ready（业务可用性端到端：Release 管理的 K8s 资源真就绪）
+# 3. 关联资源 Ready（端到端：Release 管理的 K8s 资源真就绪）
 kubectl get all -n <NAMESPACE> -l app.kubernetes.io/instance=<RELEASE_NAME> \
   --no-headers | awk '{print $1, $2}' | head -10
 # expected: 资源列表非空且 STATUS 无 Failed → 应用发布闭环完成
 ```
 
-> Release deployed + 历史版本数 ≥1 + 关联资源 Ready = 跨步骤闭环。Verify 段查 Release 字段，此处汇总 Release 状态 + 修订历史 + 部署资源就绪三项，确认应用真可用（业务可用性端到端）。
+> Release deployed + 历史版本数 ≥1 + 关联资源 Ready = 配置完成。上文验证段查 Release 字段，此处汇总 Release 状态 + 修订历史 + 部署资源就绪三项，确认应用可用。
 
 ---
 

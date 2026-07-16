@@ -22,7 +22,7 @@ fused: true
 
 - 标准集群内需要免 CVM、按 Pod 用量计费的容量 — 创建虚拟节点 / 超级节点池
 - `DescribeClusterVirtualNodePools` 返回空，或需新增超级节点池
-- 虚拟节点问题（Pod Pending / 排水失败 / 子网 IP 不足）— 看 [故障恢复]段
+- 虚拟节点问题（Pod Pending / 排水失败 / 子网 IP 不足）— 看 [故障恢复](#故障恢复)
 
 ## 准备工作
 
@@ -205,12 +205,12 @@ tccli tke DeleteClusterVirtualNodePool --ClusterId "<ID>" --NodePoolId "<POOL>"
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
 <!-- tccli管虚拟节点池CRUD，kubectl验证节点Ready并测试Pod调度到虚拟节点(K8s层观测)，非tccli边界 -->
 ```bash
-# ②业务可用性端到端: 虚拟节点 eklet-xxx Ready 且 Pod 可调度到虚拟节点（Verify 只查 LifeState，未查 Pod 真能调度）
+# 端到端核对：虚拟节点 eklet-xxx Ready 且 Pod 可调度到虚拟节点（仅查 LifeState 不够，还须确认 Pod 可调度）
 kubectl get nodes | grep eklet
 # expected: 含 eklet-xxx 虚拟节点且 Ready（非仅节点池 LifeState=normal）
 
 kubectl run nginx-test --image=nginx --restart=Never --overrides='{"spec":{"nodeName":"<EKLET_NODE_NAME>"}}'
-# expected: Pod Pending→Running（Pod 成功调度到虚拟节点，业务可用性验证）
+# expected: Pod Pending→Running（Pod 成功调度到虚拟节点）
 kubectl delete pod nginx-test
 ```
 

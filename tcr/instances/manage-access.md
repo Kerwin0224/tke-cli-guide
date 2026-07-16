@@ -27,7 +27,7 @@ TCR 实例创建后**默认拒绝全部公网与内网访问**。登录/推拉�
 | 开启内网访问 | 允许指定 VPC 内访问 | 腾讯云内推拉推荐 | 须配 VPC 私有域解析；占用 VPC 接入配额（见 [配额](../reference/quotas.md)） |
 | 开启公网访问 | 允许通过互联网访问 | 仅本地/外网 CI 需要 | 无白名单时全互联网可尝试登录；产生 COS 公网流量费 |
 | 创建 Token | 生成 docker login 凭证 | 是 | Token 泄露 = 可 push/pull；值只显示一次 |
-| 配置白名单 | 限制公网访问来源 IP | 公网场景强烈建议 | 白名单外 IP 被拒绝 |
+| 配置白名单 | 限制公网访问来源 IP | 公网场景建议配置 | 白名单外 IP 被拒绝 |
 
 > **为什么 docker 出现在本篇**：`docker login` 用于确认端点与 Token 是否真正可用。TCCLI 只管理端点/凭证/白名单，**不提供** Registry 协议登录或镜像传输（无 daemon / 无 `docker login` 等价 Action）——能力终止处才接 docker。
 
@@ -72,7 +72,7 @@ tccli tcr ManageInternalEndpoint \
 tccli tcr DescribeInternalEndpoints \
   --region ap-guangzhou \
   --RegistryId "<REGISTRY_ID>"
-# expected: AccessVpcSet 含目标 VpcId/SubnetId；项字段 Status 示例为 Running（api.json/官方示例；空接入时 AccessVpcSet 可为 null、TotalCount=0）
+# expected: AccessVpcSet 含目标 VpcId/SubnetId；项字段 Status 示例为 Running（官方示例；空接入时 AccessVpcSet 可为 null、TotalCount=0）
 ```
 
 > 内网域名解析：链路建立后，若 VPC 内无法解析实例域名，须在控制台「管理自动解析」或 Private DNS 配置（见官方内网访问控制）。TCCLI 侧对应 `CreateInternalEndpointDns` 等；本篇只保证接入链路创建。
@@ -153,7 +153,7 @@ docker login <REGISTRY_DOMAIN> --username <USERNAME> --password <TOKEN>
 
 ### 步骤 5：配置公网白名单（开了公网时）
 
-强烈建议: 限制公网访问来源。不要用 `0.0.0.0/0`（对全互联网开放）除非你清楚知道风险；正式启用前删除过宽规则。
+建议限制公网访问来源。不要用 `0.0.0.0/0`（对全互联网开放）除非你清楚知道风险；正式启用前删除过宽规则。
 
 > 白名单策略（`CreateSecurityPolicy` / `DeleteSecurityPolicy` / `ModifySecurityPolicy` / 多策略批量 `CreateMultipleSecurityPolicy`）的完整命令见 [访问控制 — 公网白名单](../access/manage.md#createsecuritypolicy公网白名单)。本篇聚焦实例级访问开关（端点 + Token），白名单写操作归访问控制篇，避免双篇重复。
 
@@ -229,7 +229,7 @@ tccli tcr DeleteSecurityPolicy --RegistryId "<ID>" --PolicyIndex <INDEX>  # 见 
 
 > docker CLI（Registry 登录可用性确认，非 tccli；TCCLI 不提供 docker daemon 操作能力）
 ```bash
-# 跨步骤汇总：至少一条可达路径（内网 AccessVpcSet 或公网 Opened）+ Token Enabled
+# 至少一条可达路径（内网 AccessVpcSet 或公网 Opened）+ Token Enabled
 tccli tcr DescribeInternalEndpoints --region ap-guangzhou --RegistryId "<REGISTRY_ID>" --filter "AccessVpcSet[].{vpc:VpcId,subnet:SubnetId,status:Status}"
 # expected: 内网路径时非空
 
@@ -243,12 +243,12 @@ tccli tcr DescribeInstanceToken --region ap-guangzhou --RegistryId "<REGISTRY_ID
 tccli tcr DescribeSecurityPolicies --region ap-guangzhou --RegistryId "<REGISTRY_ID>" --filter "SecurityPolicySet[].CidrBlock"
 # expected: 公网 Opened 时包含你的出口 IP（如 "203.0.113.10/32"）
 
-# 业务可用性端到端：docker login 真正可达
+# docker login 端到端确认可达
 docker login <REGISTRY_DOMAIN> --username <USERNAME> --password <TOKEN>
 # expected: Login Succeeded
 ```
 
-> （内网已接入 **或** 公网 Opened）+ Token Enabled +（公网时白名单含 IP）+ docker Login Succeeded = 访问管理闭环完成，可进入推送镜像。路径与凭证缺一则 docker login 失败。
+> （内网已接入 **或** 公网 Opened）+ Token Enabled +（公网时白名单含 IP）+ docker Login Succeeded = 访问管理配置完成，可进入推送镜像。路径与凭证缺一则 docker login 失败。
 
 ---
 

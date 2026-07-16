@@ -13,7 +13,7 @@ tccli tcr DescribeInstances --region ap-guangzhou
 # expected: { "TotalCount": "≥0", "Registries": [...] }
 ```
 
-正常输出： 每个实例 `Status: "Running"`。任何非 Running 状态（`Creating`/`Deleting`/异常）或实例完全不出现在列表中，见 [状态机](reference/states.md) 或下方。
+正常输出： 每个实例 `Status: "Running"`。任何非 Running 状态（`Pending`/`Deploying`/`Deleting`/异常）或实例完全不出现在列表中，见 [状态机](reference/states.md) 或下方。
 
 ## 诊断工具箱
 

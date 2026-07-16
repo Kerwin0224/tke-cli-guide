@@ -33,7 +33,7 @@ fused: true
 
 | 场景 | 是否启用 | 说明 |
 |:-----|:--------:|:-----|
-| 大镜像频繁拉取（>1GB） | ✅ | CFS 缓存显著降低延迟 |
+| 大镜像频繁拉取（>1GB） | ✅ | CFS 缓存降低延迟 |
 | 小镜像 / 拉取频次低 | ❌ | CFS 有存储成本，收益不显 |
 | VPC 内网拉取为主 | ⚠️ | 内网本身较快，加速收益有限 |
 
@@ -148,10 +148,10 @@ tccli tcr DeleteImageAccelerateService --region <REGION> --RegistryId <REGISTRY_
 ## 收尾确认
 
 ```bash
-# 一次性核对：镜像加速服务已开启且后端就绪
+# 核对镜像加速服务已开启且后端就绪
 tccli tcr DescribeImageAccelerateService --region <REGION> --RegistryId "<REGISTRY_ID>" \
   --filter "{enable:IsEnable,vip:CFSVIP,status:Status}"
-# expected: enable=true, vip 非空, status 正常 → 加速闭环完成
+# expected: enable=true, vip 非空, status 正常 → 加速服务配置完成
 ```
 
 ---

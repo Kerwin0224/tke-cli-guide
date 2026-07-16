@@ -12,7 +12,7 @@ fused: false
 
 - `DescribeClusters` → `ClusterStatus=Running` 但 `Property` 解析出 `NetworkType` 非 `CiliumOverlay`，要新建集群选此模型（创建后不可切换）
 - 新建集群时评估三种 Pod 网络模型（Global Router / VPC-CNI / CiliumOverlay），需要 Cilium 数据面且不占 VPC IP
-- CiliumOverlay 集群创建后 `AddClusterCIDR` 扩 Pod 网段报错（此模型不支持），看 [限制与故障恢复]段
+- CiliumOverlay 集群创建后 `AddClusterCIDR` 扩 Pod 网段报错（此模型不支持），看 [限制与故障恢复](#限制与故障恢复)
 
 
 ## 概述
@@ -143,7 +143,7 @@ tccli tke DescribeClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]'
   --filter "Clusters[0].{state:ClusterStatus,name:ClusterName,property:Property,subnet:ClusterNetworkSettings.SubnetId}"
 # expected: state=Running；property 解析含 NetworkType=CiliumOverlay；subnet 为创建时 SubnetId
 
-# 衔接下一步前置：kubeconfig 可拉取（进创建节点池前须能连通集群）
+# 下一步前置：kubeconfig 可拉取（进创建节点池前须能连通集群）
 tccli tke DescribeClusterKubeconfig --region ap-guangzhou --ClusterId "<CLUSTER_ID>" \
   --filter "Kubeconfig" --output text | head -1
 # expected: apiVersion: v1

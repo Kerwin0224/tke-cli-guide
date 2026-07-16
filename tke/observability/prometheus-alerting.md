@@ -19,7 +19,7 @@ fused: true
 
 - `DescribePrometheusAlertPolicy` 返回空，需为 Prometheus 实例创建告警策略监控指标越阈
 - 告警触发但通知未送达，`DescribePrometheusGlobalNotification` → `Enabled=false` 或接收组为空
-- `DescribePrometheusAlertHistory` 无记录，规则 PromQL 永假或 Agent 采集未生效 — 看 [故障恢复]段
+- `DescribePrometheusAlertHistory` 无记录，规则 PromQL 永假或 Agent 采集未生效 — 看 [故障恢复](#故障恢复)
 
 
 ## 概述

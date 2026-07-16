@@ -204,10 +204,10 @@ tccli tke AddExistedInstances --version 2018-05-25 \
 
 ### 新建 CVM 作节点（CreateClusterInstances）
 
-> `CreateClusterInstances` 是新建 CVM 作节点（`RunInstancePara` 透传 CVM `RunInstances` JSON），与 `AddExistedInstances`（接入已有实例）区别。**不依赖 AS 节点池**，适合「只要 1 台普通 Worker 跑通」；缺 `AS_QCSRole` 时可用本路径绕过节点池。ECM/Edge 见 [边缘集群](../specialized/edge-cluster.md)。
+> `CreateClusterInstances` 是新建 CVM 作节点（`RunInstancePara` 透传 CVM `RunInstances` JSON），与 `AddExistedInstances`（接入已有实例）区别。**不依赖 AS 节点池**，适合「仅需 1 台普通 Worker 做最小验证」；缺 `AS_QCSRole` 时可用本路径绕过节点池。ECM/Edge 见 [边缘集群](../specialized/edge-cluster.md)。
 
 ```bash
-# 最小可跑：1 台 POSTPAID + 指定子网/安全组/机型（字段以 cvm RunInstances 契约为准）
+# 最小验证：1 台 POSTPAID + 指定子网/安全组/机型（字段以 cvm RunInstances 契约为准）
 # 机型无货时先 DescribeZoneInstanceConfigInfos 取 Status=SELL 最小规格
 tccli tke CreateClusterInstances --version 2018-05-25 \
   --ClusterId "<CLUSTER_ID>" --region ap-guangzhou \
@@ -296,13 +296,13 @@ tccli tke CreateClusterInstances --version 2018-05-25 \
 
 > 本篇是多操作合集（查询/启停/删除/驱逐/扩缩/修改/GPU/接入），无统一收尾命令。每类操作执行后用下表对应命令确认该操作产物：
 
-| 操作类型 | 确认命令 | 预期（②业务可用性端到端） |
+| 操作类型 | 确认命令 | 预期（端到端可用性） |
 |:---------|:---------|:--------------------------|
-| 启停/重启 | `tccli tke DescribeClusterMachines --version 2022-05-01 --ClusterId "<CLUSTER_ID>" --Filters '[{"Name":"InstanceIds","Values":["<ID>"]}]'` | ②业务可用性: InstanceState=Stopped(停止后)/Running(启动后)；启动后 `kubectl get nodes` 节点须 Ready |
-| 删除节点 | `tccli tke DescribeClusterInstances --version 2018-05-25 --ClusterId "<CLUSTER_ID>" --InstanceIds '["<ID>"]'` | ②业务可用性: 目标节点不在列表（已删）；剩余 `kubectl get nodes` 无 NotReady |
-| 驱逐 (kubectl) | `kubectl get nodes <NODE_NAME>` | ②业务可用性: 节点 SchedulingDisabled + Pod 已迁移无 Pending |
-| 扩缩容 | 见 [扩缩容节点池](nodepool-scale.md) 收尾确认 | ③跨步骤汇总: 新版 LifeState=Running + Replicas==ReadyReplicas；旧版 LifeState=normal + DesiredNodesNum==NodeCountSummary |
-| 接入已有 CVM | `tccli tke DescribeClusterInstances --version 2018-05-25 --ClusterId "<CLUSTER_ID>" --InstanceIds '["<ID>"]'` | ②业务可用性: 接入节点 InstanceState=running 且 `kubectl get nodes` 含该节点 Ready |
+| 启停/重启 | `tccli tke DescribeClusterMachines --version 2022-05-01 --ClusterId "<CLUSTER_ID>" --Filters '[{"Name":"InstanceIds","Values":["<ID>"]}]'` | InstanceState=Stopped(停止后)/Running(启动后)；启动后 `kubectl get nodes` 节点须 Ready |
+| 删除节点 | `tccli tke DescribeClusterInstances --version 2018-05-25 --ClusterId "<CLUSTER_ID>" --InstanceIds '["<ID>"]'` | 目标节点不在列表（已删）；剩余 `kubectl get nodes` 无 NotReady |
+| 驱逐 (kubectl) | `kubectl get nodes <NODE_NAME>` | 节点 SchedulingDisabled + Pod 已迁移无 Pending |
+| 扩缩容 | 见 [扩缩容节点池](nodepool-scale.md) 收尾确认 | 新版 LifeState=Running + Replicas==ReadyReplicas；旧版 LifeState=normal + DesiredNodesNum==NodeCountSummary |
+| 接入已有 CVM | `tccli tke DescribeClusterInstances --version 2018-05-25 --ClusterId "<CLUSTER_ID>" --InstanceIds '["<ID>"]'` | 接入节点 InstanceState=running 且 `kubectl get nodes` 含该节点 Ready |
 
 ---
 

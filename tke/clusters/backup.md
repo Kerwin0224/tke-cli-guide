@@ -217,18 +217,18 @@ tccli tke DeleteBackupStorageLocation --region <REGION> --Name <LOCATION_NAME>
 > Velero CLI（非 tccli；tke API 无备份执行 Action，灾备由 Velero 插件承担）
 <!-- kubectl检查Velero插件就绪，tccli无K8s Pod管理能力，非tccli边界 -->
 ```bash
-# 衔接下一步前置：Velero 插件就绪（backup.md 声明的备份执行前置，Verify 查 State=Available 但没查 Velero 插件能否执行备份）
+# 核对 Velero 插件就绪（执行备份的前置；仅 State=Available 不足以证明可备份）
 kubectl get pods -n velero-system
 # expected: velero pod Running（Velero 插件就绪，可执行 velero backup create）
 
-# 存储位置可用（步骤 3 Verify 已核 State=Available，此处核对接通性）
+# 核对存储位置可用（步骤 3 已核 State=Available，此处再核对接通性）
 tccli tke DescribeBackupStorageLocations --region <REGION> \
   --Names '["<LOCATION_NAME>"]' \
   --filter "BackupStorageLocationSet[0].{name:Name,state:State,bucket:Bucket}" --output text
 # expected: state=Available → 存储位置可达
 ```
 
-> 存储位置 `State=Available` + Velero 插件 pod `Running` = 备份前置就绪，可衔接 [执行备份与恢复（Velero 边界）](#执行备份与恢复velero-边界) 段。**业务可用性边界**：tccli 仅管存储位置 CRUD，执行备份须 Velero 插件就绪（见 [§概述](#概述) 产品边界警告）；Velero 未装时存储位置配好也无法备份。
+> 存储位置 `State=Available` + Velero 插件 pod `Running` = 备份前置就绪，可进入 [执行备份与恢复（Velero 边界）](#执行备份与恢复velero-边界) 段。**能力边界**：tccli 仅管存储位置 CRUD，执行备份须 Velero 插件就绪（见 [§概述](#概述) 产品边界警告）；Velero 未装时存储位置配好也无法备份。
 
 ## 下一步
 
