@@ -23,8 +23,9 @@ fused: false
 | 规则维度 | 作用 | 示例 |
 |:---------|:-----|:-----|
 | 仓库匹配 | 按仓库名模式限定 | `prod-*` 匹配所有 prod 开头仓库 |
-| Tag 匹配 | 按Tag 名模式限定 | `latest`/`v*` |
-| 装饰 | 匹配或排除 | `matches`（匹配）/ `excludes`（排除） |
+| Tag 匹配 | 按 Tag 名模式限定 | `latest`/`v*` |
+| 仓库装饰 | 仓库匹配或排除 | **`repoMatches` / `repoExcludes`**（非 `matches`） |
+| Tag 装饰 | Tag 匹配或排除 | `matches` / `excludes` |
 
 > 规则作用于命名空间级别。规则创建后立即生效，匹配的 Tag 被 push 覆盖时报 `denied`。
 >
@@ -50,11 +51,11 @@ fused: false
 | Rule | object | 是 | 规则对象（四字段均须给出） | `InvalidParameterValue` |
 | Rule.RepositoryPattern | string | 是 | 仓库匹配模式，如 `**`（全部）/`prod-*` | 作用范围错 |
 | Rule.TagPattern | string | 是 | Tag 匹配模式，如 `latest`/`v*` | 作用范围错 |
-| Rule.RepositoryDecoration | string | 是 | `matches`/`excludes` | 匹配逻辑错 |
-| Rule.TagDecoration | string | 是 | `matches`/`excludes` | 匹配逻辑错 |
+| Rule.RepositoryDecoration | string | 是 | **`repoMatches` / `repoExcludes`**（仓库侧；勿写 `matches`） | 匹配逻辑错 / `InvalidParameterValue` |
+| Rule.TagDecoration | string | 是 | `matches` / `excludes`（Tag 侧） | 匹配逻辑错 |
 | Rule.Disabled | boolean | 否 | 是否禁用 | 规则不生效 |
 
-> `Pattern` 支持 glob：`**` 匹配全部，`prod-*` 匹配前缀，`v*` 匹配 v 开头。`Decoration=matches` 表示匹配 Pattern 的生效；`excludes` 表示排除。
+> `Pattern` 支持 glob：`**` 匹配全部，`prod-*` 匹配前缀，`v*` 匹配 v 开头。仓库侧装饰枚举是 `repoMatches`/`repoExcludes`；Tag 侧是 `matches`/`excludes`。`repoMatches`/`matches` 表示匹配 Pattern 的生效；`repoExcludes`/`excludes` 表示排除。
 
 ## 应用
 
@@ -62,9 +63,10 @@ fused: false
 
 ```bash
 # 命名空间下所有仓库的 latest Tag 不可覆盖
+# RepositoryDecoration 用 repoMatches（非 matches）；TagDecoration 用 matches
 tccli tcr CreateImmutableTagRules --region <REGION> \
   --RegistryId "<REGISTRY_ID>" --NamespaceName "<NAMESPACE_NAME>" \
-  --Rule '{"RepositoryPattern":"**","TagPattern":"latest","RepositoryDecoration":"matches","TagDecoration":"matches"}'
+  --Rule '{"RepositoryPattern":"**","TagPattern":"latest","RepositoryDecoration":"repoMatches","TagDecoration":"matches"}'
 # expected: exit 0, 返回 RuleId
 ```
 
@@ -79,7 +81,7 @@ tccli tcr CreateImmutableTagRules --region <REGION> \
 # 所有 v 开头的 Tag（版本号）不可覆盖，防止发版后被篡改
 tccli tcr CreateImmutableTagRules --region <REGION> \
   --RegistryId "<REGISTRY_ID>" --NamespaceName "<NAMESPACE_NAME>" \
-  --Rule '{"RepositoryPattern":"**","TagPattern":"v*","RepositoryDecoration":"matches","TagDecoration":"matches"}'
+  --Rule '{"RepositoryPattern":"**","TagPattern":"v*","RepositoryDecoration":"repoMatches","TagDecoration":"matches"}'
 # expected: exit 0
 ```
 
@@ -109,10 +111,12 @@ docker push <REGISTRY_DOMAIN>/<NAMESPACE_NAME>/<REPO>:latest
 
 ```bash
 # 禁用规则（不删除，保留配置）
+# ModifyImmutableTagRules 顶层必填 --RuleId，Rule 对象内字段按需覆盖
 tccli tcr ModifyImmutableTagRules --region <REGION> \
   --RegistryId "<REGISTRY_ID>" --NamespaceName "<NAMESPACE_NAME>" \
-  --Rule '{"RuleId":<RULE_ID>,"Disabled":true}'
-# expected: exit 0
+  --RuleId <RULE_ID> \
+  --Rule '{"RepositoryPattern":"**","TagPattern":"latest","RepositoryDecoration":"repoMatches","TagDecoration":"matches","Disabled":true}'
+# expected: exit 0；缺 --RuleId 报 the following arguments are required: --RuleId
 
 # 或删除规则
 tccli tcr DeleteImmutableTagRules --region <REGION> \
@@ -127,7 +131,7 @@ tccli tcr DeleteImmutableTagRules --region <REGION> \
 | 现象 | 诊断 | 根因 | 修复 |
 |:--------|:----------|:------------|:-----|
 | `ResourceNotFound` | `DescribeNamespaces` 核对 | 命名空间不存在 | 先 `CreateNamespace` |
-| `InvalidParameterValue` | 检查 Rule JSON | Pattern/Decoration 拼错 | Decoration 用 `matches`/`excludes` |
+| `InvalidParameterValue` | 检查 Rule JSON | Pattern/Decoration 拼错 | 仓库侧用 `repoMatches`/`repoExcludes`，Tag 侧用 `matches`/`excludes` |
 | `LimitExceeded` | `DescribeImmutableTagRules` 看数量 | 规则达上限 | 删除闲置规则 |
 | `FailedOperation` | `DescribeInstanceStatus` 查看状态 | 实例非 Running | 等实例 Running |
 

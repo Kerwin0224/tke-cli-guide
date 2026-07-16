@@ -99,7 +99,8 @@ tccli tcr DescribeInternalEndpoints --region <REGION> --RegistryId "<REGISTRY_ID
 | Name | string | 是 | 服务账号名，实例内唯一 | `InvalidParameter` |
 | Permissions | list | 是 | 权限列表（命名空间 + 读/写） | `InvalidParameterValue` |
 | Description | string | 否 | 描述 | — |
-| Duration | int | 否 | 有效期秒数 | — |
+| Duration | int | 否 | 有效期（**单位：天**，非秒），从当前时间起算，优先级高于 `ExpiresAt` | — |
+| ExpiresAt | int | 否 | 过期时间戳（**单位：毫秒**） | — |
 | Disable | boolean | 否 | 是否禁用 | — |
 
 ## 操作步骤
@@ -139,8 +140,8 @@ tccli tcr CreateSecurityPolicy --region <REGION> \
 tccli tcr CreateServiceAccount --region <REGION> \
   --RegistryId "<REGISTRY_ID>" --Name "<SA_NAME>" \
   --Permissions '[{"Resource":"prod","Actions":["tcr:PushRepository","tcr:PullRepository"]}]' \
-  --Duration 2592000
-# expected: exit 0, 返回服务账号凭证（Permissions 用 Resource=命名空间 + Actions 列表，非 NamespaceName/Access）
+  --Duration 30
+# expected: exit 0, 返回服务账号凭证（Duration=30 表示 30 天；Permissions 用 Resource=命名空间 + Actions 列表，非 NamespaceName/Access）
 ```
 
 | 占位符 | 含义 | 约束 | 如何获取 |
@@ -284,7 +285,7 @@ tccli tcr DeleteServiceAccount --RegistryId "<REGISTRY_ID>" --Name "<SA_NAME>" -
 # expected: exit 0
 ```
 
-> `ModifyServiceAccountPassword` 的 `Random=true` 随机生成密码（返回新密码），`false` 用 `--Password` 指定。`Duration` 是有效期秒数，`ExpiresAt` 是过期时间戳。
+> `ModifyServiceAccountPassword` 的 `Random=true` 随机生成密码（返回新密码），`false` 用 `--Password` 指定。`Duration` 是有效期**天数**（非秒），`ExpiresAt` 是过期时间戳（毫秒）。
 
 ## 收尾确认
 

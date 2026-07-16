@@ -4,6 +4,8 @@ doc_type: Overview
 # 镜像生命周期管理
 
 > 自动化镜像版本管理：保留、保护、清理。决定镜像如何随时间演进与清理。
+>
+> 官方文档：[自动删除镜像版本](https://cloud.tencent.com/document/product/1141/50613) · [镜像版本不可变](https://cloud.tencent.com/document/product/1141/58200)
 
 ## 是什么
 
@@ -37,7 +39,7 @@ TCR 镜像生命周期管理自动化处理镜像版本的保留、保护与清�
 | Webhook 触发 | 推送/删除事件回调 | `CreateWebhookTrigger` | [版本保留 - Webhook](tag-retention.md#webhook-触发器) |
 | 实例同步 | 跨地域复制 | `CreateReplicationInstance` | [实例同步](../replication/manage.md) |
 
-> **版本保留 ≠ 制品清理**：保留规则删的是版本/Tag 信息；制品清理（GC）才回收底层层数据。完整闭环：`CreateGCJob` → `DescribeGCJobs` → 必要时 `TerminateGCJob`（见 [GC 垃圾回收任务](tag-retention.md#gc-垃圾回收任务)）。`GCParameters.DryRun` 可先模拟再正式执行（正式删除层后不可逆）。
+> **版本保留 ≠ 制品清理**：保留规则删的是版本/Tag 信息；制品清理（GC）才回收底层层数据。完整闭环：`CreateGCJob` → `DescribeGCJobs` → 必要时 `TerminateGCJob`（见 [GC 垃圾回收任务](tag-retention.md#gc-垃圾回收任务)）。`GCParameters.Dryrun`（字段名全小写 r，非 `DryRun`）可先模拟再正式执行（正式删除层后不可逆）。
 
 ## 治理三步联合配置
 

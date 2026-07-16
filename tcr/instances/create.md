@@ -11,7 +11,7 @@ fused: true
 
 ## 触发条件
 
-- `tccli tcr DescribeInstances --region <REGION>` 返回 `TotalCount: 0` 或实例数已达 `LimitExceeded.InstanceQuota` 配额上限需扩容
+- `tccli tcr DescribeInstances --region <REGION>` 返回 `TotalCount: 0` 或实例数已达地域级配额上限（官方默认 10；超额时服务端返回 `LimitExceeded` 类错误）需扩容/清闲置
 - 需要独立镜像存储域名/VPC 内网访问/镜像签名能力，个人版 (`DescribeImagePersonal`) 已不满足
 - `CheckInstanceName --RegistryName "<NAME>"` 返回 `IsValidated: true`（名称未被占用）且选定地域在 `DescribeRegions` 返回列表内
 
@@ -26,11 +26,11 @@ TCR 实例是镜像存储的容器 —— 每个实例有独立的域名、存�
 | standard (标准版) | 中小团队生产 | 100 / 3000 / 3000 / 10 | 可升级为 premium |
 | premium (高级版) | 大规模 / 完整同步与企业能力 | 500 / 5000 / 5000 / 20 | 当前最高规格 |
 
-> 配额与功能差异以官方 [产品服务层级与容量限制](https://cloud.tencent.com/document/product/1141/104731) 为准；本仓数字汇总见 [配额与限制](../reference/quotas.md)。地域级默认最多 **10** 个企业版实例（`LimitExceeded.InstanceQuota`）。
+> 配额与功能差异以官方 [产品服务层级与容量限制](https://cloud.tencent.com/document/product/1141/104731) 为准；本仓数字汇总见 [配额与限制](../reference/quotas.md)。地域级默认最多 **10** 个企业版实例（超额常见 `LimitExceeded` 类错误码，以实际响应 `Error.Code` 为准）。
 
 镜像与 Chart 数据落在关联 COS 桶，按 COS 用量计费（非上表「存储配额」）。**规格选择**: 初次使用从 `basic` 开始，后续按需升级。
 
-操作是**异步**的: `CreateInstance` 返回 `RegistryId` 后实例进入 `Creating`，须轮询 `DescribeInstanceStatus` 直到 `Status: "Running"` 才可使用（约 3-5 分钟，见 [实例状态](../reference/states.md)）。
+操作是**异步**的: `CreateInstance` 返回 `RegistryId` 后实例进入创建过渡态（`Pending`→`Deploying`，官方 `Registry.Status` 无 `Creating` 字面值），须轮询 `DescribeInstanceStatus` 直到 `Status: "Running"` 才可使用（约 3-5 分钟，见 [实例状态](../reference/states.md)）。
 
 ## 准备工作
 
@@ -72,14 +72,15 @@ tccli tcr DescribeRegions
 
 | 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
 |-------|------|:--------:|------------|---------------|
-| RegistryName | string | 是 | 控制台：5–50 字符，小写字母/数字/`-`，不能以 `-` 开头或结尾；创建后不可改 | `InvalidParameter.RegistryName` |
-| RegistryType | string | 是 | `basic` / `standard` / `premium` | `InvalidParameter.RegistryType` |
-| RegistryChargeType | integer | 否 | `0` 按量计费（API 默认）/ `1` 预付费（包年包月） | `InvalidParameter.RegistryChargeType` |
+| RegistryName | string | 是 | 控制台：5–50 字符，小写字母/数字/`-`，不能以 `-` 开头或结尾；创建后不可改。短名/大写等非法格式 → `InvalidParameter.ErrorNameIllegal`；`CheckInstanceName` 返回 `IsValidated: false` | `InvalidParameter.ErrorNameIllegal` / `InvalidParameter.ErrorRegistryName` / `InvalidParameter.ErrorNameExists` |
+| RegistryType | string | 是 | `basic` / `standard` / `premium`（大小写敏感，须小写） | `InvalidParameter`（`not support registry type`） |
+| RegistryChargeType | integer | 否 | `0` 按量计费（API 默认）/ `1` 预付费（包年包月） | `InvalidParameter` |
 | DeletionProtection | boolean | 否 | `true` / `false`，默认 `false` | — |
-| RegistryChargePrepaid | object | 仅预付费 | `Period` (月数) + `RenewFlag` | `InvalidParameter.RegistryChargePrepaid` |
-| TagSpecification | object | 否 | Tags 数组 | `InvalidParameter.TagSpecification` |
+| RegistryChargePrepaid | object | 仅预付费 | `Period` (月数) + `RenewFlag` | `InvalidParameter` |
+| TagSpecification | object | 否 | Tags 数组 | `InvalidParameter.ErrorTagOverLimit` |
 | SyncTag | boolean | 否 | 是否同步 COS Tag | — |
 | EnableCosMAZ | boolean | 否 | 是否开启 COS 多 AZ；购买页默认勾选并建议开启 | — |
+| EnableCosVersioning | boolean | 否 | 是否开启关联 COS 桶多版本控制 | — |
 
 ## 操作步骤
 
@@ -169,12 +170,14 @@ tccli tcr ModifyInstance --region ap-guangzhou --RegistryId "<REGISTRY_ID>" --De
 
 tccli tcr DeleteInstance --region ap-guangzhou --RegistryId "<REGISTRY_ID>"
 # expected: exit 0
+# 可选：--DeleteBucket true 同时删关联 COS 桶（默认 false，仅删实例；桶内镜像数据策略按账号需要选择）
+# 可选：--DryRun true 仅预检不真正删除
 
 tccli tcr DescribeInstances --region ap-guangzhou --Registryids '["<REGISTRY_ID>"]'
 # expected: { "TotalCount": 0, "Registries": [] } → 已删（tccli 默认剥离 Response 包装层）
 ```
 
-> 若 DescribeInstances 仍返回实例但状态为 `Deleting`，属删除中（异步），稍候再查。Deleting 状态诊断见 [实例状态](../reference/states.md)。
+> 若 DescribeInstances 仍返回实例但状态为 `Deleting`（或删除失败相关 `DeleteFailed`/`DeleteBucketFailed`），属删除中或删除异常，稍候再查或见 [实例状态](../reference/states.md)。
 
 > **Billing warning**: 按量计费实例删除即停止计费。包年包月实例提前删除**不退费**。
 
@@ -185,18 +188,22 @@ tccli tcr DescribeInstances --region ap-guangzhou --Registryids '["<REGISTRY_ID>
 | 现象 | 诊断 | 根因 | 修复 |
 |---------|----------|------------|-----|
 | `AuthFailure.SecretIdNotFound` | `tccli tcr DescribeRegions` | 凭证未配置 | 见 [配置凭证](../../getting-started/credentials.md) |
-| `InvalidParameter.RegistryName` | 检查名称长度和字符 | 名称格式错误 | 使用 5–50 字符小写字母/数字/`-` |
-| `ResourceInUse.RegistryNameExists` | `tccli tcr CheckInstanceName --RegistryName "<NAME>"` | 名称已被占用 | 换一个名称 |
-| `LimitExceeded.InstanceQuota` | `tccli tcr DescribeInstances` | 实例数达上限 (默认 10) | 删除闲置实例或提工单 |
-| `UnsupportedRegion` | `tccli tcr DescribeRegions` | 所选地域不支持 TCR | 换一个支持的地域 |
+| `InvalidParameter.ErrorNameIllegal` / `InvalidParameter.ErrorRegistryName` | `CheckInstanceName`（`IsValidated: false`，`DetailCode` 非 0） | 名称长度/字符非法（短名、大写、`-` 首尾等） | 使用 5–50 字符小写字母/数字/`-`，不能以 `-` 开头或结尾 |
+| `InvalidParameter.ErrorNameExists` | `tccli tcr CheckInstanceName --RegistryName "<NAME>"` | 名称已被占用 | 换一个名称 |
+| `InvalidParameter.ErrorNameReserved` | 换名重试 | 名称被保留 | 换一个名称 |
+| `InvalidParameter`（`not support registry type`） | 检查 `RegistryType` 字面值 | 非 `basic`/`standard`/`premium` 或大小写错误 | 用小写规格枚举 |
+| `InvalidParameter.UnsupportedRegion` | `tccli tcr DescribeRegions` | 所选地域不支持创建实例 | 换支持的地域 |
+| `FailedOperation.ValidateRegistryNameFail` | `CheckInstanceName` | 名称校验失败 | 按控制台规则改名后再建 |
+| `FailedOperation.TradeFailed`（消息含 `TCR_QCSRole` / 商品下单参数校验） | 查 CAM 服务角色与计费开通 | 账号未授权 TCR 服务角色或计费校验失败 | 控制台开通 TCR / 授权 `TCR_QCSRole` 后重试；属账号侧前置，非入参格式错误 |
+| `LimitExceeded`（实例配额，默认地域级 10） | `tccli tcr DescribeInstances` / `--AllRegion true` | 实例数达上限 | 删除闲置实例或提工单 |
 
 ### 命令成功但状态不对（exit = 0）
 
 | 现象 | 诊断 | 根因 | 修复 |
 |---------|----------|------------|-----|
-| `Status` 不是 `Running` | `tccli tcr DescribeInstanceStatus --RegistryIds '["<REGISTRY_ID>"]'` | 初始化未完成 | 轮询 `DescribeInstanceStatus` 直到 `Running`（创建是异步操作。注意 `DescribeInstanceStatus` 用 `--RegistryIds` 大写 D，与 `DescribeInstances` 的 `--Registryids` 小写 d 不同） |
+| `Status` 不是 `Running` | `tccli tcr DescribeInstanceStatus --RegistryIds '["<REGISTRY_ID>"]'` | 初始化/部署未完成或异常 | 轮询 `DescribeInstanceStatus` 直到 `Running`（创建异步；过渡态为 `Pending`/`Deploying`，非 `Creating`。注意 `DescribeInstanceStatus` 用 `--RegistryIds` 大写 D，与 `DescribeInstances` 的 `--Registryids` 小写 d 不同）。若为 `FailedCreated`/`Bucket-Error`/`Unhealthy` 等，见 [状态机](../reference/states.md) |
 | 无法 `docker login` | `DescribeInternalEndpoints` / `DescribeExternalEndpointStatus` | 访问端点未开（默认全拒绝） | 优先内网 `ManageInternalEndpoint`；本地/外网再 `ManageExternalEndpoint --Operation Create`，见 [访问管理](manage-access.md) |
-| 创建成功但未出现在列表 | 检查 `--region` 是否与创建时一致 | 查看的地域错误 | 切换到创建时的地域 |
+| 创建成功但未出现在列表 | 检查 `--region` 是否与创建时一致；或 `DescribeInstances --AllRegion true` | 查看的地域错误 | 切换到创建时的地域 |
 
 ## 实例生命周期管理
 
@@ -238,9 +245,11 @@ tccli tcr DescribeInstances --region ap-guangzhou --Registryids '["<REGISTRY_ID>
 # expected: status="Running", name/type 与创建参数一致, protect 与创建参数一致
 ```
 
-> 实例 `Running` = 创建闭环完成，可进入 [访问管理](manage-access.md) 与 [命名空间/仓库](../repositories/manage.md)。`DescribeNamespaces` 须在 `Running` 后调用（`Creating` 中调用返回空）。空实例无镜像，须先建命名空间才能 push。
+> 实例 `Running` = 创建闭环完成，可进入 [访问管理](manage-access.md) 与 [命名空间/仓库](../repositories/manage.md)。`DescribeNamespaces` 须在 `Running` 后调用（`Pending`/`Deploying` 过渡态中调用通常返回空）。空实例无镜像，须先建命名空间才能 push。
 >
 > 访问端点**不在本篇强制开启**：默认拒绝全部公网/内网访问。生产优先内网 VPC；本地或外网 CI 再开公网并配白名单——见 [访问管理](manage-access.md)。docker login/push/pull 属 docker CLI（非 tccli；TCCLI 无镜像传输能力），在端点+Token 配好后于 [推送拉取镜像](../images/push-pull.md) 执行。
+>
+> **账号边界**：若当前账号企业版 `DescribeInstances`（含 `--AllRegion true`）`TotalCount: 0` 且 `CreateInstance` 返回 `FailedOperation.TradeFailed`（含 `TCR_QCSRole` / 商品下单校验），属账号开通/角色前置，不是文档命令写错；先完成控制台开通与服务角色授权再创建。
 
 ---
 

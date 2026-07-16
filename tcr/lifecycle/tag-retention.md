@@ -23,7 +23,7 @@ fused: true
 | 规则类型 | 字段 | 含义 | 示例取值 |
 |:---------|:----|:-----|:-----------|
 | 保留最新 N 个 | `latestPushedK` | 保留最近推送的 N 个版本 | `10` |
-| 保留最近 N 天 | `nDays` | 保留 N 天内推送的版本 | `30` |
+| 保留最近 N 天 | `nDaysSinceLastPush` | 保留 N 天内推送的版本 | `30` |
 
 > 规则作用于命名空间级别（`NamespaceId`）。**单个命名空间暂只能创建一条**保留规则。规则创建后按 `CronSetting` 定时执行，也可 `CreateTagRetentionExecution` 手动触发。创建后**不可修改**生效的命名空间。
 
@@ -66,9 +66,9 @@ tccli tcr DescribeTagRetentionRules --region <REGION> --RegistryId "<REGISTRY_ID
 |:------|------|:--------:|------------|---------------|
 | RegistryId | string | 是 | `tcr-xxxxxxxx` | `ResourceNotFound` |
 | NamespaceId | int | 是 | 命名空间 ID | `ResourceNotFound` |
-| CronSetting | string | 是 | Cron 表达式，如 `0 2 * * *`（每天 2 点）；也可 `manual` | `InvalidParameterValue` |
+| CronSetting | string | 是 | **仅** `manual` / `daily` / `weekly` / `monthly`（非 5 段 Cron 表达式） | `InvalidParameterValue` |
 | RetentionRule | object | 否 | `{Key, Value}`；省略时须配合 `AdvancedRuleItems` 或 `manual` 场景 | `InvalidParameterValue` |
-| RetentionRule.Key | string | 传对象时是 | `latestPushedK` / `nDays` | `InvalidParameterValue` |
+| RetentionRule.Key | string | 传对象时是 | `latestPushedK` / `nDaysSinceLastPush` | `InvalidParameterValue` |
 | RetentionRule.Value | int | 传对象时是 | 保留数量或天数 | `InvalidParameterValue` |
 | AdvancedRuleItems | list | 否 | 高级规则（按 tag/仓库过滤） | `InvalidParameterValue` |
 | Disabled | boolean | 否 | 是否禁用规则 | — |
@@ -79,19 +79,20 @@ tccli tcr DescribeTagRetentionRules --region <REGION> --RegistryId "<REGISTRY_ID
 
 ### 步骤 1：决策 — 保留策略
 
-#### 为什么选 latestPushedK vs nDays
+#### 为什么选 latestPushedK vs nDaysSinceLastPush
 
 - **latestPushedK（保留 N 个）**: 保留最近 N 个版本，数量固定。适合持续集成（每次推送保留最新 10 个）
-- **nDays（保留 N 天）**: 保留 N 天内版本，时间固定。适合按时间回滚的需求
+- **nDaysSinceLastPush（保留 N 天）**: 保留 N 天内版本，时间固定。适合按时间回滚的需求
 - **默认推荐**: `latestPushedK` + `Value=10`——多数场景保留最新 10 个够用
 - **可修改**： 能，`ModifyTagRetentionRule` 修改规则
 
 ```bash
 # 修改保留规则（RegistryId + RetentionId 定位 + 新 CronSetting/RetentionRule）
+# CronSetting 仅 manual|daily|weekly|monthly；Key 用 nDaysSinceLastPush（非 nDays）
 tccli tcr ModifyTagRetentionRule --region <REGION> \
   --RegistryId "<REGISTRY_ID>" --RetentionId <RETENTION_ID> --NamespaceId <NAMESPACE_ID> \
-  --CronSetting "0 3 * * *" \
-  --RetentionRule '{"Key":"nDays","Value":30}'
+  --CronSetting daily \
+  --RetentionRule '{"Key":"nDaysSinceLastPush","Value":30}'
 # expected: exit 0; RetentionId 不存在时报 InvalidParameter
 ```
 
@@ -106,9 +107,10 @@ tccli tcr ModifyTagRetentionRule --region <REGION> \
 #### 选项 A：最小化（命名空间级全仓库）
 
 ```bash
+# CronSetting 仅 manual|daily|weekly|monthly（非 5 段 Cron）
 tccli tcr CreateTagRetentionRule --region <REGION> \
   --RegistryId "<REGISTRY_ID>" --NamespaceId <NAMESPACE_ID> \
-  --CronSetting "0 2 * * *" \
+  --CronSetting daily \
   --RetentionRule '{"Key":"latestPushedK","Value":10}'
 # expected: exit 0, 返回 RetentionId
 ```
@@ -125,13 +127,13 @@ tccli tcr CreateTagRetentionRule --region <REGION> \
 ```bash
 tccli tcr CreateTagRetentionRule --region <REGION> \
   --RegistryId "<REGISTRY_ID>" --NamespaceId <NAMESPACE_ID> \
-  --CronSetting "0 2 * * *" \
+  --CronSetting daily \
   --RetentionRule '{"Key":"latestPushedK","Value":5}' \
-  --AdvancedRuleItems '[{"RepositoryFilter":{"Decoration":"matches","Pattern":"prod-*"}}]'
+  --AdvancedRuleItems '[{"RepositoryFilter":{"Decoration":"repoMatches","Pattern":"prod-*"}}]'
 # expected: exit 0
 ```
 
-> `AdvancedRuleItems` 按 `RepositoryFilter`/`TagFilter` 细化规则作用范围。`Decoration` 为 `matches`（匹配）或 `excludes`（排除）。
+> `AdvancedRuleItems` 按 `RepositoryFilter`/`TagFilter` 细化规则作用范围。仓库过滤 `Decoration` 为 `repoMatches` / `repoExcludes`；Tag 过滤为 `matches` / `excludes`。
 
 ### 步骤 3：手动触发执行（测试规则）
 
@@ -153,7 +155,7 @@ tccli tcr DescribeTagRetentionRules --region <REGION> --RegistryId "<REGISTRY_ID
 # 查看执行历史
 tccli tcr DescribeTagRetentionExecution --region <REGION> --RegistryId "<REGISTRY_ID>" \
   --RetentionId <RETENTION_ID>
-# expected: 执行记录，Status 含 Success
+# expected: 执行记录，Status 含 Succeed（枚举: Failed/Succeed/Stopped/InProgress，非 Success）
 
 # 查看单次执行的任务详情（RegistryId + RetentionId + ExecutionId 定位某次执行）
 tccli tcr DescribeTagRetentionExecutionTask --region <REGION> \
@@ -166,7 +168,7 @@ tccli tcr DescribeTagRetentionExecutionTask --region <REGION> \
 |:-----|:-----|:-----|
 | 规则存在 | `DescribeTagRetentionRules` → `RetentionPolicyList` | 含目标规则 |
 | 规则启用 | `DescribeTagRetentionRules` → `Disabled` | `false` |
-| 执行成功 | `DescribeTagRetentionExecution` → `Status` | `Success` |
+| 执行成功 | `DescribeTagRetentionExecution` → `Status` | `Succeed` |
 | 镜像清理 | `DescribeImages` → `ImageInfoList` | 旧版本被删除，保留指定数量 |
 
 ## 清理
@@ -192,8 +194,8 @@ tccli tcr DescribeTagRetentionRules --region <REGION> --RegistryId "<REGISTRY_ID
 | 现象 | 诊断 | 根因 | 修复 |
 |:--------|:----------|:------------|:-----|
 | `ResourceNotFound` | `DescribeNamespaces` 核对 ID | NamespaceId 错或命名空间不存在 | 用正确的 NamespaceId（整数） |
-| `InvalidParameterValue.CronSetting` | 检查 Cron 格式 | Cron 表达式错 | 用标准 5 段 Cron，如 `0 2 * * *` |
-| `InvalidParameterValue.RetentionRule` | 检查 Key/Value | Key 拼错或 Value 非数字 | Key 用 `latestPushedK`/`nDays`，Value 为正整数 |
+| `InvalidParameterValue.CronSetting` | 检查取值 | 非 `manual`/`daily`/`weekly`/`monthly` | 用四选一枚举，**不要**写 5 段 Cron |
+| `InvalidParameterValue.RetentionRule` | 检查 Key/Value | Key 拼错或 Value 非数字 | Key 用 `latestPushedK`/`nDaysSinceLastPush`，Value 为正整数 |
 | `FailedOperation` | `DescribeInstanceStatus` 查看状态 | 实例非 Running | 等实例 Running |
 
 ### 命令成功但状态不对 (exit = 0)
@@ -229,17 +231,17 @@ tccli tcr CreateWebhookTrigger --RegistryId "<REGISTRY_ID>" --Namespace "<NAMESP
 ```
 
 ```bash
-# 修改触发器 (嵌套 Trigger 对象, 含 Name/Targets/事件类型)
-tccli tcr ModifyWebhookTrigger --RegistryId "<REGISTRY_ID>" --region <REGION> \
-  --Trigger '{"Name":"<TRIGGER_NAME>","Targets":[{"Address":"<URL>"}]}'
-# expected: exit 0
+# 修改触发器（RegistryId + Namespace 必填 + 嵌套 Trigger；Trigger 须含 Id 定位目标）
+tccli tcr ModifyWebhookTrigger --RegistryId "<REGISTRY_ID>" --Namespace "<NAMESPACE>" --region <REGION> \
+  --Trigger '{"Id":<TRIGGER_ID>,"Name":"<TRIGGER_NAME>","EventTypes":["pushImage"],"Condition":".*","Enabled":true,"Targets":[{"Address":"<URL>"}]}'
+# expected: exit 0；缺 --Namespace 报 the following arguments are required: --Namespace
 
 # 删除触发器 (按 Namespace + Id)
 tccli tcr DeleteWebhookTrigger --RegistryId "<REGISTRY_ID>" --Namespace "<NAMESPACE>" --Id <TRIGGER_ID> --region <REGION>
 # expected: exit 0
 ```
 
-> `DeleteWebhookTrigger` 用 `Id`（Integer，触发器 ID）+ `Namespace` 定位，非触发器名。`ModifyWebhookTrigger` 的 `Trigger` 是嵌套对象（Name/Targets[]/事件类型）。触发器执行日志查 `DescribeWebhookTriggerLog`。
+> `DeleteWebhookTrigger` 用 `Id`（Integer，触发器 ID）+ `Namespace` 定位，非触发器名。`ModifyWebhookTrigger` 必填 `--Namespace`，`Trigger` 是嵌套对象（须含 `Id` 及 Name/Targets[]/EventTypes/Condition/Enabled）。触发器执行日志查 `DescribeWebhookTriggerLog`。
 
 ```bash
 # 查询触发器执行日志（RegistryId + Namespace + Id 定位触发器，分页取日志）
@@ -255,13 +257,14 @@ tccli tcr DescribeWebhookTriggerLog --RegistryId "<REGISTRY_ID>" --Namespace "<N
 ### 创建 GC 任务
 
 ```bash
-# 创建 GC 任务（RegistryId + GCParameters 嵌套配置；建议先 DryRun=true 预览）
+# 创建 GC 任务（RegistryId + GCParameters 嵌套配置；建议先 Dryrun=true 预览）
+# 字段名是 Dryrun（全小写 r），非 DryRun
 tccli tcr CreateGCJob --RegistryId "<REGISTRY_ID>" --region <REGION> \
-  --GCParameters '{"DryRun":false}'
+  --GCParameters '{"Dryrun":false}'
 # expected: exit 0，返回 {"RequestId":"..."}（无 JobId 字段，任务用 DescribeGCJobs 查 Jobs[] 状态）
 ```
 
-> `GCParameters` 含 `DryRun` 试运行开关。GC 删除镜像层后释放存储，**不可逆**，建议先 `DryRun=true` 预览影响范围再正式执行。
+> `GCParameters` 含 `Dryrun`（字段名全小写 r，非 `DryRun`）试运行开关。GC 删除镜像层后释放存储，**不可逆**，建议先 `Dryrun=true` 预览影响范围再正式执行。
 
 ### 查询 GC 任务
 
@@ -281,7 +284,7 @@ tccli tcr TerminateGCJob --RegistryId "<REGISTRY_ID>" --region <REGION>
 # expected: exit 0
 ```
 
-> GC 任务由系统在删除镜像后触发或手动发起。`DescribeGCJobs` 查任务状态（Running/Success/Failed），`TerminateGCJob` 终止进行中的 GC（仅 RegistryId）。
+> GC 任务由系统在删除镜像后触发或手动发起。`DescribeGCJobs` 返回 `Jobs[]`，状态字段是 **`JobStatus`**（非 `Status`；示例值如 `finished`，以实际返回为准），`TerminateGCJob` 终止进行中的 GC（仅 RegistryId）。
 
 ## 收尾确认
 
@@ -305,7 +308,7 @@ tccli tcr DescribeImages --region <REGION> --RegistryId "<REGISTRY_ID>" \
 # expected: ≤ RetentionRule.Value（保留数量上限）
 ```
 
-> 规则启用 + 执行 Success + 镜像数收敛到保留值 = 版本保留闭环完成，旧版本已按策略清理。
+> 规则启用 + 执行 Succeed + 镜像数收敛到保留值 = 版本保留闭环完成，旧版本已按策略清理。
 
 ---
 

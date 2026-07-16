@@ -53,7 +53,7 @@ Agent 与 Prometheus 实例的关系：实例是存储与查询后端，Agent �
 |:-----|:-----|:----:|:-------|:-------|:-----------|
 | `InstanceId` | String | 是 | — | Prometheus 实例 ID | 实例不存在被拒 |
 | `Agents[].Region` | String | 是 | — | 集群地域，如 `ap-guangzhou` | 与集群不符被拒 |
-| `Agents[].ClusterType` | String | 是 | — | `MANAGED_CLUSTER` / `INDEPENDENT_CLUSTER` | 类型错被拒 |
+| `Agents[].ClusterType` | String | 是 | — | `tke` / `eks`（非 CreateCluster 的 MANAGED/INDEPENDENT） | 类型错被拒 |
 | `Agents[].ClusterId` | String | 是 | — | 已存在的集群 ID | 集群不存在被拒 |
 | `Agents[].EnableExternal` | Boolean | 否 | false | true/false | 公网/内网上报选错 |
 | `Agents[].NotInstallBasicScrape` | Boolean | 否 | false | true/false | 缺失基础指标 |
@@ -69,7 +69,7 @@ Agent 与 Prometheus 实例的关系：实例是存储与查询后端，Agent �
 ```bash
 tccli tke CreatePrometheusClusterAgent --region <REGION> \
   --InstanceId <PROM_INSTANCE_ID> \
-  --Agents '[{"Region":"<REGION>","ClusterType":"MANAGED_CLUSTER","ClusterId":"<CLUSTER_ID>","EnableExternal":false}]'
+  --Agents '[{"Region":"<REGION>","ClusterType":"tke","ClusterId":"<CLUSTER_ID>","EnableExternal":false}]'
 # expected: exit 0, 返回 RequestId
 ```
 
@@ -97,7 +97,7 @@ tccli tke ModifyPrometheusAgentExternalLabels --region <REGION> \
 ```bash
 tccli tke DeletePrometheusClusterAgent --region <REGION> \
   --InstanceId <PROM_INSTANCE_ID> \
-  --Agents '[{"ClusterType":"MANAGED_CLUSTER","ClusterId":"<CLUSTER_ID>","Region":"<REGION>"}]' \
+  --Agents '[{"ClusterType":"tke","ClusterId":"<CLUSTER_ID>","Region":"<REGION>"}]' \
   --Force false
 # expected: exit 0, 返回 RequestId
 ```
@@ -115,7 +115,7 @@ tccli tke DescribePrometheusClusterAgents --region <REGION> --InstanceId <PROM_I
     "Agents": [
         {
             "ClusterId": "cls-example",
-            "ClusterType": "MANAGED_CLUSTER",
+            "ClusterType": "tke",
             "Region": "ap-guangzhou",
             "EnableExternal": false,
             "ExternalLabels": [{"Name": "cluster", "Value": "prod-gz"}]
@@ -127,7 +127,7 @@ tccli tke DescribePrometheusClusterAgents --region <REGION> --InstanceId <PROM_I
 
 ```bash
 tccli tke DescribePrometheusTargets --region <REGION> \
-  --InstanceId <PROM_INSTANCE_ID> --ClusterType MANAGED_CLUSTER --ClusterId <CLUSTER_ID>
+  --InstanceId <PROM_INSTANCE_ID> --ClusterType tke --ClusterId <CLUSTER_ID>
 # expected: exit 0, 返回采集目标列表，所有 target lastError 为空
 ```
 
@@ -156,7 +156,7 @@ tccli tke DescribePrometheusAgents --region <REGION> \
 ```bash
 tccli tke DeletePrometheusClusterAgent --region <REGION> \
   --InstanceId <PROM_INSTANCE_ID> \
-  --Agents '[{"ClusterType":"MANAGED_CLUSTER","ClusterId":"<CLUSTER_ID>","Region":"<REGION>"}]' --Force true
+  --Agents '[{"ClusterType":"tke","ClusterId":"<CLUSTER_ID>","Region":"<REGION>"}]' --Force true
 # expected: exit 0
 ```
 
@@ -204,7 +204,7 @@ tccli tke DescribePrometheusRecordRules --region <REGION> --InstanceId <PROM_INS
 
 # 衔接下一步前置：Agent Status=Running 是配告警规则/采集配置的前置
 tccli tke DescribePrometheusTargets --region <REGION> \
-  --InstanceId <PROM_INSTANCE_ID> --ClusterType MANAGED_CLUSTER --ClusterId <CLUSTER_ID> \
+  --InstanceId <PROM_INSTANCE_ID> --ClusterType tke --ClusterId <CLUSTER_ID> \
   --filter "Targets[].{job:ScrapeJob,lastError:LastError}" --output text | head -5
 # expected: lastError 均为空 → Agent 管理闭环完成
 ```

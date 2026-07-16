@@ -63,8 +63,9 @@ gatekeeper	kube-system	4	deployed	gatekeeper	1.3.0
 
 ```bash
 # 查询 TKE 内置可用 Chart（Kind/Arch/ClusterType 过滤；用于选 Chart 名与版本）
+# GetTkeAppChartList 的 ClusterType 仅 tke / eks（非 CreateCluster 的 MANAGED_CLUSTER）
 tccli tke GetTkeAppChartList --region ap-guangzhou \
-  --Kind "<CHART_KIND>" --ClusterType MANAGED_CLUSTER
+  --Kind "<CHART_KIND>" --ClusterType tke
 # expected: exit 0, 返回 AppCharts[]（含内置 Chart 名/版本/架构；匹配为空时 AppCharts=[]）
 ```
 
@@ -79,38 +80,38 @@ tccli tke GetTkeAppChartList --region ap-guangzhou \
 | Namespace | string | 是 | 部署的命名空间 | `InvalidParameterValue` |
 | Chart | string | 是 | Chart 名 | `InvalidParameterValue` |
 | ChartVersion | string | 否 | Chart 版本 | `InvalidParameterValue` |
-| ChartFrom | string | 否 | Chart 来源（`repo`/`tke`） | `InvalidParameterValue` |
-| ChartRepoURL | string | 否 | Chart 仓库 URL | `InvalidParameterValue` |
+| ChartFrom | string | 否 | Chart 来源：`tke-market`（默认）/ `other` | `InvalidParameterValue` |
+| ChartRepoURL | string | 否 | Chart 仓库 URL（`ChartFrom=other` 时） | `InvalidParameterValue` |
 | Values | string | 否 | 自定义 Values（JSON） | `InvalidParameterValue` |
 | Username | string | 否 | 私有仓库用户名 | `UnauthorizedOperation` |
 | Password | string | 否 | 私有仓库密码 | `UnauthorizedOperation` |
-| ClusterType | string | 否 | 集群类型 | — |
+| ClusterType | string | 否 | 集群类型：`tke` / `eks` / `tkeedge` / `external` | — |
 
-> `ChartFrom`: `tke`（TKE 内置 Chart）/ `repo`（外部仓库，需 `ChartRepoURL`）。私有仓库用 `Username`/`Password`。
+> `ChartFrom` **仅** `tke-market`（应用市场，默认）/ `other`（第三方 repo，需 `ChartRepoURL`）。**不是** `tke`/`repo`。私有仓库用 `Username`/`Password`。`ChartFrom=tke-market` 时 `ChartNamespace` 须非空（来自 `DescribeProducts`）。
 
 ## 操作步骤
 
 ### 步骤 1：决策 — Chart 来源 {#chart-来源决策}
 
-#### 为什么选 tke 内置 vs 外部仓库
+#### 为什么选 tke-market vs other
 
-- **tke 内置**: TKE 提供的官方 Chart（如 eniipamd），无需配仓库
-- **外部仓库**: 自建或第三方 Helm 仓库，需 `ChartRepoURL`
-- **默认推荐**: 官方应用用 `tke`；自定义应用用 `repo`
+- **tke-market**: TKE 应用市场 Chart，无需配仓库；须传 `ChartNamespace`
+- **other**: 自建或第三方 Helm 仓库，需 `ChartRepoURL`（Chart 参数可为 `*.tgz` 下载地址）
+- **默认推荐**: 官方应用用 `tke-market`；自定义应用用 `other`
 - **能换源吗?**: 能，`UpgradeClusterRelease` 改 Chart 来源
 
 ### 步骤 2：创建 Release
 
-`CreateClusterRelease` 必传 `ClusterId`/`Name`/`Namespace`/`Chart`/`ChartFrom`。按场景**二选一**：A 最小化（官方 tke 仓库）或 B 增强（外部仓库+自定义 Values）。
+`CreateClusterRelease` 必传 `ClusterId`/`Name`/`Namespace`/`Chart`；`ChartFrom` 可选（默认 `tke-market`）。按场景**二选一**：A 最小化（应用市场）或 B 增强（外部仓库+自定义 Values）。
 
 > ⚠️ **A 与 B 是二选一变体，不是先做 A 再做 B**——两者各调一次 `CreateClusterRelease` 会装**两个同名 Release（命名空间内冲突）或两份 Release**。Release 创建后改配置（版本/Values）用 `UpgradeClusterRelease`，**禁用第二次 `CreateClusterRelease` 改配置**。
 
-#### 选项 A：最小化（官方 tke 仓库）
+#### 选项 A：最小化（应用市场 tke-market）
 
 ```bash
 tccli tke CreateClusterRelease --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" --Name "<RELEASE_NAME>" --Namespace "<NAMESPACE>" \
-  --Chart "<CHART_NAME>" --ChartFrom tke
+  --Chart "<CHART_NAME>" --ChartFrom tke-market --ChartNamespace "<CHART_NS>"
 # expected: exit 0, 返回 RequestId
 ```
 
@@ -123,12 +124,12 @@ tccli tke CreateClusterRelease --region ap-guangzhou \
 
 #### 选项 B：增强（外部仓库 + 自定义 Values）
 
-> **与 A 二选一，非在 A 之后执行**。用 `ChartFrom repo` 指外部仓库，配 URL/版本/Values/认证。
+> **与 A 二选一，非在 A 之后执行**。用 `ChartFrom other` 指外部仓库，配 URL/版本/Values/认证。
 
 ```bash
 tccli tke CreateClusterRelease --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" --Name "<RELEASE_NAME>" --Namespace "<NAMESPACE>" \
-  --Chart "<CHART_NAME>" --ChartFrom repo \
+  --Chart "<CHART_NAME>" --ChartFrom other \
   --ChartRepoURL "https://charts.example.com" --ChartVersion "1.2.0" \
   --Values '{"replicaCount":3}' \
   --Username "<REPO_USER>" --Password "<REPO_PASS>"

@@ -5,6 +5,8 @@ subtype: 8B
 # TCR 共享字段参考
 
 > TCR 多个 Action 共用的嵌套字段结构。统一在此引导一次，各文档引用本页。
+>
+> 官方文档：[API 概览](https://cloud.tencent.com/document/product/1141/41813)
 
 ## 何时查本页
 

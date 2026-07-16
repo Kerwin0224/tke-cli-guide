@@ -39,7 +39,7 @@ tccli --version
 # expected: tccli 版本号
 
 tccli cvm DescribeRegions --region ap-guangzhou
-# expected: RegionSet 列表返回 → 凭证有效
+# expected: RegionInstanceSet 列表返回 → 凭证有效（顶层键 RegionInstanceSet，非 RegionSet）
 ```
 
 ### 资源检查

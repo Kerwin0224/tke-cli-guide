@@ -4,6 +4,8 @@ subtype: 7B
 ---
 # TCR 故障排查
 
+> 官方文档：[产品服务层级与容量限制](https://cloud.tencent.com/document/product/1141/104731) · [个人版常见问题](https://cloud.tencent.com/document/product/1141/57780)
+
 ## 从这里开始
 
 ```bash
@@ -167,9 +169,9 @@ tccli tcr DescribeInstances --region ap-guangzhou --Registryids '["<REGISTRY_ID>
 
 | 状态 | 动作 |
 |--------|------|
-| `Creating` | 等待 3-5 分钟，新创建的实例需初始化 |
+| `Pending` / `Deploying` | 等待 3–5 分钟，创建过渡态（官方 `Registry.Status` **无** `Creating` 字面值） |
 | `Deleting` | 实例正在删除，等待完成 |
-| 非 Running 且非过渡态 | 查 `DescribeInstanceStatus` 的 `Conditions[].Reason`；欠费则充值，超 1 小时未恢复提工单 |
+| 非 `Running` 且非过渡态 | 查 `DescribeInstanceStatus` 的 `Conditions[].Reason`；欠费则充值，超 1 小时未恢复提工单 |
 
 **验证**：
 
@@ -237,7 +239,7 @@ tccli tcr DescribeSecurityPolicies --region ap-guangzhou --RegistryId "<ID>" > t
 
 ## 下一步
 
-- [实例状态机](reference/states.md) — `Creating`/`Running`/`Deleting` 状态枚举
+- [实例状态机](reference/states.md) — `Pending`/`Deploying`/`Running`/`Deleting` 等官方 Status 枚举
 - [错误码](reference/error-codes.md) — docker CLI 错误（`unauthorized`/`denied`）+ TCR 特有码
 - [访问控制](access/manage.md) — Token/白名单/VPC 内网配置
 - [推送拉取镜像](images/push-pull.md) — 完整 push/pull 链路与失败模式

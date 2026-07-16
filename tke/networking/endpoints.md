@@ -54,7 +54,7 @@ fused: true
 | 内网端点（仅同 VPC / 专线 / VPN） | `CreateClusterEndpoint --IsExtranet false` | **不能**（本机不在 VPC 时） | VPC 隔离 |
 | ~~VIP 外网端口~~ | ~~`CreateClusterEndpointVip`~~ | **禁止新用** | 官方废弃，见 [独立 VIP 端点](#独立-vip-端点已废弃禁止新用) |
 
-操作是**异步**的：`CreateClusterEndpoint` 返回即提交；就绪时 `DescribeClusterEndpointStatus` 的 `Status` 为 **`Created`**（不是 `Running`）。关闭后回到 `NotFound`。
+操作是**异步**的：`CreateClusterEndpoint` 返回即提交；就绪时 `DescribeClusterEndpointStatus` 的 `Status` 为 **`Created`**（不是 `Running`）。完整枚举：`NotFound`（未开）/ `Creating`（开启中）/ `Created`（成功）/ `CreateFailed`（失败，看 `ErrorMsg`）。关闭后回到 `NotFound`。
 
 > **本机 kubectl**：必须走公网端点（或本机已接入集群 VPC）。只开内网端点时，`DescribeClusterKubeconfig` 里的 `server` 是内网 VIP，本机访问会超时。
 
@@ -238,7 +238,7 @@ tccli tke DescribeClusterEndpointStatus --region ap-guangzhou \
 
 | 维度 | 命令 | 预期 |
 |:-----|:-----|:-----|
-| 端点状态 | `DescribeClusterEndpointStatus` → `Status` | `Created`（未开为 `NotFound`） |
+| 端点状态 | `DescribeClusterEndpointStatus` → `Status` | `Created`（未开 `NotFound`；开启中 `Creating`；失败 `CreateFailed`） |
 | 端点地址 | `DescribeClusterEndpoints` → `ClusterExternalEndpoint` / `ClusterIntranetEndpoint` | 非空（CLB host 或 IP） |
 | ACL | `DescribeClusterEndpoints` → `ClusterExternalACL` | 含你放行的 CIDR（若已 Modify） |
 | DNS | `dig +short` 对 `ClusterDomain` | 可解析 **或** 不可解析时已改用 `ClusterExternalEndpoint` |
@@ -254,10 +254,12 @@ tccli tke DescribeClusterEndpointStatus --region ap-guangzhou \
 
 ```bash
 # （历史兼容）查询存量 VIP 状态 — 新开通请用 CreateClusterEndpoint
-# tccli tke DescribeClusterEndpointVipStatus --ClusterId "<CLUSTER_ID>" --region <REGION>
+tccli tke DescribeClusterEndpointVipStatus --ClusterId "<CLUSTER_ID>" --region <REGION>
+# expected: 仅用于存量 VIP 查询；无 VIP 时按实际响应；禁止作为新开通路径
 
 # （历史兼容）删除存量 VIP
-# tccli tke DeleteClusterEndpointVip --ClusterId "<CLUSTER_ID>" --region <REGION>
+tccli tke DeleteClusterEndpointVip --ClusterId "<CLUSTER_ID>" --region <REGION>
+# expected: 仅清理存量 VIP；新集群无 VIP 可删；禁止代替 DeleteClusterEndpoint
 ```
 
 ### 切换公网/内网端点

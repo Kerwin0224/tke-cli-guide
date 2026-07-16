@@ -68,7 +68,7 @@ TKE 集群备份（基于 Velero）将集群资源（Deployment/Service/ConfigMa
 |:-----|:-----------|:----:|:-----|
 | `Name` | Create/Delete | 是 | 存储位置名（全局唯一） |
 | `StorageRegion` | Create | 是 | COS 桶地域 |
-| `Bucket` | Create | 是 | COS 桶名（须 `tke-backup` 前缀） |
+| `Bucket` | Create | 是 | COS 桶名：须 `tke-backup` 前缀；help 声明字符长度 19（创建前以 `tccli tke CreateBackupStorageLocation help --detail` 为准） |
 | `Provider` | Create | 否 | `tencentcloud`（默认 `tencentcloud`，可省略） |
 | `Path` | Create | 否 | 桶内路径 |
 | `Names[]` | Describe | 否 | 按名查询（空则查全部） |
@@ -81,7 +81,7 @@ TKE 集群备份（基于 Velero）将集群资源（Deployment/Service/ConfigMa
 
 ### 步骤 1：创建合规 COS 桶
 
-在 COS 服务创建桶名以 `tke-backup` 开头的桶（如 `tke-backup-myteam-1250000000`，`1250000000` 为账号 APPID）。
+在 COS 服务创建桶名以 `tke-backup` 开头的桶。help 声明 `Bucket` 字符长度 19（含前缀）；创建前以 `tccli tke CreateBackupStorageLocation help --detail` 与 COS 实际命名规则为准。
 
 ### 步骤 2：创建备份存储位置
 

@@ -166,12 +166,14 @@ kubectl delete deployment my-app --ignore-not-found
 kubectl delete secret tcr-secret -n default --ignore-not-found
 # expected: secret "tcr-secret" deleted 或 not found
 
-# 3. （可选）删除 TCR Token
-tccli tcr DeleteInstanceToken --region ap-guangzhou --RegistryId "<REGISTRY_ID>" --TokenId "<TOKEN_ID>"
-# expected: exit 0
+# 3. Token 清理：本篇步骤 1 用的是 TokenType=temp
+# temp 创建时常返回 TokenId:""，且通常不出现在 DescribeInstanceToken 列表，约 1 小时自动过期，无需 DeleteInstanceToken
+# 若改用 longterm：保存 Create 响应的 TokenId（或 DescribeInstanceToken → Tokens[].Id），再：
+# tccli tcr DeleteInstanceToken --region ap-guangzhou --RegistryId "<REGISTRY_ID>" --TokenId "<TOKEN_ID>"
+# expected (longterm): exit 0
 ```
 
-> TCR 实例与镜像版本保留（不影响其他业务）。临时 Token 1 小时后自动过期。
+> TCR 实例与镜像版本保留（不影响其他业务）。**temp Token 约 1 小时自动过期**；`DeleteInstanceToken`/`ModifyInstanceToken` 仅适用于 **longterm** 凭证。
 
 ---
 

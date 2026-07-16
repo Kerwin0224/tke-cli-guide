@@ -87,13 +87,13 @@ kubectl -n kube-system get deploy tke-eni-ip-scheduler -o jsonpath='{.spec.templ
 | 字段 | 类型 | 必填 | 默认值 | 有效值 | 填错的影响 |
 |:------|------|:--------:|:------:|-------|-----------|
 | ClusterId | string | 是 | — | `cls-xxxxxxxx` | `ResourceNotFound` |
-| VpcCniType | string | 是 | — | `tke-route-eni` / `tke-direct-route-eni` | IP 分配方式不对 |
+| VpcCniType | string | 是 | — | `tke-route-eni` / `tke-direct-eni` | IP 分配方式不对 |
 | EnableStaticIp | boolean | 是 | — | `true`/`false` | 固定 IP 不生效 |
 | Subnets | list | 是 | — | VPC 子网 ID 列表 | `ResourceNotFound.SubnetId` |
 | ExpiredSeconds | int | 条件 | 0 | 固定 IP 回收秒数；`EnableStaticIp=true` 时必填且须 >300，不传默认 IP 永不销毁 | IP 回收时机不对 |
 | SkipAddingNonMasqueradeCIDRs | boolean | 否 | false | `true`/`false` | 路由配置影响 |
 
-> `VpcCniType`: `tke-route-eni`（弹性网卡路由，常用）/ `tke-direct-route-eni`（直连路由）。`EnableStaticIp=true` 开启固定 IP，配合 `ExpiredSeconds` 设回收时间（须 >300 秒）。
+> `VpcCniType`: `tke-route-eni`（策略路由/共享网卡多 IP，常用）/ `tke-direct-eni`（独立网卡）。**不是** `tke-direct-route-eni`。`EnableStaticIp=true` 开启固定 IP，配合 `ExpiredSeconds` 设回收时间（须 >300 秒）。
 >
 > ⚠️ **必填对齐 Action 入参契约**：`EnableStaticIp` 在 `EnableVpcCniNetworkType` 入参中为必填（非可选）——开启 VPC-CNI 时必须显式传 `true`/`false` 声明是否固定 IP；`ExpiredSeconds` 是条件必填（`EnableStaticIp=true` 时必填且 >300）。完整入参以 `tccli tke EnableVpcCniNetworkType help --detail` 为准。
 
@@ -240,7 +240,7 @@ tccli tke DisableVpcCniNetworkType --region ap-guangzhou --ClusterId "<CLUSTER_I
 | 现象 | 诊断 | 根因 | 修复 |
 |:--------|:----------|:------------|:-----|
 | `ResourceNotFound.SubnetId` | `tccli vpc DescribeSubnets` | 子网不在集群 VPC | 用集群 VPC 内子网 |
-| `InvalidParameterValue.VpcCniType` | 查枚举 | VpcCniType 拼错 | 用 `tke-route-eni` 或 `tke-direct-route-eni` |
+| `InvalidParameterValue.VpcCniType` | 查枚举 | VpcCniType 拼错 | 用 `tke-route-eni` 或 `tke-direct-eni` |
 | `UnsupportedOperation` | `DescribeClusters` → `NetworkType` | 已开启 VPC-CNI 或集群非 Running | 先 Disable 或等 Running |
 | 创建/开启 VPC-CNI 失败且消息含授权/IPAMD/ENI | `tccli cam DescribeRoleList --Page 1 --Rp 100 --filter "List[?RoleName=='IPAMDofTKE_QCSRole'].RoleName" --output text` | 缺 `IPAMDofTKE_QCSRole` 或未挂 `QcloudAccessForIPAMDofTKERole` | 见 [IPAMD 服务角色](#ipamd-服务角色)；总表 [配置凭证](../../getting-started/credentials.md#补-ipamdoftke_qcsrolevpc-cni-前置) |
 | `UnauthorizedOperation` / CAM 拒绝（用户侧） | 查子账号策略 | 用户无 `tke:EnableVpcCniNetworkType` | 给用户挂 TKE 策略，与服务角色无关 |

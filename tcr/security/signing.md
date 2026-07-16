@@ -152,7 +152,7 @@ tccli tcr CreateSignature --region <REGION> \
 
 | 维度 | 命令 | 预期 |
 |:-----|:-----|:-----|
-| 策略存在 | `CreateSignature --DryRun` 不报策略错 | 无 `ResourceNotFound` |
+| 策略存在 | 再次 `CreateSignature` 不报策略缺失类错误 | 无策略相关 `ResourceNotFound`（`CreateSignature` **无** `--DryRun` 参数） |
 | 签名成功 | `CreateSignature` | exit 0 |
 | 证书未过期 | KMS 密钥状态 `Enabled` | `tccli kms DescribeKey --KeyId "<KMS_KEY_ID>"` → `KeyMetadata.KeyState` |
 

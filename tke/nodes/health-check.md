@@ -20,7 +20,8 @@ fused: false
 
 - 需自动发现节点故障（kubelet 不健康/文件系统只读/内核 oops）并在允许时自动修复 — 创建健康检查策略
 - DescribeHealthCheckPolicies 返回空或不含目标规则，需新增策略覆盖 `KubeletUnhealthy`/`RuntimeUnhealthy` 等规则
-- `DescribeHealthCheckTemplate` 报 `UnsupportedRegion` 或 CAM 拒绝 `tke:CreateHealthCheckPolicy` — 看 [故障恢复]段
+- `DescribeHealthCheckTemplate` / `CreateHealthCheckPolicy` 报 CAM 拒绝 `tke:CreateHealthCheckPolicy` — 看 [故障恢复]段
+- 创建策略后绑定未生效（`DescribeHealthCheckPolicyBindings` 无记录）— 看 [验证]段与 [收尾确认]
 
 
 ## 概述
@@ -98,11 +99,12 @@ tccli tke DescribeHealthCheckTemplate --version 2022-05-01 --region <SUPPORTED_R
 }
 ```
 
-> ⚠️ **地域限制**：`DescribeHealthCheckTemplate` 在 `ap-guangzhou` 返回 `UnsupportedRegion`；改用 `ap-beijing` / `ap-shanghai` / `ap-chengdu` / `ap-nanjing`。模板是全局一致的，任一支持地域查询结果相同。
+> 模板里即使 `RepairAction=RestartKubelet/RestartRuntime`，`ShouldRepair` 默认仍可能为 `false`（建议检测、默认不建议自动修复）。创建策略时由你在 `Rules[].AutoRepairEnabled` 显式打开自动修复；只有 `RepairAction` 非 `None` 的规则（`KubeletUnhealthy`/`RuntimeUnhealthy`）打开才有效。
+> 模板在 `ap-guangzhou` / `ap-beijing` / `ap-shanghai` 等地域均可查，内容全局一致（15 条规则）。策略创建/查询用**集群所在地域**。
 
 | 占位符 | 含义 | 约束 | 获取方式 |
 |--------|------|------|---------|
-| `<SUPPORTED_REGION>` | 支持地域 | 非 `ap-guangzhou` | `ap-beijing` 等 |
+| `<SUPPORTED_REGION>` | 查询模板用地域 | 与集群同地域即可；跨地域查模板结果相同 | 如 `ap-guangzhou` |
 | `<CLUSTER_ID>` | 集群 ID | 已存在的集群 | `tccli tke DescribeClusters --region <REGION>` |
 | `<POLICY_NAME>` | 策略名 | 集群内唯一 | 自定义 |
 
@@ -173,7 +175,6 @@ tccli tke ModifyHealthCheckPolicy --version 2022-05-01 --region <REGION> \
 
 | 现象 | 根因 | 修复 |
 |:-----|:-----|:-----|
-| `UnsupportedRegion` | `DescribeHealthCheckTemplate` 在 `ap-guangzhou` 不可用 | 改用 `ap-beijing` 等支持地域查模板；策略创建/查询用集群所在地域 |
 | `AuthFailure.UnauthorizedOperation` (tke:CreateHealthCheckPolicy) | CAM 策略要求资源带特定标签（要求 `billing` 标签） | 给集群加授权要求的标签，或申请 `tke:CreateHealthCheckPolicy` 权限 |
 | 同名策略已存在 | `HealthCheckPolicy.Name` 集群内唯一 | 先 `DeleteHealthCheckPolicy` 再建，或 `ModifyHealthCheckPolicy` 覆盖 |
 | 自动修复未触发 | 规则 `RepairAction=None`（如 `ReadonlyFilesystem`）不可修复 | 仅 `KubeletUnhealthy`/`RuntimeUnhealthy` 可自动修复，其余只能告警 |

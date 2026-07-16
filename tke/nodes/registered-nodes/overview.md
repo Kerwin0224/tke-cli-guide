@@ -81,7 +81,7 @@ tccli tke DescribeExternalNodePools --region ap-guangzhou --ClusterId "<CLUSTER_
 # expected: 有池时列出 id/name/life；无池时 TotalCount=0 且 NodePoolSet 为空数组
 ```
 
-> 注册节点特性是否已在集群开启，用 `DescribeExternalNodeSupportConfig --ClusterId` 看 `Enabled`/`Status`（未开启时 `Enabled=false`、`Status=Disabled`）。创建与接入步骤见下方链接。
+> 注册节点特性是否已在集群开启，用 `DescribeExternalNodeSupportConfig --ClusterId` 看 **`Status`**（`Disabled`/`Initializing`/`Enabled`/`InitFailed`）。`Enabled` 布尔可能与 `Status` 不同步，**以 `Status` 为准**。创建与接入步骤见下方链接。
 
 ## 快速开始
 

@@ -149,19 +149,20 @@ tccli tke DisableEncryptionProtection --ClusterId "<CLUSTER_ID>" --region <REGIO
 > `Status` 状态机：`Closed`（未加密）→ `Opening`（开启中）→ `Opened`（已开启）。`DisableEncryptionProtection` 关闭加密保护（非关闭加密本身），允许对加密集群做特殊操作。
 
 ```bash
-# 开启加密保护（KMSConfiguration 传 KMS 加密配置）
+# 开启加密保护（KMSConfiguration 字段是 KeyId + KmsRegion，不是 KmsKeyId）
 tccli tke EnableEncryptionProtection --region <REGION> \
   --ClusterId "<CLUSTER_ID>" \
-  --KMSConfiguration '{"KmsRegion":"<KMS_REGION>","KmsKeyId":"<KMS_KEY_ID>"}'
+  --KMSConfiguration '{"KmsRegion":"<KMS_REGION>","KeyId":"<KMS_KEY_ID>"}'
 # expected: exit 0, Status 进入 Opening → Opened; 集群不存在报 ResourceNotFound
+# KeyId 可选：不传则采用 TKE 默认生成密钥（TKE-KMS）
 ```
 
 | 占位符 | 含义 | 如何获取 |
 |:-------|:-----|:---------|
 | `<KMS_REGION>` | KMS 密钥所在地域 | `tccli kms ListKeys --region <REGION>` |
-| `<KMS_KEY_ID>` | KMS 主密钥 ID | `tccli kms ListKeys` → `Keys[].KeyId` |
+| `<KMS_KEY_ID>` | KMS 主密钥 ID（对应字段名 `KeyId`） | `tccli kms ListKeys` → `Keys[].KeyId` |
 
-> `EnableEncryptionProtection` 的 `KmsConfiguration` 是嵌套对象（含 `KmsRegion`/`KmsKeyId`），开启后 etcd 数据用 KMS 密钥加密。开启是异步操作，用 `DescribeEncryptionStatus` 轮询 `Status` 到 `Opened`。开启前需先在 KMS 创建密钥并授权 TKE 使用。
+> `EnableEncryptionProtection` 的 `KMSConfiguration` 是嵌套对象（字段 **`KeyId`** / **`KmsRegion`**，**不是** `KmsKeyId`），开启后 etcd 数据用 KMS 密钥加密。开启是异步操作，用 `DescribeEncryptionStatus` 轮询 `Status` 到 `Opened`（`Closed`/`Opening`/`Opened`/`Closing`）。开启前需先在 KMS 创建密钥并授权 TKE 使用。
 
 ## 开放策略（OPA/Gatekeeper）
 

@@ -33,7 +33,7 @@ TCR 实例是独立的镜像仓库服务后端。企业版实例有独立存储�
 |:-----|:-----|:-----|
 | Registry | 实例，独立镜像仓库服务 | 顶级资源，决定访问域名与存储 |
 | RegistryType | `basic` / `standard` / `premium` | 决定配额、功能与价格 |
-| Status | 实例状态（Creating/Running/Deleting） | push/pull 前必须 Running |
+| Status | 实例状态（创建过渡 `Pending`/`Deploying`；稳定 `Running`；删除 `Deleting`；另有异常态） | push/pull 前必须 `Running` |
 | PublicDomain | 公网访问域名 | docker login/push/pull 的地址 |
 | 访问凭证 | Token（Username + Token） | docker login 的用户名密码 |
 
@@ -63,11 +63,13 @@ TCR 实例是独立的镜像仓库服务后端。企业版实例有独立存储�
 
 | 状态 | 含义 | 触发 | 用户可执行操作 |
 |:-----|:-----|:-----|:--------------|
-| Creating | 创建中 | `CreateInstance` | 等待（3-5 分钟） |
+| Pending | 初始化中 | `CreateInstance` 后 | 等待 |
+| Deploying | 创建中 | 初始化后部署 | 等待（约 3-5 分钟） |
 | Running | 正常运行 | 创建完成 | 全部操作 |
 | Deleting | 删除中 | `DeleteInstance` | 等待 |
+| Unhealthy / FailedCreated / FailedUpdated / Bucket-Error / Isolate / DeleteBucketFailed / DeleteFailed | 异常或回收相关 | 创建/更新/存储/删除失败或欠费隔离 | 按 [状态机](../reference/states.md) 与错误信息处理；勿在非 `Running` 时 push/pull |
 
-> 完整状态机见 [状态机参考](../reference/states.md)。push/pull 前必须确认 `Running`。
+> 完整枚举与过程字段见 [状态机参考](../reference/states.md)（`DescribeInstances`/`DescribeInstanceStatus` 的 `Status`；官方数据结构无 `Creating` 字面值，创建过渡为 `Pending`→`Deploying`）。push/pull 前必须确认 `Running`。
 
 ## 不适用场景
 
@@ -89,7 +91,7 @@ tccli tcr DescribeInstances --region <REGION> \
 - [创建实例](create.md) — 规格选择、地域、后端存储；配额见 [quotas](../reference/quotas.md) / 官方 104731
 - [访问管理](manage-access.md) — **先内网后公网**、Token、白名单
 - [自定义域名](custom-domain.md) — 绑定自有域名 + 证书
-- [状态机](../reference/states.md) — 实例状态枚举（Creating/Running/Deleting）
+- [状态机](../reference/states.md) — 实例状态枚举（Pending/Deploying/Running/Deleting 及异常态）
 - [错误码](../reference/error-codes.md) — docker login/push 失败码
 - [配额与限制](../reference/quotas.md) — 规格配额与用量查询
 - [个人版](../personal/index.md) — 免费个人版（API 形态不同）

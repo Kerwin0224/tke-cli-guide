@@ -64,7 +64,7 @@ tccli tke DescribeClusters --region <REGION> --filter "Clusters[*].ClusterId" --
 |:-----|:-----|:----:|:-----|:-----------|
 | `InstanceId` | String | 是 | Prometheus 实例 | 实例不存在被拒 |
 | `ClusterId` | String | 是 | 已存在集群 | 集群不存在被拒 |
-| `ClusterType` | String | 是 | `MANAGED_CLUSTER`/`INDEPENDENT_CLUSTER` | 类型错被拒 |
+| `ClusterType` | String | 是 | `tke`/`eks`（非 CreateCluster 的 MANAGED/INDEPENDENT） | 类型错被拒 |
 | `ServiceMonitors[]` | Array | 否 | Create=对象{Name,Config,TemplateId}；Delete=字符串(Name) | Create/Delete 混用会参数错 |
 | `PodMonitors[]` | Array | 否 | 同上 | 同上 |
 | `RawJobs[]` | Array | 否 | 同上 | 同上 |
@@ -95,7 +95,7 @@ tccli tke DescribeClusters --region <REGION> --filter "Clusters[*].ClusterId" --
 
 ```bash
 tccli tke CreatePrometheusConfig --region <REGION> \
-  --InstanceId <PROM_INSTANCE_ID> --ClusterType MANAGED_CLUSTER --ClusterId <CLUSTER_ID> \
+  --InstanceId <PROM_INSTANCE_ID> --ClusterType tke --ClusterId <CLUSTER_ID> \
   --ServiceMonitors '[{"Name":"<SM_NAME>","Config":"<SM_YAML>"}]'
 # expected: exit 0, 返回 RequestId
 ```
@@ -129,7 +129,7 @@ tccli tke CreatePrometheusTemp --region <REGION> \
 # 同步模板到目标实例
 tccli tke SyncPrometheusTemp --region <REGION> \
   --TemplateId <TEMPLATE_ID> \
-  --Targets '[{"Region":"<REGION>","InstanceId":"<PROM_INSTANCE_ID>","ClusterId":"<CLUSTER_ID>","ClusterType":"MANAGED_CLUSTER"}]'
+  --Targets '[{"Region":"<REGION>","InstanceId":"<PROM_INSTANCE_ID>","ClusterId":"<CLUSTER_ID>","ClusterType":"tke"}]'
 # expected: exit 0, 返回 RequestId
 ```
 
@@ -159,7 +159,7 @@ tccli tke ModifyPrometheusTemplate --region <REGION> \
 # 4. 同步告警模板到目标实例（Targets 结构同 SyncPrometheusTemp）
 tccli tke SyncPrometheusTemplate --region <REGION> \
   --TemplateId <TEMPLATE_ID> \
-  --Targets '[{"Region":"<REGION>","InstanceId":"<PROM_INSTANCE_ID>","ClusterId":"<CLUSTER_ID>","ClusterType":"MANAGED_CLUSTER"}]'
+  --Targets '[{"Region":"<REGION>","InstanceId":"<PROM_INSTANCE_ID>","ClusterId":"<CLUSTER_ID>","ClusterType":"tke"}]'
 # expected: exit 0
 
 # 5. 删除告警模板
@@ -184,7 +184,7 @@ tccli tke CreatePrometheusDashboard --region <REGION> \
 
 ```bash
 tccli tke DescribePrometheusConfig --region <REGION> \
-  --InstanceId <PROM_INSTANCE_ID> --ClusterId <CLUSTER_ID> --ClusterType MANAGED_CLUSTER
+  --InstanceId <PROM_INSTANCE_ID> --ClusterId <CLUSTER_ID> --ClusterType tke
 # expected: exit 0, 返回 ServiceMonitors/PodMonitors 等当前配置
 ```
 
@@ -205,7 +205,7 @@ tccli tke DescribePrometheusGlobalConfig --region <REGION> --InstanceId <PROM_IN
 
 # 修改采集配置（覆盖式，ServiceMonitors 等为对象数组{Name,Config,TemplateId}，与 Create 同结构）
 tccli tke ModifyPrometheusConfig --region <REGION> \
-  --InstanceId <PROM_INSTANCE_ID> --ClusterType MANAGED_CLUSTER --ClusterId <CLUSTER_ID> \
+  --InstanceId <PROM_INSTANCE_ID> --ClusterType tke --ClusterId <CLUSTER_ID> \
   --ServiceMonitors '[{"Name":"<SM_NAME>","Config":"<SM_YAML>"}]'
 # expected: CAM 拦截 AuthFailure.UnauthorizedOperation；授权后 exit 0
 
@@ -241,7 +241,7 @@ tccli tke ModifyPrometheusRecordRuleYaml --region <REGION> \
 ```bash
 # 删除采集配置（传 Name 字符串数组）
 tccli tke DeletePrometheusConfig --region <REGION> \
-  --InstanceId <PROM_INSTANCE_ID> --ClusterType MANAGED_CLUSTER --ClusterId <CLUSTER_ID> \
+  --InstanceId <PROM_INSTANCE_ID> --ClusterType tke --ClusterId <CLUSTER_ID> \
   --ServiceMonitors '["<SM_NAME>"]'
 # expected: exit 0
 

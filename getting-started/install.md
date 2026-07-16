@@ -4,6 +4,8 @@ doc_type: How-to
 # 安装 TCCLI
 
 > 安装腾讯云命令行工具 TCCLI，本指南所有命令的前置。已安装可跳到 [配置凭证](credentials.md)。
+>
+> 官方文档：[TCCLI 安装](https://cloud.tencent.com/document/product/440/6176)
 
 ## 概述
 

@@ -97,7 +97,7 @@ tccli tcr DescribeInstanceCustomizedDomain --region <REGION> --RegistryId <REGIS
 }
 ```
 
-> 上图为空结果示例（未绑定时）。绑定成功后 `DomainInfoList` 含域名对象，`TotalCount >= 1`。
+> 上图为空结果示例（未绑定时，或 `RegistryId` 不存在时 API 亦可能返回空列表而非报错）。绑定成功后 `DomainInfoList` 含域名对象（字段含 `DomainName`/`CertId`/`Status`），`TotalCount >= 1`。`Status` 枚举：`SUCCESS` / `FAILURE` / `CREATING` / `DELETING`。
 
 ### 步骤 4：配置 DNS 解析
 

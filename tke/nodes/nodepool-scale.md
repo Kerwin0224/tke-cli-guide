@@ -170,18 +170,18 @@ tccli tke DescribeNodePools --version 2022-05-01 --region ap-guangzhou \
 - **InstanceDeleteMode 选择**: 缩容时 `terminate`（销毁 CVM，停止计费）/ `retain`（保留 CVM 作他用，继续计费）——默认 `terminate` 避免孤儿 CVM
 
 ```bash
-# 扩容 Master (RunInstancesForNode 透传 CVM RunInstances JSON, NodeRole=master)
+# 扩容 Master (RunInstancesForNode 透传 CVM RunInstances JSON, NodeRole=MASTER_ETCD)
 tccli tke ScaleOutClusterMaster --ClusterId "<CLUSTER_ID>" --region <REGION> \
-  --RunInstancesForNode '[{"NodeRole":"master","RunInstancesPara":["<CVM_JSON>"]}]'
+  --RunInstancesForNode '[{"NodeRole":"MASTER_ETCD","RunInstancesPara":["<CVM_JSON>"]}]'
 # expected: exit 0
 
 # 缩容 Master (按 InstanceId, InstanceDeleteMode 销毁方式)
 tccli tke ScaleInClusterMaster --ClusterId "<CLUSTER_ID>" --region <REGION> \
-  --ScaleInMasters '[{"InstanceId":"<INSTANCE_ID>","NodeRole":"master","InstanceDeleteMode":"terminate"}]'
+  --ScaleInMasters '[{"InstanceId":"<INSTANCE_ID>","NodeRole":"MASTER_ETCD","InstanceDeleteMode":"terminate"}]'
 # expected: exit 0
 ```
 
-> Master 扩缩容仅独立集群（INDEPENDENT_CLUSTER）需要——托管集群（MANAGED_CLUSTER）的 Master 由 TKE 管理。`InstanceDeleteMode` 如 `terminate`（销毁）/ `retain`（保留）。
+> Master 扩缩容仅独立集群（INDEPENDENT_CLUSTER）需要——托管集群（MANAGED_CLUSTER）的 Master 由 TKE 管理。扩容 `NodeRole` 为 `MASTER_ETCD`/`WORKER`；缩容 `NodeRole` 为 `MASTER`/`ETCD`/`MASTER_ETCD`。`InstanceDeleteMode` 为 `terminate`（销毁）/ `retain`（保留）。完整命令与多数派约束见 [Master 运维](../clusters/master-ops.md)。
 
 ### 集群级 ASG 选项
 

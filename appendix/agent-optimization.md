@@ -4,6 +4,8 @@ doc_type: Concept
 # Agent 优化模式
 
 > 如何用 TCCLI 的 Agent 优化 flag 组合来省 token、等异步、模板化调用、标记身份。这些模式让 agent 高效驱动 TCCLI 完成长任务。
+>
+> 官方文档：[TCCLI 使用](https://cloud.tencent.com/document/product/440/6177)
 
 ## 概述
 

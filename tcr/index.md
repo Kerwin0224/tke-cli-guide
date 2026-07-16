@@ -4,6 +4,8 @@ doc_type: Overview
 # TCR 容器镜像服务
 
 > 腾讯云容器镜像服务 (Tencent Container Registry) — 安全、高性能的 Docker/OCI 镜像仓库。
+>
+> 官方文档：[产品服务层级与容量限制](https://cloud.tencent.com/document/product/1141/104731) · [个人版快速入门](https://cloud.tencent.com/document/product/1141/63910)
 
 ## 是什么
 

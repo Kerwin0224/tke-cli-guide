@@ -45,11 +45,11 @@ fused: true
 
 公网版的 tccli 步骤与专线版相同：
 
-1. 查询支持现状：`DescribeExternalNodeSupportConfig`
-2. 开启支持：`EnableExternalNodeSupport`（按控制台公网版开关对应配置传入）
+1. 查询支持现状：`DescribeExternalNodeSupportConfig`（以 `Status` 为准：`Disabled`/`Initializing`/`Enabled`/`InitFailed`）
+2. 开启支持：`EnableExternalNodeSupport`（`NetworkType` 仅 `HostNetwork`/`CiliumBGP`，与专线版相同；公网能力看 `EnabledPublicConnect`/`PublicConnectUrl`）
 3. 创建节点池：`CreateExternalNodePool`
-4. 获取脚本：`DescribeExternalNodeScript`
-5. 在目标机器执行脚本，节点上线
+4. 获取脚本：`DescribeExternalNodeScript`（响应 `Command`/`Link`/`Token`）
+5. 在目标机器执行 `Command`，节点上线
 
 完整命令、字段表、占位符与验证见[创建注册节点（专线版）](dedicated-line.md)。本篇不重复命令，仅说明公网相关的差异与约束。
 

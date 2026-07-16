@@ -4,7 +4,7 @@ subtype: 8B
 ---
 # TKE 状态机
 
-> 集群、节点池、节点三类资源的完整状态机。状态值来自 `DescribeClusterStatus` / `DescribeClusterNodePools` / `DescribeClusterInstances` 的响应字段，以官方文档为准。
+> 集群、节点池、节点三类资源的完整状态机。状态值来自 `DescribeClusterStatus` / `DescribeClusterNodePools` / `DescribeClusterInstances` 的响应字段，以官方文档为准。半常量与配额边界见 [购买集群配额限制](https://cloud.tencent.com/document/product/457/9087)。
 
 ## 查询命令
 

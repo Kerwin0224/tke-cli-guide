@@ -4,6 +4,8 @@ doc_type: Overview
 # 集群插件
 
 > TKE 集群插件管理——扩展集群功能的组件，如 CBS CSI、Ingress Controller、eniipamd。
+>
+> 官方文档：[组件与应用概述](https://cloud.tencent.com/document/product/457/81234) · [VPC-CNI（eniipamd）组件变更记录](https://cloud.tencent.com/document/product/457/64920)
 
 ## 是什么
 

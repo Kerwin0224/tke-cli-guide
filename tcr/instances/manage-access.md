@@ -51,7 +51,7 @@ tccli tcr DescribeInstances --region ap-guangzhou --Registryids '["<REGISTRY_ID>
   - 推拉端在腾讯云 VPC / TKE → **只开内网**（本篇步骤 2）
   - 本地调试或外网 CI → 再开公网 + 白名单（步骤 3–4）
   - 两者可并存，互不冲突
-- **可修改**：公网/内网可随时 `Manage*Endpoint --Operation Create|Delete`
+- **可修改**：公网/内网可随时 `Manage*Endpoint --Operation Create|Delete`（**仅** `Create`/`Delete`；传 `Open`/`Close` 等返回 `InvalidParameter`：`not support operation, must Create or Delete`）
 
 ### 步骤 2：开启内网访问（推荐优先）
 
@@ -63,6 +63,7 @@ tccli tcr ManageInternalEndpoint \
   --VpcId "<VPC_ID>" \
   --SubnetId "<SUBNET_ID>"
 # expected: exit 0
+# --Operation 仅 Create|Delete；Open/Close 非法
 ```
 
 验证:
@@ -71,7 +72,7 @@ tccli tcr ManageInternalEndpoint \
 tccli tcr DescribeInternalEndpoints \
   --region ap-guangzhou \
   --RegistryId "<REGISTRY_ID>"
-# expected: AccessVpcSet 含目标 VpcId/SubnetId；Status 可达（如 Running）
+# expected: AccessVpcSet 含目标 VpcId/SubnetId；项字段 Status 示例为 Running（api.json/官方示例；空接入时 AccessVpcSet 可为 null、TotalCount=0）
 ```
 
 > 内网域名解析：链路建立后，若 VPC 内无法解析实例域名，须在控制台「管理自动解析」或 Private DNS 配置（见官方内网访问控制）。TCCLI 侧对应 `CreateInternalEndpointDns` 等；本篇只保证接入链路创建。
@@ -127,9 +128,9 @@ tccli tcr CreateInstanceToken \
 创建(CreateInstanceToken) → 使用(docker login) → [temp 自动过期 / longterm 禁用或删除]
 ```
 
-- **禁用长期 Token**（保留凭证记录，可再启用）：`tccli tcr ModifyInstanceToken --region <REGION> --RegistryId "<ID>" --TokenId "<TOKEN_ID>" --Enable false`（`<TOKEN_ID>` = `DescribeInstanceToken` → `Tokens[].Id`）
+- **禁用长期 Token**（保留凭证记录，可再启用）：`tccli tcr ModifyInstanceToken --region <REGION> --RegistryId "<ID>" --TokenId "<TOKEN_ID>" --Enable false`（`<TOKEN_ID>` = `DescribeInstanceToken` → `Tokens[].Id`；`ModifyFlag` 默认 `2` 表示启停，改描述用 `1`）
 - **删除长期 Token**（彻底移除凭证）：`tccli tcr DeleteInstanceToken --region <REGION> --RegistryId "<ID>" --TokenId "<TOKEN_ID>"`，expected exit 0
-- **查询 Token 列表**：`tccli tcr DescribeInstanceToken --region <REGION> --RegistryId "<ID>"` → `Tokens[].Id` / `Enabled` / `Desc`
+- **查询 Token 列表**：`tccli tcr DescribeInstanceToken --region <REGION> --RegistryId "<ID>"` → `Tokens[].Id` / `Enabled` / `Desc`（列表无 `TokenType` 字段）
 
 > 长期凭证泄露后，先 `ModifyInstanceToken --Enable false` 禁用止损，再 `DeleteInstanceToken` 删除。temp 凭证 1 小时自动过期，无需手动清理。
 
@@ -211,7 +212,8 @@ tccli tcr DeleteSecurityPolicy --RegistryId "<ID>" --PolicyIndex <INDEX>  # 见 
 | `docker login` 连接超时（VPC 内） | `tccli tcr DescribeInternalEndpoints` | 内网未接入或域名未解析 | `ManageInternalEndpoint` + 私有域解析 |
 | `docker login` 返回 `403 Forbidden` | `tccli tcr DescribeSecurityPolicies` | 当前 IP 不在白名单 | 添加当前 IP 到白名单，或临时删除白名单 |
 | `DescribeSecurityPolicies` → `ResourceNotFound`（消息含 `Failed to get security group id from registry`） | `DescribeExternalEndpointStatus` | 公网端点未开（`Status=Closed`）或实例无安全组绑定（basic 常见） | 先 `ManageExternalEndpoint --Operation Create`；仍失败则查规格/公网是否支持白名单 |
-| `ManageExternalEndpoint` / `ManageInternalEndpoint` 报错 | `tccli tcr DescribeInstances` | 实例状态不是 Running | 等待实例就绪 |
+| `InvalidParameter`（`not support operation, must Create or Delete`） | 检查 `--Operation` | 传了 `Open`/`Close` 等非法值 | 只用 `Create` 或 `Delete` |
+| `ManageExternalEndpoint` / `ManageInternalEndpoint` 报错 | `tccli tcr DescribeInstances` | 实例状态不是 Running，或 RegistryId 不存在 | 等待实例就绪；假 ID 可能返回 `InternalError.DbError` / `FailedOperation.ErrorGetDBDataError` |
 | `CreateSecurityPolicy` CidrBlock 错误 | 检查 CIDR 格式 | 格式不是 `IP/掩码` | 使用格式如 `1.2.3.4/32` |
 | `LimitExceeded`（VPC 接入） | `DescribeInternalEndpoints` 看条数 | 达规格 VPC 配额（basic=5） | 删闲置接入或升规格，见 [配额](../reference/quotas.md) |
 

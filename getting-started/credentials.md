@@ -7,6 +7,8 @@ fused: false
 
 > 获取腾讯云 CAM 凭证（SecretId/SecretKey）并配置到 TCCLI，让 TCCLI 能调用 TKE/TCR API。这是使用本指南所有命令的**唯一前置**——未配置凭证时，第一条 API 调用返回 `AuthFailure.SecretIdNotFound`。
 > 控制台: [访问管理 CAM](https://console.cloud.tencent.com/cam)
+>
+> 官方文档：[访问密钥](https://cloud.tencent.com/document/product/598/40488) · [TCCLI 配置](https://cloud.tencent.com/document/product/440/62968)
 
 > ⚠️ **控制台是固有边界**：CAM 根凭证（SecretId/SecretKey）的**首次获取**须经腾讯云控制台/浏览器——腾讯云不允许用 TCCLI 自举创建 API 密钥（`tccli auth login` 也触发浏览器登录）。本指南定位是"TCCLI 操作手册"，凭证首次获取这一步**必须**经控制台一次性操作，无法纯 CLI 闭环。这是腾讯云的固有边界，非文档缺陷。配好凭证后，后续所有 TKE/TCR 操作均可纯 CLI 完成。
 
@@ -132,7 +134,7 @@ tccli tke DescribeRegions
 ```
 ```json
 {
-    "TotalCount": 42,
+    "TotalCount": 19,
     "RegionInstanceSet": [
         {
             "RegionName": "ap-guangzhou",
@@ -142,6 +144,8 @@ tccli tke DescribeRegions
     ]
 }
 ```
+
+> `TotalCount` 为当前账号可见的 TKE 地域数（随产品开通变化，勿写死）。字段名是 `RegionInstanceSet`（不是 `RegionSet`）。
 
 > ⚠️ **不要用 `tccli auth verify`**——该子命令**不存在**（`tccli auth` 仅有 login/logout/help，执行 verify 返回 exit 252 Invalid choice）。凭证验证用 `tccli tke DescribeRegions` 这类轻量只读调用。
 
@@ -339,7 +343,7 @@ tccli configure remove --profile <PROFILE_NAME>
 ```bash
 # 跨产品端到端：凭证对 TKE 和 TCR 两个产品域均生效（验证段仅验证 TKE 域）
 tccli tcr DescribeRegions --filter "TotalCount" --output text
-# expected: 非零数字（如 27）→ 凭证对 TCR 域同样可达，跨产品配置闭环完成
+# expected: 非零数字（如 19；随账号/产品开通变化）→ 凭证对 TCR 域同样可达，跨产品配置闭环完成
 
 # profile 核查：确认当前用的是哪个 profile（避免误用主账号密钥）
 tccli configure list | grep -E "^region|^output" 

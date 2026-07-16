@@ -89,7 +89,7 @@ tccli cam AttachRolePolicy \
 |:------|------|:--------:|------------|---------------|
 | ClusterId | string | 是 | `cls-xxxxxxxx` | `ResourceNotFound` |
 | AddonName | string | 是 | 插件名：`cbs` / `eniipamd` / `tcr` / `tke-log-agent` / `cluster-autoscaler` 等；以 `DescribeAddonValues` 返回为准（部分集群 CBS 为 `cbs-csi`） | `InvalidParameterValue` |
-| AddonVersion | string | 是 | 插件版本 | `InvalidParameterValue.AddonVersion` |
+| AddonVersion | string | 否 | 插件版本；**不传则安装最新兼容版本** | `InvalidParameterValue.AddonVersion` |
 | RawValues | string | 否 | base64 编码的配置 JSON | `InvalidParameterValue` |
 | DryRun | boolean | 否 | 仅校验不执行 | — |
 
@@ -131,15 +131,16 @@ tccli tke GetTkeAppChartList --region ap-guangzhou --Arch amd64
 
 ### 步骤 2：安装插件
 
-`InstallAddon` 必传 `ClusterId`/`AddonName`/`AddonVersion`。按场景**二选一**：A 默认配置（用插件 DefaultValues）或 B 自定义配置（传 `RawValues`）。
+`InstallAddon` 必传 `ClusterId`/`AddonName`；`AddonVersion` 可选（不传则装最新兼容版本）。按场景**二选一**：A 默认配置（用插件 DefaultValues）或 B 自定义配置（传 `RawValues`）。
 
 > ⚠️ **A 与 B 是二选一变体，不是先做 A 再做 B**——两者各调一次 `InstallAddon` 会装**两次同名插件**（第二次报已存在）。插件装好后改配置用 `UpdateAddon`，**禁用第二次 `InstallAddon` 改配置**。
 
 #### 选项 A：默认配置
 
 ```bash
+# 不传 AddonVersion → 安装最新兼容版本；需要钉版本时再加 --AddonVersion "<VERSION>"
 tccli tke InstallAddon --region ap-guangzhou \
-  --ClusterId "<CLUSTER_ID>" --AddonName "<ADDON_NAME>" --AddonVersion "<VERSION>"
+  --ClusterId "<CLUSTER_ID>" --AddonName "<ADDON_NAME>"
 # expected: exit 0, 返回 RequestId
 ```
 
@@ -166,8 +167,9 @@ tccli tke DescribeAddonValues --region ap-guangzhou \
 # 生成 base64 配置
 VALUES=$(echo '{"resources":{"limits":{"cpu":"500m"}}}' | base64)
 
+# AddonVersion 可选；钉版本时再加 --AddonVersion "<VERSION>"
 tccli tke InstallAddon --region ap-guangzhou \
-  --ClusterId "<CLUSTER_ID>" --AddonName "<ADDON_NAME>" --AddonVersion "<VERSION>" \
+  --ClusterId "<CLUSTER_ID>" --AddonName "<ADDON_NAME>" \
   --RawValues "$VALUES"
 # expected: exit 0
 ```
@@ -192,7 +194,7 @@ tccli tke DescribeAddon --region ap-guangzhou --ClusterId "<CLUSTER_ID>" --Addon
 | 维度 | 命令 | 预期 |
 |:-----|:-----|:-----|
 | 插件状态 | `DescribeAddon` → `Addons[].Phase` | `Succeeded` |
-| 版本一致 | `DescribeAddon` → `Addons[].AddonVersion` | 等于安装/更新的版本 |
+| 版本一致 | `DescribeAddon` → `Addons[].AddonVersion` | 等于安装/更新时指定的版本；未指定时等于最新兼容版本 |
 | 运行状态 | `kubectl get pods -n kube-system -l app=<ADDON_NAME>` | Pod Running |
 | 无异常 | `DescribeAddon` → `Addons[].Reason` | 空 |
 

@@ -256,9 +256,11 @@ tccli tcr DuplicateImage --RegistryId "<REGISTRY_ID>" --region <REGION> \
   --SourceNamespace "<SRC_NS>" --SourceRepo "<SRC_REPO>" --SourceReference "<SRC_TAG>" \
   --DestinationNamespace "<DEST_NS>" --DestinationRepo "<DEST_REPO>" --DestinationTag "<DEST_TAG>"
 # expected: exit 0
+# 可选：--Override true 覆盖目标已有同名 tag（默认不覆盖策略以服务端为准）
+# DestinationNamespace / DestinationRepo 可选，不填默认与源一致
 ```
 
-> `DuplicateImage` 是同实例内镜像复制（跨命名空间/仓库），区别于 [实例同步](../replication/manage.md)（跨实例/跨地域）。`SourceReference`/`DestinationTag` 是镜像 tag。
+> `DuplicateImage` 是同实例内镜像复制（跨命名空间/仓库），区别于 [实例同步](../replication/manage.md)（跨实例/跨地域）。`SourceReference`/`DestinationTag` 是镜像 tag；可选 `Override` 控制是否覆盖目标 tag。
 
 ## 收尾确认
 

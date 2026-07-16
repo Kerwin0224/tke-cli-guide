@@ -5,6 +5,8 @@ doc_type: Overview
 
 > 适合个人开发者和轻量场景——免费使用，与企业版 API 形态完全不同。
 > 控制台：无独立个人版管理页——`https://console.cloud.tencent.com/tcr/personal` 与 `/ccr*` 返回 **404**（页面提示网址已删除或尚未生效）；左栏无个人版入口。规格对比见 [购买页](https://buy.cloud.tencent.com/tcr)，个人版相关面见 [公有镜像](https://console.cloud.tencent.com/tcr/publicimage)（域名 `ccr.ccs.tencentyun.com`）。操作走本文 API / [个人版全功能](manage.md)。
+>
+> 官方文档：[容器镜像服务个人版](https://cloud.tencent.com/document/product/1141/57780) · [个人版快速入门](https://cloud.tencent.com/document/product/1141/63910)
 
 ## 是什么
 

@@ -66,8 +66,9 @@ basic 实例不能作主也不能作从。需先 [创建实例](../instances/cre
 | `Rule.Name` | ManageReplication | 是 | 规则名 |
 | `Rule.DestNamespace` | ManageReplication | 是 | 目标命名空间 |
 | `RegistryId` | CreateReplicationInstance | 是 | 主实例 ID |
-| `ReplicationRegionId` | CreateReplicationInstance | 是 | 从实例地域数字 ID |
-| `SyncTag` | CreateReplicationInstance | 否 | 是否同步标签 |
+| `ReplicationRegionId` | CreateReplicationInstance | 条件 | 从实例地域数字 ID；与 `ReplicationRegionName` **二选一或同传**（API 层二者均 Optional，实际须给地域） |
+| `ReplicationRegionName` | CreateReplicationInstance | 条件 | 从实例地域名（如 `ap-beijing`）；可与数字 ID 同传 |
+| `SyncTag` | CreateReplicationInstance | 否 | 是否同步 TCR 云标签至 COS Bucket |
 
 ### TCR 地域数字 ID（ReplicationRegionId 取值）
 
@@ -203,7 +204,7 @@ tccli tcr DescribeReplicationPolicies --region <SOURCE_REGION> \
 tccli tcr DescribeReplicationInstanceCreateTasks --region <SOURCE_REGION> \
   --ReplicationRegistryId <REPLICATION_REGISTRY_ID> \
   --ReplicationRegionId <DEST_REGION_ID>
-# expected: exit 0，返回 TaskDetail+Status（无任务时为空；从实例创建进度 Creating→Success/Failed）
+# expected: exit 0，返回 TaskDetail+Status（无任务时为空；整体 Status / TaskDetail.TaskStatus 示例为 SUCCESS，以实际响应为准）
 ```
 
 > `DescribeReplicationPolicies` 用 `Page`/`PageSize`（从 1 开始的页码），与同域 `DescribeReplicationInstances` 的 `Offset`/`Limit` 不同——切换接口必须改分页参数。`DescribeReplicationInstanceCreateTasks` 用 `ReplicationRegistryId`（从实例 ID，步骤 1 返回）+ `ReplicationRegionId`（从实例地域数字 ID）查创建任务，区别于 `DescribeReplicationInstanceSyncStatus` 查的是同步状态。

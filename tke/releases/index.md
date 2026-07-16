@@ -4,6 +4,8 @@ doc_type: Overview
 # 应用发布
 
 > 用 Helm Release 在 TKE 集群内部署应用。Release 是 TKE 封装的 Helm 部署实例，管理应用从部署到卸载的完整生命周期。
+>
+> 官方文档：[组件与应用概述](https://cloud.tencent.com/document/product/457/81234)
 
 ## 是什么
 

@@ -171,7 +171,7 @@ tccli tke DescribeClusterStatus \
         {
             "ClusterId": "cls-xxxxxxxx",
             "ClusterState": "Running",
-            "ClusterInstanceState": "AllNormal",
+            "ClusterInstanceState": "",
             "ClusterBMonitor": false,
             "ClusterInitNodeNum": 0,
             "ClusterRunningNodeNum": 0,
@@ -186,6 +186,8 @@ tccli tke DescribeClusterStatus \
     "RequestId": "..."
 }
 ```
+
+> **空集群说明**：本 Quickstart 创建时**无 worker**，`ClusterRunningNodeNum=0` 时 `ClusterInstanceState` 常为**空字符串**（非异常）。有 ≥1 worker 且节点健康后才为 `AllNormal`。waiter 只盯 `ClusterState=Running` 即可。
 
 | waiter 参数 | 值 | 说明 |
 |:-----------|:----|:-----|

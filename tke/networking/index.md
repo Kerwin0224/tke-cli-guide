@@ -4,6 +4,8 @@ doc_type: Overview
 # 网络管理
 
 > 集群的网络访问入口与 Pod 网络模型。决定如何连接集群、Pod 如何获取 IP。
+>
+> 官方文档：[容器网络概述](https://cloud.tencent.com/document/product/457/50353) · [容器集群网络方案选型](https://cloud.tencent.com/document/product/457/106561) · [创建集群访问端口](https://cloud.tencent.com/document/api/457/39414)
 
 ## 是什么
 

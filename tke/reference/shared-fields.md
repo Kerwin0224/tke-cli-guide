@@ -5,6 +5,8 @@ subtype: 8B
 # TKE 共享字段参考
 
 > TKE 多个 Action 共用的嵌套字段结构。这些字段在创建集群、添加节点、节点池等操作中重复出现，统一在此引导一次，各文档引用本页，不重复展开。
+>
+> 官方文档：[API 概览](https://cloud.tencent.com/document/product/457/31884)
 
 ## 何时查本页
 

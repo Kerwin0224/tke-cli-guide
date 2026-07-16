@@ -60,16 +60,31 @@ tccli tke UpdateClusterKubeconfig --region <REGION> --ClusterId "<CLUSTER_ID>"
 
 ### 集群访问 Token 轮转
 
-> 完整入参以 `tccli tke RotateClusterToken help --detail` 为准（2018-05-25 版）。
+> 完整入参以 `tccli tke RotateClusterToken help --detail` 与实际 CLI 行为为准（2018-05-25）。
+
+**当前 TCCLI 契约缺口（已用命令核实）**：
+
+| 渠道 | 结果 |
+|:-----|:-----|
+| `tccli tke RotateClusterToken --generate-cli-skeleton` | `{}`（无业务字段） |
+| `help --detail` → AVAILABLE PARAMETERS | **无** |
+| 官方 Example | `tccli tke RotateClusterToken --cli-unfold-argument`（**无** `--ClusterId`） |
+| 不传业务参调用 | 服务端 `MissingParameter`：请求缺少必传参数 `ClusterId` |
+| 传 `--ClusterId cls-xxx` | TCCLI **本地** `Unknown options: --ClusterId`（参数未进 CLI 模型） |
+| `--cli-input-json file://` 写入 `{"ClusterId":"..."}` | 仍 `MissingParameter`（JSON 中非骨架字段被丢弃/不生效） |
+
+结论：**服务端要求 `ClusterId`，当前 TCCLI 未暴露该入参**，按文档写 `--ClusterId` 的命令**不可执行**。凭证轮换请用已暴露 `ClusterId` 的路径：
 
 ```bash
-# 轮转集群访问 Token（凭证泄露或定期安全轮换时）
-tccli tke RotateClusterToken --region <REGION> --ClusterId "<CLUSTER_ID>"
-# expected: exit 0（仅返回 RequestId）；轮转后旧 Token 失效，须重新 DescribeClusterKubeconfig 获取新凭证
+# 可执行：轮转 kubeconfig 证书面（skeleton 含 ClusterId）
+tccli tke UpdateClusterKubeconfig --region <REGION> --ClusterId "<CLUSTER_ID>"
+# expected: exit 0；再 DescribeClusterKubeconfig 取新凭证
+
+# 下列命令在当前 TCCLI 下不要照抄 --ClusterId（会 Unknown options）
+# tccli tke RotateClusterToken --region <REGION>   # 无 ClusterId → MissingParameter
 ```
 
-> ⚠️ **权限约束**：该 Action 受 CAM 强约束，资源策略要求 `qcs:resource_tag` 含 `billing`（或等同授权）才允许执行。对非自有/无授权集群调用返回 `AuthFailure.UnauthorizedOperation`（非 `ResourceNotFound`），属**授权缺失**而非资源不存在——排查时优先查 CAM 策略而非集群 ID。
-> 与 `UpdateClusterKubeconfig`（轮转 kubeconfig 证书）的区别：`RotateClusterToken` 轮转的是集群对外访问 Token（如 kube-apiserver 访问凭据），二者是不同凭证面，按需选用。
+> `UpdateClusterKubeconfig` 与 `RotateClusterToken` 是不同凭证面；后者需 TCCLI/API 模型补齐 `ClusterId` 后才能 CLI 闭环。权限上写操作仍受 CAM 约束（如资源标签 `billing`），未授权时常见 `AuthFailure.UnauthorizedOperation`。
 
 
 ### OIDC 配置

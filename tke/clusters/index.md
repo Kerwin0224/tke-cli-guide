@@ -26,8 +26,8 @@ doc_type: Overview
 | Cluster | 容器运行所需云资源集合；标准集群 = 托管 Master/Etcd + 你管工作节点 | 顶级资源；决定地域、网络、K8s 版本 |
 | ClusterType | `MANAGED_CLUSTER`（托管）/ `INDEPENDENT_CLUSTER`（独立，**已停止新建**） | 决定 Master 归谁管：托管=腾讯云管 Master 节点规模（不可改），但控制面参数/组件/加密仍由 tccli 改；新建默认走托管 |
 | ClusterLevel | L5 / L20 / L50 / L100 / L200 / L500 / L3000 / L5000 等 | 决定管理费与可管理规模（见 [配额](../reference/quotas.md)） |
-| ClusterState | 集群生命周期状态 | 非 `Running` 时多数写操作被拒 |
-| 删除保护 | `DeletionProtection` 开关 | 删除前须先关闭，否则 `DeleteCluster` 失败 |
+| ClusterState / ClusterStatus | 集群生命周期状态（分源） | `DescribeClusterStatus` → `ClusterStatusSet[].ClusterState`；`DescribeClusters` → `Clusters[].ClusterStatus`。非 `Running` 时多数写操作被拒 |
+| 删除保护 | `DeletionProtection`（创建/属性）/ `ClusterDeletionProtection`（`DescribeClusterStatus`） | 删除前须先 `DisableClusterDeletionProtection`，否则 `DeleteCluster` 失败 |
 
 ## 集群类型对比
 

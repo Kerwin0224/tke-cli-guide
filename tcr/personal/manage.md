@@ -66,7 +66,7 @@ tccli tcr DescribeNamespacePersonal --Namespace "" --Limit 10 --Offset 0
 
 | 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
 |:------|------|:--------:|------------|---------------|
-| Password | string | 是 | docker login 密码，8-32 字符 | `InvalidParameter` |
+| Password | string | 是 | docker login 密码，**8–16 位** | `MissingParameter`（消息含 `password is illegal in length`）；已注册再创建 → `InvalidParameter.ErrUserExist` |
 
 > `CreateUserPersonal` 仅需 `Password`。用户名由系统分配（腾讯云账号 ID）。创建后用该用户名 + 密码 docker login。
 
@@ -80,10 +80,11 @@ tccli tcr DescribeNamespacePersonal --Namespace "" --Limit 10 --Offset 0
 
 | 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
 |:------|------|:--------:|------------|---------------|
-| Namespace | string | 是 | 须已存在的命名空间 | `ResourceNotFound` |
-| RepoName | string | 是 | 仓库名，命名空间内唯一 | `InvalidParameter` |
+| RepoName | string | 是 | **`{Namespace}/{ImageName}` 一体格式**（含斜杠）；无独立 `--Namespace` | `InvalidParameter` |
+| Public | integer | 否 | `1` 公共 / `0` 私有 | `InvalidParameter` |
+| Description | string | 否 | 仓库描述 | — |
 
-> 个人版 `CreateRepositoryPersonal` 入参是 `RepoName`（非 `RepositoryName`）。与企业版 `CreateRepository` 的字段名不同。
+> 个人版 `CreateRepositoryPersonal` 只有 `RepoName`（非 `RepositoryName`，也**无** `--Namespace`）。`RepoName` 必须写成 `命名空间/仓库名`，与企业版 `CreateRepository`（分传 `NamespaceName` + `RepositoryName`）不同。
 
 ## 操作步骤
 
@@ -91,12 +92,12 @@ tccli tcr DescribeNamespacePersonal --Namespace "" --Limit 10 --Offset 0
 
 ```bash
 tccli tcr CreateUserPersonal --Password "<PASSWORD>"
-# expected: exit 0, 返回用户名（系统分配）
+# expected: exit 0, {"RequestId":"..."}（响应不含用户名；用户名=腾讯云账号 UIN，如 100031528779）
 ```
 
 | 占位符 | 含义 | 约束 | 如何获取 |
 |:------------|:-----|:-----|:---------|
-| `<PASSWORD>` | docker login 密码 | 8-32 字符 | 自定义 |
+| `<PASSWORD>` | docker login 密码 | **8–16 位** | 自定义 |
 
 > 用户名由系统分配（腾讯云账号 ID）。若已创建过用户，再次 `CreateUserPersonal` 会报错——用 `ModifyUserPasswordPersonal` 改密。
 
@@ -118,7 +119,8 @@ tccli tcr CreateNamespacePersonal --Namespace "<NAMESPACE_NAME>"
 ### 步骤 3：创建仓库
 
 ```bash
-tccli tcr CreateRepositoryPersonal --Namespace "<NAMESPACE_NAME>" --RepoName "<REPO_NAME>"
+# RepoName = 命名空间/仓库名（一体）；无 --Namespace 参数
+tccli tcr CreateRepositoryPersonal --RepoName "<NAMESPACE_NAME>/<REPO_NAME>"
 # expected: exit 0
 ```
 
@@ -170,12 +172,12 @@ tccli tcr DescribeRepositoryPersonal --RepoName "<NAMESPACE_NAME>/<REPO_NAME>"
 > **副作用警告**：删除命名空间会级联删除其下所有仓库与镜像，不可恢复。
 
 ```bash
-# 1. 删除镜像
-tccli tcr DeleteImagePersonal --Namespace "<NAMESPACE_NAME>" --RepoName "<REPO_NAME>" --Tag "<TAG>"
+# 1. 删除镜像（RepoName = namespace/repo；无 --Namespace）
+tccli tcr DeleteImagePersonal --RepoName "<NAMESPACE_NAME>/<REPO_NAME>" --Tag "<TAG>"
 # expected: exit 0
 
-# 2. 删除仓库
-tccli tcr DeleteRepositoryPersonal --Namespace "<NAMESPACE_NAME>" --RepoName "<REPO_NAME>"
+# 2. 删除仓库（RepoName = namespace/repo；无 --Namespace）
+tccli tcr DeleteRepositoryPersonal --RepoName "<NAMESPACE_NAME>/<REPO_NAME>"
 # expected: exit 0
 
 # 3. 删除命名空间（须无仓库）
@@ -194,7 +196,8 @@ tccli tcr DescribeNamespacePersonal --Namespace "<NAMESPACE_NAME>" --Limit 10 --
 | 现象 | 诊断 | 根因 | 修复 |
 |:--------|:----------|:------------|:-----|
 | `LimitExceeded` | `DescribeUserQuotaPersonal` 看配额 | 命名空间/仓库达上限 | 删除闲置资源或升级企业版 |
-| `InvalidParameter` (Password) | 检查密码长度 | 密码 <8 或 >32 字符 | 用 8-32 字符密码 |
+| `MissingParameter`（`password is illegal in length`） | 检查密码长度 | 密码 <8 或 >16 位 | 用 **8–16 位**密码 |
+| `InvalidParameter.ErrUserExist` | 已创建过个人版用户 | 账号已初始化 | 改用 `ModifyUserPasswordPersonal` 改密 |
 | `ResourceNotFound` (Namespace) | `DescribeNamespacePersonal` 核对 | 命名空间不存在 | 先 `CreateNamespacePersonal` |
 | `ResourceInUse` | 查命名空间下仓库 | 删除命名空间时仍有仓库 | 先删所有仓库再删命名空间 |
 

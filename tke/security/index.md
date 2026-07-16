@@ -4,6 +4,8 @@ doc_type: Overview
 # 集群加固
 
 > TKE 集群的安全防护：认证、审计、加密、删除保护。决定谁能访问集群、操作可追溯、防误删。本节是 TKE 集群内的安全配置；让 TCCLI 能调用 API 的 CAM 根凭证是产品之上的全局前置，见 [配置凭证](../../getting-started/credentials.md)。
+>
+> 官方文档：[容器服务安全组设置](https://cloud.tencent.com/document/product/457/9084) · [常见高危操作](https://cloud.tencent.com/document/product/457/39539)
 
 ## 是什么
 

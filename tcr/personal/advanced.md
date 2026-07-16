@@ -62,12 +62,13 @@ fused: false
 | 参数 | 所属 Action | 必填 | 说明 |
 |:-----|:-----------|:----:|:-----|
 | `RepoName` | 多数 | 是 | `<namespace>/<repo>`（含斜杠） |
-| `Namespace` | 部分查询 | 是 | 命名空间名 |
+| `Namespace` | 部分查询 / CreateApplicationTriggerPersonal | 是/视 Action | 个人版命名空间名，或触发器里的 **K8s** 命名空间 |
 | `Public` | ModifyRepositoryAccessPersonal | 是 | 1 公开 / 0 私有 |
 | `SrcImage`/`DestImage` | DuplicateImagePersonal | 是 | `<ns>/<repo>:<tag>` |
-| `Type`/`Val` | ManageImageLifecycleGlobalPersonal | 是 | 策略类型/保留值 |
+| `Type`/`Val` | ManageImageLifecycleGlobalPersonal | 是 | `global_keep_last_days`/`global_keep_last_nums` + 保留值 |
 | `TriggerName` | 触发器类 | 是 | 触发器名 |
-| `ClusterId`/`WorkloadName` | CreateApplicationTriggerPersonal | 是 | 关联 TKE 集群/工作负载 |
+| `InvokeMethod` | Create/ModifyApplicationTriggerPersonal | 创建时是 | **仅** `all` / `taglist` / `regex`（无 `void`） |
+| `ClusterId`/`WorkloadType`/`WorkloadName`/`ContainerName`/`ClusterRegion` | CreateApplicationTriggerPersonal | 是 | 关联 TKE 集群/工作负载/容器；`ClusterRegion` 为地域**数字 ID** |
 
 ## 操作步骤
 
@@ -160,25 +161,28 @@ tccli tcr DescribeImageLifecyclePersonal --RepoName "<NAMESPACE_NAME>/<REPO_NAME
 ### 步骤 5：应用触发器（推送后触发 TKE 部署）
 
 ```bash
-# 创建应用触发器 (关联 TKE 集群, 推送镜像后自动更新工作负载)
+# 创建应用触发器（关联 TKE 集群；推送镜像后自动更新工作负载）
+# InvokeMethod 仅 all|taglist|regex（无 void）；ContainerName/ClusterRegion 必填
 tccli tcr CreateApplicationTriggerPersonal \
   --RepoName "<NAMESPACE_NAME>/<REPO_NAME>" \
   --TriggerName "<TRIGGER_NAME>" \
-  --InvokeMethod "void" \
+  --InvokeMethod all \
   --ClusterId "<CLUSTER_ID>" --Namespace "<K8S_NAMESPACE>" \
-  --WorkloadType "<WORKLOAD_TYPE>" --WorkloadName "<WORKLOAD_NAME>"
-# expected: exit 0
+  --WorkloadType Deployment --WorkloadName "<WORKLOAD_NAME>" \
+  --ContainerName "<CONTAINER_NAME>" \
+  --ClusterRegion <CLUSTER_REGION_ID>
+# expected: exit 0；缺 ContainerName/ClusterRegion 报 required；InvokeMethod=void 非法
 ```
 
-> `CreateApplicationTriggerPersonal` 关联 TKE 集群（`ClusterId`/`Namespace`/`WorkloadType`/`WorkloadName`）。
+> `CreateApplicationTriggerPersonal` 关联 TKE 集群：`RepoName`（`ns/repo`）/`TriggerName`/`InvokeMethod`（`all`|`taglist`|`regex`）/`ClusterId`/`Namespace`（K8s 命名空间）/`WorkloadType`/`WorkloadName`/`ContainerName`/`ClusterRegion`（地域数字 ID，如广州 `1`、成都 `16`）均必填。`InvokeMethod=taglist|regex` 时再传 `--InvokeExpr`。
 
 ```bash
 # 查询触发器
 tccli tcr DescribeApplicationTriggerPersonal --RepoName "<NAMESPACE_NAME>/<REPO_NAME>" --Limit 10
 # expected: exit 0, Data
 
-# 修改触发器
-tccli tcr ModifyApplicationTriggerPersonal --RepoName "<NAMESPACE_NAME>/<REPO_NAME>" --TriggerName "<TRIGGER_NAME>" --InvokeMethod "void"
+# 修改触发器（InvokeMethod 仍仅 all|taglist|regex）
+tccli tcr ModifyApplicationTriggerPersonal --RepoName "<NAMESPACE_NAME>/<REPO_NAME>" --TriggerName "<TRIGGER_NAME>" --InvokeMethod all
 # expected: exit 0
 
 # 查询触发器执行日志
@@ -248,7 +252,7 @@ tccli tcr DescribeApplicationTriggerLogPersonal --RepoName "<NAMESPACE_NAME>/<RE
 # expected: 有触发记录（需先 push 一次镜像才产生日志；InvokeResult 为触发执行结果）
 ```
 
-> 触发器存在 + 生命周期策略生效 + 触发日志 Success = 个人版高级管理闭环完成。触发器未触发时日志为空，需 push 镜像后查。
+> 触发器存在 + 生命周期策略生效 + 触发日志有记录（`InvokeResult` 含 `returnCode`/`returnMsg`）= 个人版高级管理闭环完成。触发器未触发时日志为空，需 push 镜像后查。
 
 ---
 

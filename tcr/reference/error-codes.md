@@ -5,6 +5,8 @@ subtype: 8D
 # TCR 错误码
 
 > TCR 涉及 TCCLI 与 docker 两个工具，错误码分三层：docker CLI 错误（推送/拉取高频）→ TCR 特有错误码 → 通用错误码。错误码按 API/docker 返回原样写出。
+>
+> 官方文档：[公共错误码](https://cloud.tencent.com/document/product/1141/41814)
 
 ## docker CLI 错误（推送 / 拉取高频）
 
@@ -55,7 +57,7 @@ tccli tcr DescribeExternalEndpointStatus --region <REGION> --RegistryId "<REGIST
 # expected: Status = "Opened"
 ```
 
-> 错误响应结构：`{"Response":{"Error":{"Code":"...","Message":"..."},"RequestId":"..."}}`。docker 侧错误不是 JSON，是 stderr 文本——用 `--language en-US` 锁定 TCCLI 错误语言，docker 错误天然英文。如遇未列出的错误码，查 [腾讯云 TCR 错误码文档](https://cloud.tencent.com/document/product/1141)。
+> 错误响应结构（HTTP API 原始）：`{"Response":{"Error":{"Code":"...","Message":"..."},"RequestId":"..."}}`。**tccli 默认剥离 `Response` 包装**，终端常见顶层即 `Error` + `RequestId`。docker 侧错误不是 JSON，是 stderr 文本——用 `--language en-US` 锁定 TCCLI 错误语言，docker 错误天然英文。如遇未列出的错误码，查 [腾讯云 TCR 错误码文档](https://cloud.tencent.com/document/product/1141)。
 
 ## 相关文档
 

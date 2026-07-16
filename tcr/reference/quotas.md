@@ -4,7 +4,7 @@ subtype: 8C
 ---
 # TCR 配额与限制
 
-> 企业版按实例规格（basic / standard / premium）区分配额；个人版为共享服务、另有限额。数值以官方「产品服务层级与容量限制」为准，调额后以官网最新表为准。超限时常见 `LimitExceeded` / `FailedOperation.QuotaExceed`（以实际 `Error.Code` 为准）。
+> 企业版按实例规格（basic / standard / premium）区分配额；个人版为共享服务、另有限额。数值以官方 [产品服务层级与容量限制](https://cloud.tencent.com/document/product/1141/104731) 为准，调额后以官网最新表为准。超限时常见 `LimitExceeded` / `FailedOperation.QuotaExceed`（以实际 `Error.Code` 为准）。
 
 ## 企业版实例配额（按规格）
 
@@ -27,11 +27,11 @@ subtype: 8C
 | Type | 含义 | 示例账号 Value（以 `DescribeUserQuotaPersonal` 实时返回为准） |
 |:-----|:-----|:---------------------:|
 | `namespace` | 命名空间上限 | 10 |
-| `repo` | 仓库上限 | 500 |
+| `repo` | 仓库上限 | 500（**广州地域**；官方 FAQ：其他地域默认 100） |
 | `tag` | 版本上限 | 100 |
 | `trigger` | 触发器上限 | 10 |
 
-> 个人版适合临时测试；生产与独立存储/SLA 选企业版。控制台入口已与企业版合并，API 面仍用 `*Personal` Action。
+> 个人版适合临时测试；生产与独立存储/SLA 选企业版。控制台入口已与企业版合并，API 面仍用 `*Personal` Action。官方 FAQ 口径：单地域命名空间 **10**；镜像仓库 **广州 500 / 其他地域 100**；单镜像 Tag **100**；**不支持调额**。API `DescribeUserQuotaPersonal` 返回的是账号级限额表，`repo` 在广州账号常见为 500。
 
 ## 查询配额用量
 
