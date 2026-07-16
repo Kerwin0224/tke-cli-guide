@@ -11,7 +11,7 @@ fused: false
 ## 触发条件
 
 - `DescribeClusters` → `NetworkType` 含 `GR`（Global Router）但需 Pod 固定 IP 或安全组直通，要开启 VPC-CNI
-- `DescribeEnableVpcCniProgress` 返回 `Status` 非 `Enabled`，或 Pod 卡在 `ContainerCreating` 且 `kubectl describe pod` <!-- tccli管VPC-CNI配置，kubectl describe查Pod详情诊断IP分配，非tccli边界 --> 显示 IP 分配失败
+- `DescribeEnableVpcCniProgress` 返回 `Status` 非 `Succeed`（枚举为 `Running`/`Succeed`/`Failed`），或 Pod 卡在 `ContainerCreating` 且 `kubectl describe pod` <!-- tccli管VPC-CNI配置，kubectl describe查Pod详情诊断IP分配，非tccli边界 --> 显示 IP 分配失败
 - `DescribeIPAMD` → `EnableIPAMD=false`，需开启 VPC-CNI 让 Pod 从 VPC 子网获 IP — 看 [故障恢复]段
 
 
@@ -208,7 +208,7 @@ tccli tke DeleteClusterRouteTable --region <REGION> --RouteTableName "<RT_NAME>"
 # 查询开启进度（仅已是 / 正在开启 VPC-CNI 的集群可用）
 # 非 VPC-CNI 集群会报 FailedOperation.EnableVPCCNIFailed: ... is not vpc-cni cluster
 tccli tke DescribeEnableVpcCniProgress --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
-# expected: Status="Enabled"；出参仅 Status/ErrorMessage（无进度百分比字段）
+# expected: Status="Succeed"（进行中 Running / 失败 Failed）；出参仅 Status/ErrorMessage（无进度百分比字段）
 
 # 未开启时先用 IPAMD 诊断（沙箱 Global Router 常见：EnableIPAMD=false）
 tccli tke DescribeIPAMD --region ap-guangzhou --ClusterId "<CLUSTER_ID>" \
@@ -219,7 +219,7 @@ tccli tke DescribeIPAMD --region ap-guangzhou --ClusterId "<CLUSTER_ID>" \
 | 维度 | 命令 | 预期 |
 |:-----|:-----|:-----|
 | IPAMD | `DescribeIPAMD` → `EnableIPAMD` | `true`（开启后） |
-| 开启进度 | `DescribeEnableVpcCniProgress` → `Status` | `Enabled`（非 VPC-CNI 集群勿调，会 FailedOperation） |
+| 开启进度 | `DescribeEnableVpcCniProgress` → `Status` | `Succeed`（`Running`/`Succeed`/`Failed`；非 VPC-CNI 集群勿调，会 FailedOperation） |
 | 网络类型 | `DescribeClusters` → `NetworkType` | 含 `VPC-CNI` |
 | Pod 获 IP | `kubectl get pod -o wide` <!-- tccli管VPC-CNI网络配置，kubectl查Pod IP状态验证IP分配，非tccli边界 --> | Pod IP 在 VPC 子网段内 |
 
@@ -280,7 +280,7 @@ tccli tke AddVpcCniSubnets --region ap-guangzhou \
 # VPC-CNI 开启进度完成（Verify 查进度，此处端到端核 Pod 真从子网获 IP）
 tccli tke DescribeEnableVpcCniProgress --region ap-guangzhou --ClusterId "<CLUSTER_ID>" \
   --filter "{status:Status}"
-# expected: status=Enabled
+# expected: status=Succeed
 
 # 业务可用性端到端：部署测试 Pod，核 Pod IP 在指定子网段内（Verify 仅列维度未端到端验证）
 <!-- tccli管VPC-CNI网络能力配置，kubectl管Pod生命周期验证IP分配，非tccli边界 -->
@@ -290,7 +290,7 @@ kubectl get pod vpc-cni-test -o wide --no-headers | awk '{print $6}'
 kubectl delete pod vpc-cni-test
 ```
 
-> 开启进度 Enabled + Pod IP 落在 VPC 子网段 = 端到端闭环。Verify 段查进度与开关状态，此处用真实 Pod 验证 IP 分配行为符合 VPC-CNI 契约（Pod 与 CVM 同级从子网拿 IP），是固定 IP / 安全组直通功能的前置。
+> 开启进度 `Status=Succeed` + Pod IP 落在 VPC 子网段 = 端到端闭环。Verify 段查进度与开关状态，此处用真实 Pod 验证 IP 分配行为符合 VPC-CNI 契约（Pod 与 CVM 同级从子网拿 IP），是固定 IP / 安全组直通功能的前置。
 
 ---
 

@@ -20,7 +20,7 @@ fused: true
 
 | 选项                       | 最佳场景            | 关键限制            | 升级路径         | 新建 |
 | ------------------------ | --------------- | --------------- | ------------ | ---- |
-| MANAGED_CLUSTER (托管)     | 生产环境，免运维 Master | Master 不可 SSH；不可改 Master/Etcd 规模与参数 | 控制台/API 一键升级 | ✅ |
+| MANAGED_CLUSTER (托管)     | 生产环境，免运维 Master | Master 不可 SSH；不可改 Master/Etcd **节点规模**（控制面参数/组件仍可由 tccli 改，见 [配置集群](configure.md)） | 控制台/API 一键升级 | ✅ |
 | INDEPENDENT_CLUSTER (独立) | 存量：完全控制 Master  | 需自行维护 Master HA | 手动升级 Master  | ❌ **已停止新建** |
 
 
@@ -526,23 +526,23 @@ tccli tke DescribeClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]'
 tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet[?ClusterId=='<CLUSTER_ID>'] | [0].{state:ClusterState,running:ClusterRunningNodeNum,protect:ClusterDeletionProtection}"
 # expected: state=Running, running=0(空集群), protect=true
 
-# 衔接下一步前置：kubeconfig 可拉取（进创建节点池前须能连通集群）
+# 可选：凭证文件可拉取（不等于本机 kubectl 已通）
 tccli tke DescribeClusterKubeconfig --region ap-guangzhou --ClusterId "<CLUSTER_ID>" --filter "Kubeconfig" --output text | head -1
-# expected: apiVersion: v1（kubeconfig 可用 → 可进入创建节点池）
+# expected: apiVersion: v1（仅说明可写出 YAML；默认无访问端点，本机 kubectl 通常仍失败）
 ```
 
-> 集群 `Running` + `protect=true` + kubeconfig 可拉取 = 创建闭环完成。**但** `running=0` **意味着空集群无法运行 Pod**（业务可用性边界：须 [创建节点池](../nodes/nodepool-create.md) 加工作节点才能运行负载），且空集群仍计管理费——立即进入下一步。
-
-
+> 集群 `Running` + `protect=true` + kubeconfig 可拉取 = **控制面创建闭环**完成。  
+> **不等于**本机/公网 CI 已能 `kubectl`：须先 [加节点](../nodes/nodepool-create.md)（无 worker 不能开公网端点），再 [管理端点](../networking/endpoints.md)（公网端点 `Created` + `SecurityPolicies` + 必要时把 kubeconfig `server` 改为 `ClusterExternalEndpoint`）。  
+> `running=0` 时不能运行业务 Pod，空集群仍计管理费——立即进入下一步。
 
 ## 下一步
 
-> 集群 `Running` 只是创建闭环的第 1 步（空集群）。继续完成"可运行 Pod 的集群"：
+> 集群 `Running` 只是第 1 步（空控制面）。若目标是「本机可操作、可跑 Pod」：
 
-- **[创建节点池](../nodes/nodepool-create.md)** — 给集群添加工作节点（**必做**：集群没有节点不能运行 Pod，且空集群仍计管理费）
-- [获取 kubeconfig](../security/auth.md) — 配置 kubectl 访问集群
-- [管理端点](../networking/endpoints.md) — 开启公网/内网访问端点（kubectl 远程连接的前置）
-- [查询集群](query.md) — 学习 filter + JMESPath 表达式
-- [应用发布](../releases/index.md) — 集群就绪后部署应用
-- [独立集群 Master 运维](master-ops.md) — 独立集群场景下，扩缩容 Master/etcd 节点
+- **[创建节点池](../nodes/nodepool-create.md)** / [新建 CVM 作节点](../nodes/instance-ops.md) — **必做**：无 worker 不能跑 Pod，也不能开公网端点
+- **[管理端点](../networking/endpoints.md)** — **本机/公网 CI 必做**：`CreateClusterEndpoint` → ACL → `ClusterExternalEndpoint` 改写 kubeconfig → `kubectl get --raw=/healthz`
+- [获取 kubeconfig](../security/auth.md) — 证书/凭证面（须配合端点）
+- [查询集群](query.md) — filter + JMESPath
+- [应用发布](../releases/index.md) — 集群与访问就绪后部署应用
+- [独立集群 Master 运维](master-ops.md) — 独立集群场景
 

@@ -269,11 +269,13 @@ tccli tke DescribeEKSContainerInstanceEvent \
 # 重启实例
 tccli tke RestartEKSContainerInstances --region ap-guangzhou \
   --EksCiIds '["<EKSCI_ID>"]'
+# expected: exit 0
 
 # 查询日志
 tccli tke DescribeEksContainerInstanceLog \
   --region ap-guangzhou \
   --EksCiId "<EKSCI_ID>"
+# expected: 返回容器日志文本（实例未 Running 时可能为空）
 
 # 更新容器实例 (EksCiId 定位，Containers[] 覆盖式更新镜像/资源，RestartPolicy 重启策略)
 tccli tke UpdateEKSContainerInstance --region ap-guangzhou \
@@ -347,9 +349,11 @@ tccli tke DescribeEKSClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>
 # 1. 删除容器实例
 tccli tke DeleteEKSContainerInstances --region ap-guangzhou \
   --EksCiIds '["<EKSCI_ID>"]'
+# expected: exit 0
 
 # 2. 删除 EKS 集群
 tccli tke DeleteEKSCluster --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
+# expected: exit 0
 
 # 3. 验证
 tccli tke DescribeEKSClusters --region ap-guangzhou
@@ -358,7 +362,7 @@ tccli tke DescribeEKSClusters --region ap-guangzhou
 
 ## API 参考
 
-完整的 EKS API 共 14 个操作:
+本篇覆盖 EKS / 容器实例相关 **15** 个 Action（与 chapter-plan 一致）:
 
 | 分类 | API | 说明 |
 |------|-----|------|

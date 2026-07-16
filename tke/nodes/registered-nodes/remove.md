@@ -31,11 +31,12 @@ fused: true
 | 参数 | 所属 Action | 必填 | 说明 |
 |:-----|:-----------|:----:|:-----|
 | `ClusterId` | DrainExternalNode / DeleteExternalNode / DeleteExternalNodePool | 是 | 集群 ID |
-| `Name` | DrainExternalNode / DeleteExternalNode | 是 | 节点名（单数；`DeleteExternalNode` 用 `Names[]`） |
+| `Name` | DrainExternalNode | 是 | 节点名（**单数**） |
+| `Names` | DeleteExternalNode | 是 | 节点名数组（**复数** `Names[]`，勿与 Drain 的 `Name` 混用） |
 | `NodePoolIds` | DeleteExternalNodePool | 是 | 节点池 ID 数组 |
 | `Force` | DeleteExternalNode / DeleteExternalNodePool | 否 | 是否强制删除（默认 false 优雅） |
 
-> `DeleteExternalNode` 用 `Names[]`（节点名数组），`DeleteExternalNodePool` 用 `NodePoolIds[]`（节点池 ID 数组），两者都支持 `Force` 强制删除。
+> `DrainExternalNode` 用单数 `Name`；`DeleteExternalNode` 用 `Names[]`；`DeleteExternalNodePool` 用 `NodePoolIds[]`。后两者支持 `Force`。
 
 ## 操作步骤
 

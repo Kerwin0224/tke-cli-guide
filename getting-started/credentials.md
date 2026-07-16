@@ -5,23 +5,23 @@ fused: false
 ---
 # 配置 TCCLI 凭证
 
-> 获取腾讯云 CAM 凭证（SecretId/SecretKey）并配置到 TCCLI，让 TCCLI 能调用 TKE/TCR API。这是使用本指南所有命令的**唯一前置**——未配置凭证时，第一条 API 调用返回 `AuthFailure.SecretIdNotFound`。
+> 获取腾讯云 CAM 凭证（SecretId/SecretKey）并配置到 TCCLI，让 TCCLI 能调用 TKE API。这是使用本指南所有命令的**唯一前置**——未配置凭证时，第一条 API 调用返回 `AuthFailure.SecretIdNotFound`。
 > 控制台: [访问管理 CAM](https://console.cloud.tencent.com/cam)
 
-> ⚠️ **控制台是固有边界**：CAM 根凭证（SecretId/SecretKey）的**首次获取**须经腾讯云控制台/浏览器——腾讯云不允许用 TCCLI 自举创建 API 密钥（`tccli auth login` 也触发浏览器登录）。本指南定位是"TCCLI 操作手册"，凭证首次获取这一步**必须**经控制台一次性操作，无法纯 CLI 闭环。这是腾讯云的固有边界，非文档缺陷。配好凭证后，后续所有 TKE/TCR 操作均可纯 CLI 完成。
+> ⚠️ **控制台是固有边界**：CAM 根凭证（SecretId/SecretKey）的**首次获取**须经腾讯云控制台/浏览器——腾讯云不允许用 TCCLI 自举创建 API 密钥（`tccli auth login` 也触发浏览器登录）。本指南定位是"TCCLI 操作手册"，凭证首次获取这一步**必须**经控制台一次性操作，无法纯 CLI 闭环。这是腾讯云的固有边界，非文档缺陷。配好凭证后，后续所有 TKE 操作均可纯 CLI 完成。
 
 > **前置**：你需有一个腾讯云账号。若没有，先在 [腾讯云首页](https://cloud.tencent.com/) 注册（注册需浏览器+手机验证，属一次性操作）。
 
 ## 概述
 
-TCCLI 调用腾讯云 API 需要凭证。三类凭证作用域不同，本文只管第一类（CAM 根凭证，全局前置）；后两类在各自产品文档里配置：
+TCCLI 调用腾讯云 API 需要凭证。两类凭证作用域不同，本文只管第一类（CAM 根凭证，全局前置）；kubeconfig 在 TKE 安全文档里配置：
 
 | 凭证类型 | 作用 | 作用域 | 归属文档 |
 |:---------|:-----|:-------|:---------|
 | **CAM 根凭证**（SecretId/SecretKey） | 让 TCCLI 能调用腾讯云 API | 全局前置（产品之上） | 本文 |
 | kubeconfig | kubectl 连 TKE 集群 | TKE 产品内 | [TKE 集群认证](../tke/security/auth.md) |
 
-> 本文解决"TCCLI 怎么配凭证"。配好后所有 `tccli tke ...` / `tccli tcr ...` 命令才能工作。
+> 本文解决"TCCLI 怎么配凭证"。配好后所有 `tccli tke ...` 命令才能工作。
 
 ## 触发条件
 
@@ -66,7 +66,7 @@ tccli --version
 在腾讯云控制台获取 SecretId/SecretKey：
 
 1. 登录 [访问管理 CAM 控制台](https://console.cloud.tencent.com/cam)
-2. **子账号路径（推荐）**: 用户 → 用户列表 → 新建用户（子用户）→ 授权策略 `QcloudTKEFullAccess` + `QcloudTCRFullAccess` → 该用户 API 密钥 → 新建密钥
+2. **子账号路径（推荐）**: 用户 → 用户列表 → 新建用户（子用户）→ 授权策略 `QcloudTKEFullAccess` → 该用户 API 密钥 → 新建密钥
 3. **主账号路径（仅测试）**: 访问管理 → API 密钥管理 → 新建密钥
 
 | 值 | 含义 | 获取方式 |
@@ -119,7 +119,7 @@ tccli auth login
 # expected: exit 0，触发 CAM 登录流程（浏览器交互，仅接受 --profile 参数）
 ```
 
-> `tccli auth login` 触发 CAM 登录获取临时凭证，用系统默认浏览器打开授权页（源码 `login.py` 调 `webbrowser.open`，无 `--browser` 参数可选）。具体交互行为（浏览器/扫码）因环境而异——首次使用建议直接运行观察提示。临时凭证会过期，过期后重新 `tccli auth login`。适合本地交互、不想长期存密钥。
+> `tccli auth login` 触发 CAM 登录获取临时凭证，用系统默认浏览器打开授权页（无 `--browser` 参数可选）。具体交互行为（浏览器/扫码）因环境而异——首次使用建议直接运行观察提示。临时凭证会过期，过期后重新 `tccli auth login`。适合本地交互、不想长期存密钥。
 
 ## 验证
 
@@ -144,18 +144,9 @@ tccli tke DescribeRegions
 
 > ⚠️ **不要用 `tccli auth verify`**——该子命令**不存在**（`tccli auth` 仅有 login/logout/help，执行 verify 返回 exit 252 Invalid choice）。凭证验证用 `tccli tke DescribeRegions` 这类轻量只读调用。
 
-多 profile 验证（查看已配置的 profile 与 region）：
-
-```bash
-tccli configure list
-# expected: 列出各 profile 的 region/output，凭证字段（secretId/secretKey）明文显示
-```
-
-> ⚠️ **安全红线**：`tccli configure list` **明文打印 secretId/secretKey**（源码 `configure.py` 的 `ConfigureListCommand._run_main` 直接输出 `cred[config]` 原值，未做脱敏；命令 `--help` 示例里的 `****` 仅为文档演示，非实际行为）。禁止在共享环境、截图、工单、会话记录中运行该命令；共享测试账号下严禁运行任何可能暴露凭证的命令。仅在自己的隔离终端核查 profile 配置时使用。
-
 ## 服务角色（TKE / IPAMD / AS / 可观测）
 
-> CAM **用户密钥**（SecretId/SecretKey）让 **你** 调 API；**服务角色**让 **云产品** 代你访问其他产品（TKE→CVM/CLB/CBS，IPAMD→ENI，节点池→AS）。密钥配好后仍可能因缺服务角色失败——错误码与用户侧 `CamNoAuth` 不同。
+> CAM **用户密钥**（SecretId/SecretKey）让 **你** 调 API；**服务角色**让 **云产品** 代你访问其他产品（TKE→CVM/CLB/CBS，IPAMD→ENI，节点池→AS，Prometheus 等）。密钥配好后仍可能因缺服务角色失败——错误码与用户侧 `CamNoAuth` 不同。  
 > 官方角色/策略语义以 [服务授权相关角色权限说明](https://cloud.tencent.com/document/product/457/43416) 为准；下列 CLI 为 agent 可执行探测与补齐路径。
 
 ### 角色总表（按任务触发）
@@ -203,7 +194,7 @@ tccli cam ListAttachedRolePolicies --Page 1 --Rp 50 --RoleName TKE_QCSRole \
 
 ### 补 TKE_QCSRole（主服务角色）
 
-> **推荐主路径**：首次登录 [容器服务控制台](https://console.cloud.tencent.com/tke2) 弹窗 **同意授权**（官方 43416）。
+> **推荐主路径**：首次登录 [容器服务控制台](https://console.cloud.tencent.com/tke2) 弹窗 **同意授权**（官方 43416）。  
 > **CLI 等价**（子账号须有 `cam:CreateRole` / `cam:AttachRolePolicy`；无 CAM 写权限则只能控制台主账号授权）：
 
 ```bash
@@ -299,7 +290,16 @@ tccli cam AttachRolePolicy --AttachRoleName TKE_QCSRole \
 
 - **控制台一次授权**：首次进 TKE 控制台「同意授权」仍是官方主路径（尤其主账号引导创建多策略）。
 - **子账号**：可能无 `cam:CreateRole`，CLI 补角色会失败 → 主账号控制台授权或提升 CAM 权限。
-- **策略名大小写**：以 `ListPolicies` / 控制台为准；真机曾见 `QcloudAccessFortkeRoleInMetricsbyLog` 与 `QcloudAccessForTKERole` 混用大小写，挂载失败时用 `tccli cam ListPolicies` 搜精确名。
+- **策略名大小写**：以 `ListPolicies` / 控制台为准；账号侧可见 `QcloudAccessFortkeRoleInMetricsbyLog` 与 `QcloudAccessForTKERole` 混用大小写，挂载失败时用 `tccli cam ListPolicies` 搜精确名。
+
+多 profile 验证（查看已配置的 profile 与 region）：
+
+```bash
+tccli configure list
+# expected: 列出各 profile 的 region/output，凭证字段（secretId/secretKey）明文显示
+```
+
+> ⚠️ **安全红线**：`tccli configure list` **明文打印 secretId/secretKey**（不做脱敏；命令 `--help` 示例里的 `****` 仅为文档演示，非实际行为）。禁止在共享环境、截图、工单、会话记录中运行该命令；共享测试账号下严禁运行任何可能暴露凭证的命令。仅在自己的隔离终端核查 profile 配置时使用。
 
 ## 故障恢复
 
@@ -307,7 +307,11 @@ tccli cam AttachRolePolicy --AttachRoleName TKE_QCSRole \
 |:-----|:---------|:-----|:-----|
 | `AuthFailure.SecretIdNotFound` | `tccli configure list` 查 secretId 是否为空 | 凭证未配置或已过期 | `tccli configure` 重新配置 |
 | `AuthFailure.SignatureFailure` | 检查 SecretKey 是否复制完整（含首尾空格） | SecretKey 错误 | 重新从 CAM 复制 SecretKey |
-| `UnauthorizedOperation.CamNoAuth` | 查子账号授权策略 | 子账号无 TKE/TCR 权限 | CAM 控制台授权 `QcloudTKEFullAccess`/`QcloudTCRFullAccess` |
+| `UnauthorizedOperation.CamNoAuth` | 查子账号授权策略 | 子账号无 TKE 权限 | CAM 控制台授权 `QcloudTKEFullAccess` |
+| `UnauthorizedOperation.AutoScalingRoleUnauthorized` | `DescribeRoleList` 查 `AS_QCSRole` | 缺弹性伸缩服务角色 | [补 AS](#补-as_qcsrole节点池前置) → [创建节点池](../tke/nodes/nodepool-create.md#as-服务角色节点池创建前) |
+| 创建集群中途失败（服务未授权） | `DescribeRoleList` 查 `TKE_QCSRole` | 缺 TKE 服务角色 | [补 TKE_QCSRole](#补-tke_qcsrole主服务角色) 或控制台服务授权 |
+| VPC-CNI 创建/ENI 失败 | `DescribeRoleList` 查 `IPAMDofTKE_QCSRole` | 缺 IPAMD 服务角色 | [补 IPAMD](#补-ipamdoftke_qcsrolevpc-cni-前置) → [VPC-CNI](../tke/networking/vpc-cni.md#ipamd-服务角色) |
+| `cam CreateRole` / `AttachRolePolicy` 被拒 | 查子账号 CAM | 无角色管理权限 | 主账号控制台授权，或给子账号 `cam:CreateRole`/`cam:AttachRolePolicy` |
 | 地域相关报错（如 `UnsupportedRegion`/`InvalidRegion`） | `tccli tke DescribeRegions` 看地域状态 | region 不支持该产品 | 换 `ap-guangzhou`/`ap-shanghai` 等主地域 |
 | 命令卡住无响应 | 检查网络/代理 | 防火墙拦截腾讯云 API | 配置 `--https-proxy` 或开放 `*.tencentcloudapi.com` |
 
@@ -330,16 +334,16 @@ tccli configure remove --profile <PROFILE_NAME>
 ## 收尾确认
 
 ```bash
-# 跨产品端到端：凭证对 TKE 和 TCR 两个产品域均生效（验证段仅验证 TKE 域）
-tccli tcr DescribeRegions --filter "TotalCount" --output text
-# expected: 非零数字（如 27）→ 凭证对 TCR 域同样可达，跨产品配置闭环完成
+# TKE 域再确认（与验证段互补：filter 取 TotalCount）
+tccli tke DescribeRegions --filter "TotalCount" --output text
+# expected: 非零数字 → 凭证对 TKE 域可达
 
 # profile 核查：确认当前用的是哪个 profile（避免误用主账号密钥）
 tccli configure list | grep -E "^region|^output" 
 # expected: region/output 行明文显示（凭证段不 grep，避免密钥入终端历史）
 ```
 
-> TKE + TCR 双域均可调用 + 默认 profile 仅子账号密钥 = 凭证配置闭环完成，可进入任意 TKE/TCR 操作。
+> TKE 域可调用 + 默认 profile 仅子账号密钥 = 凭证配置闭环完成，可进入 TKE 操作。
 
 ## 下一步
 

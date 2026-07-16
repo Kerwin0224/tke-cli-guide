@@ -91,7 +91,7 @@ tccli cam DescribeRoleList --Page 1 --Rp 100 \
 |:---|:-----|
 | `AS_QCSRole` | 弹性伸缩服务扮演的角色；TKE 节点池代建 CVM 时由 AS 使用 |
 | `QcloudAccessForASRole` | 系统策略名；`AttachRolePolicy` 用 `--AttachRoleName` + `--PolicyName`（不是 `--RoleName`） |
-| 与 TKE 服务授权关系 | `TKE_QCSRole` 管 TKE 调 CVM/CLB/CBS；**AS 角色是另一条前置**。两者都可能缺，见 [配置凭证 — 服务角色](../../getting-started/credentials.md#服务角色tkeas) |
+| 与 TKE 服务授权关系 | `TKE_QCSRole` 管 TKE 调 CVM/CLB/CBS；**AS 角色是另一条前置**。两者都可能缺，见 [配置凭证 — 服务角色](../../getting-started/credentials.md#服务角色tke--ipamd--as--tcr--可观测) |
 | 绕过 AS | 只要 1 台普通节点、不建节点池 → [节点实例运维 — CreateClusterInstances](instance-ops.md#新建-cvm-作节点createclusterinstances) |
 
 ### 安全组（节点加入前）
@@ -168,7 +168,7 @@ tccli vpc DescribeSecurityGroups --region ap-guangzhou \
 
 ```bash
 # Native 对象整段传 JSON（非 --cli-unfold-argument 点号展开：点号展开对嵌套对象会报 ambiguous option）
-# CreatePolicy 为可选，且 API 不接受 "manual"/"ZoneEven"（传不支持的值报 CreatePolicy xxx is not supported），省略即可
+# CreatePolicy 为可选，合法枚举仅 ZoneEquality（多可用区打散）/ ZonePriority（首选可用区优先）；传 "manual"/"ZoneEven" 等非法值报 CreatePolicy xxx is not supported，省略即可
 # 标签字段为 --Tags（非 --TagSpecification）；Native.SecurityGroupIds 必填（非空），否则报 SecurityGroupIds is empty
 tccli tke CreateNodePool \
   --version 2022-05-01 \
@@ -226,7 +226,7 @@ tccli tke CreateNodePool \
   --Native.InstanceTypes '["S5.LARGE8"]' \
   --Native.InstanceChargeType POSTPAID_BY_HOUR \
   --Native.SystemDisk '{"DiskType":"CLOUD_PREMIUM","DiskSize":100}' \
-  --Native.Scaling '{"MinReplicas":2,"MaxReplicas":5,"CreatePolicy":"ZoneEven"}' \
+  --Native.Scaling '{"MinReplicas":2,"MaxReplicas":5,"CreatePolicy":"ZoneEquality"}' \
   --Native.MachineType NativeCVM \
   --Labels '[
     {"Name":"env","Value":"production"},
@@ -267,14 +267,14 @@ tccli tke DescribeNodePools \
 `DescribeNodePoolsElasticityStrength` 返回集群下各节点池的弹性健康度评分（容量水位 / 副本调度余量），是节点池弹性伸缩调优的辅助观测接口，仅 `--version 2022-05-01` 提供。
 
 ```bash
-# 查询集群节点池弹性健康度（需 ClusterId；真实命令，已实测）
+# 查询集群节点池弹性健康度（需 ClusterId）
 tccli tke DescribeNodePoolsElasticityStrength \
   --version 2022-05-01 \
   --ClusterId "<CLUSTER_ID>"
 # expected: 返回各节点池弹性健康度（字段随版本演进，以实际响应为准）
 ```
 
-> **能力边界红线（实测 2026-07-14, tccli v3.1.126.1）**：本接口**需 `ClusterId`**，但当前 tccli 构建**未给该 Action 注册 CLI 入参**，执行上报 `Unknown options: --ClusterId, <id>`（SDK `MissingParameter` 要求 `ClusterId`，CLI 参数解析层却拒绝接收，属 tccli 注册缺口，非调用方错误）。**结论**：该接口在本文档环境**不可经 tccli 成功调用**，命令句仅供「识别该能力存在 + 未来 tccli 修复后可直跑」；弹性健康度/容量余量请改用 `DescribeNodePools --version 2022-05-01` → `Native.Replicas` / `Native.ReadyReplicas` / `Native.Scaling`（Min/Max）判断，**勿依赖本接口做容量决策**。若必须取弹性评分，走控制台或等 tccli 版本更新。
+> **能力边界**：本接口**需 `ClusterId`**，但当前 tccli 构建**未给该 Action 注册 CLI 入参**，执行上报 `Unknown options: --ClusterId, <id>`（SDK `MissingParameter` 要求 `ClusterId`，CLI 参数解析层却拒绝接收，属 tccli 注册缺口，非调用方错误）。**结论**：该接口**不可经 tccli 成功调用**，命令句仅供「识别该能力存在 + 未来 tccli 修复后可直跑」；弹性健康度/容量余量请改用 `DescribeNodePools --version 2022-05-01` → `Native.Replicas` / `Native.ReadyReplicas` / `Native.Scaling`（Min/Max）判断，**勿依赖本接口做容量决策**。若必须取弹性评分，走控制台或等 tccli 版本更新。
 
 ## 旧版路径：CreateClusterNodePool (2018-05-25)
 
@@ -298,12 +298,12 @@ tccli tke CreateClusterNodePool \
 
 | 占位符 | 含义 | 约束 |
 |:-------|:-----|:-----|
-| `<AS_GROUP_JSON>` 字段 | AS 弹性伸缩组 | 最小集：`MaxSize`/`MinSize`/`DesiredCapacity`/`VpcId`/`SubnetIds`；完整以 AS 文档 + 真机错误为准 |
+| `<AS_GROUP_JSON>` 字段 | AS 弹性伸缩组 | 最小集：`MaxSize`/`MinSize`/`DesiredCapacity`/`VpcId`/`SubnetIds`；完整以 AS 文档 + 实际 API 错误响应为准 |
 | `<AS_LAUNCH_CONFIG_JSON>` 字段 | AS 启动配置 | 最小集：`InstanceType`/`InstanceChargeType`/`SystemDisk`/`SecurityGroupIds`；**不要**塞 CVM 专有键 |
 | `InstanceAdvancedSettings` | 节点高级设置 | **TCCLI 强制必填**，无自定义传 `{}` 或 `{"Unschedulable":0}` |
 | `EnableAutoscale` | 是否启用弹性扩缩容 | `false`=固定节点数，`true`=按 AS 规则弹性 |
 
-> **Launch 配置字段陷阱（真机）**：`LaunchConfigurePara` 是 **AS 启动配置** 契约，不是完整 `cvm RunInstances`。传入 `HostName`、`InstanceName` 等 CVM 键 → `FailedOperation.AsCommon` / `UnknownParameter`。用 `tccli as CreateLaunchConfiguration --generate-cli-skeleton` 或真机报错字段名收敛，勿凭 CVM 习惯填。
+> **Launch 配置字段陷阱**：`LaunchConfigurePara` 是 **AS 启动配置** 契约，不是完整 `cvm RunInstances`。传入 `HostName`、`InstanceName` 等 CVM 键 → `FailedOperation.AsCommon` / `UnknownParameter`。用 `tccli as CreateLaunchConfiguration --generate-cli-skeleton` 或按实际 API 报错字段名收敛，勿凭 CVM 习惯填。
 
 > 旧版与新版契约不同：旧版 `CreateClusterNodePool` 透传 AS 字符串（`AutoScalingGroupPara`/`LaunchConfigurePara`），新版 `CreateNodePool` 用结构化 `Native` 对象（`SubnetIds`/`InstanceTypes`）。两版查询 Action 命名也不同（旧 `DescribeClusterNodePools` vs 新 `DescribeNodePools`），跨版本切换前用 `--generate-cli-skeleton` 逐字段核契约。
 
@@ -356,6 +356,11 @@ tccli tke AddNodeToNodePool --ClusterId "<CLUSTER_ID>" --region <REGION> \
   --NodePoolId "<NODEPOOL_ID>" --InstanceIds '["<INSTANCE_ID>"]'
 # expected: exit 0
 
+# 从节点池移出节点但保留在集群内（不销毁 CVM；与 DeleteClusterInstances 不同）
+tccli tke RemoveNodeFromNodePool --ClusterId "<CLUSTER_ID>" --region <REGION> \
+  --NodePoolId "<NODEPOOL_ID>" --InstanceIds '["<INSTANCE_ID>"]'
+# expected: exit 0
+
 # 设置节点池节点保护 (防止缩容时驱逐, InstanceIds[] 指定节点)
 tccli tke SetNodePoolNodeProtection --ClusterId "<CLUSTER_ID>" --region <REGION> \
   --NodePoolId "<NODEPOOL_ID>" --InstanceIds '["<INSTANCE_ID>"]' --Protected true
@@ -367,26 +372,26 @@ tccli tke ModifyNodePoolInstanceTypes --ClusterId "<CLUSTER_ID>" --region <REGIO
 # expected: exit 0
 ```
 
-> `AddNodeToNodePool` 把已存在节点（非新建）加入节点池，区别于节点池自动创建节点。`SetNodePoolNodeProtection` 的 `Protected=true` 防止缩容驱逐（与 [扩缩容](nodepool-scale.md) 配合）。`ModifyNodePoolInstanceTypes` 变更机型会滚动重建节点。
+> `AddNodeToNodePool` 把已存在节点（非新建）加入节点池；`RemoveNodeFromNodePool` 移出节点池但保留在集群（不销毁 CVM）。`SetNodePoolNodeProtection` 的 `Protected=true` 防止缩容驱逐（与 [扩缩容](nodepool-scale.md) 配合）。`ModifyNodePoolInstanceTypes` 变更机型会滚动重建节点。
 
 ## 收尾确认
 
 ```bash
-# ②业务可用性端到端: CreatePolicy=manual 时初始 0 节点，需扩容才有节点真加入 K8s 可调度
+# ②业务可用性端到端: Native.Replicas=0（或未扩容）时无节点加入，需扩容/设 Replicas 后才有节点可调度
 tccli tke DescribeClusterInstances --version 2018-05-25 --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" \
   --InstanceIds '["<INSTANCE_ID>"]' \
   --filter "InstanceSet[].{id:InstanceId,state:InstanceState}" --output text
-# expected: 若已扩容，扩容节点 InstanceState=running；未扩容时无节点（CreatePolicy=manual 初始为 0，需进扩缩容）
+# expected: 若已扩容，扩容节点 InstanceState=running；未扩容时无节点（Replicas=0 时需进扩缩容）
 
 # ④衔接下一步前置就绪: 节点池 LifeState=Running 且扩容后 ≥1 节点 ready 才可进扩缩容
 tccli tke DescribeNodePools --version 2022-05-01 --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" --Filters '[{"Name":"NodePoolsId","Values":["<NODE_POOL_ID>"]}]' \
   --filter "NodePools[0].{name:Name,state:LifeState,desired:Native.Replicas}"
-# expected: LifeState=Running；Native.Replicas 反映期望副本数（CreatePolicy=manual 初始 Replicas=0，需 [扩缩容](nodepool-scale.md) 设值才建节点）
+# expected: LifeState=Running；Native.Replicas 反映期望副本数（Replicas=0 时需 [扩缩容](nodepool-scale.md) 设值才建节点）
 ```
 
-> 节点池 `LifeState=Running`（2022-05-01 Native）= 创建闭环完成。但 CreatePolicy=manual 时 Replicas 初始为 0、无节点加入集群（业务可用性边界），须进 [扩缩容](nodepool-scale.md) 设期望副本触发建 CVM，待节点 InstanceState=running 后方可调度 Pod。
+> 节点池 `LifeState=Running`（2022-05-01 Native）= 创建闭环完成。但 `Native.Replicas=0` 时无节点加入集群（业务可用性边界），须进 [扩缩容](nodepool-scale.md) 设期望副本（`ScaleNodePool` / `ModifyNodePool`）触发建 CVM，待节点 InstanceState=running 后方可调度 Pod。
 
 ## 下一步
 

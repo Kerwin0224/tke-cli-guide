@@ -44,7 +44,9 @@ fused: true
 
 ## 关键操作
 
-### 创建边缘集群
+### 创建边缘集群（存量对照 / 禁止新建）
+
+> ⚠️ **禁止新建**：产品已下线，创建入口已封闭；下列命令仅供存量脚本对照与参数名核对。新边缘/IDC 需求改走标准集群 + [注册节点公网版](https://cloud.tencent.com/document/product/457/57916) / [注册节点](../nodes/registered-nodes/overview.md)。调用可能返回产品侧拒绝或 `UnsupportedRegion`。
 
 ```bash
 tccli tke CreateTKEEdgeCluster \
@@ -54,10 +56,10 @@ tccli tke CreateTKEEdgeCluster \
   --VpcId "<VPC_ID>" \
   --PodCIDR "<POD_CIDR>" \
   --ServiceCIDR "<SERVICE_CIDR>"
-# expected: { "ClusterId": "cls-xxxxxxxx" }；UnsupportedRegion → 换 <EDGE_REGION>（如 ap-beijing）
+# expected: 存量对照可能返回 { "ClusterId": "cls-xxxxxxxx" }；下线后以实际 Error.Code 为准；UnsupportedRegion → 换 <EDGE_REGION>（如 ap-beijing）
 ```
 
-> ⚠️ **参数名核对**: `CreateTKEEdgeCluster` 顶层参数是 `K8SVersion`（非 `ClusterVersion`）、`VpcId`（无 `SubnetId`，边缘集群节点通过 VPC 接入，不指定子网）。完整入参以 `tccli tke CreateTKEEdgeCluster help --detail` 为准。`ap-guangzhou` 对 Edge Action 返回 `UnsupportedRegion`，创建前先用 `DescribeTKEEdgeClusters --region <候选>` 探测支持地域。
+> ⚠️ **参数名核对**: `CreateTKEEdgeCluster` 顶层参数是 `K8SVersion`（非 `ClusterVersion`）、`VpcId`（无 `SubnetId`，边缘集群节点通过 VPC 接入，不指定子网）。完整入参以 `tccli tke CreateTKEEdgeCluster help --detail` 为准。`ap-guangzhou` 对 Edge Action 返回 `UnsupportedRegion`，存量运维前先用 `DescribeTKEEdgeClusters --region <候选>` 探测支持地域。
 
 ### 查询边缘集群
 
@@ -128,21 +130,43 @@ tccli tke CreateEdgeLogConfig --region <EDGE_REGION> \
 # 查询日志开关（入参是 --ClusterIds 数组，非 --ClusterId）
 tccli tke DescribeEdgeLogSwitches --region <EDGE_REGION> \
   --ClusterIds '["<CLUSTER_ID>"]'
+# expected: 返回各集群日志开关状态列表
 
 # 安装日志 Agent
 tccli tke InstallEdgeLogAgent --region <EDGE_REGION> --ClusterId "<CLUSTER_ID>"
+# expected: exit 0
 ```
 
 ## 验证
 
 ```bash
-# 验证边缘集群创建成功（须用 DescribeTKEEdgeClusters，非 DescribeClusters）
+# 验证存量边缘集群可用（须用 DescribeTKEEdgeClusters，非 DescribeClusters）
 tccli tke DescribeTKEEdgeClusters --region <EDGE_REGION> --ClusterIds '["<CLUSTER_ID>"]' \
   --filter "Clusters[0].{id:ClusterId,state:ClusterStatus,name:ClusterName}"
-# expected: state=Running, id/name 与创建参数一致
+# expected: state=Running, id/name 与存量集群一致
 ```
 
-> 边缘集群 state=Running = 创建成功, 可进入 [关键操作]段管理。
+> 边缘集群 state=Running = 存量集群可用, 可进入 [关键操作]段运维。
+
+## 故障恢复
+
+| 症状 | 先查 | 处理 |
+|:-----|:-----|:-----|
+| `DescribeTKEEdgeClusterStatus` → `ClusterState` 非 `Running` | `DescribeTKEEdgeClusters` + `DescribeTKEEdgeClusterStatus` | 等过渡态结束；长期非 Running 按官方迁移/工单，**不要**新建 Edge 集群顶替 |
+| 边缘节点未出现 / 注册失败 | `DescribeTKEEdgeScript` 重取脚本；`DescribeEdgeClusterInstances` 看节点 | 核对 `<INTERFACE>` 网卡名与节点出网；弱网重跑注册脚本 |
+| `UnsupportedRegion` | 当前 `--region` 是否 Edge 可达 | 换 `<EDGE_REGION>`（如 `ap-beijing`）；`ap-guangzhou` 对多数 Edge Action 不支持 |
+| 需下线/迁走业务 | 官方 [迁移至标准集群](https://cloud.tencent.com/document/product/457/110447) | 标准集群 + [注册节点公网版](https://cloud.tencent.com/document/product/457/57916)；迁完再 `DeleteTKEEdgeCluster` |
+
+```bash
+# 状态非 Running 时先看 ClusterState
+tccli tke DescribeTKEEdgeClusterStatus --region <EDGE_REGION> --ClusterId "<CLUSTER_ID>"
+# expected: ClusterState 字段；非 Running 勿当新建成功
+
+# 节点是否已注册（须 Edge 地域）
+tccli tke DescribeEdgeClusterInstances --ClusterID "<CLUSTER_ID>" --region <EDGE_REGION> \
+  --Offset 0 --Limit 20
+# expected: TotalCount≥1 且 InstanceInfoSet 有节点；0 → 重取注册脚本
+```
 
 ---
 
@@ -160,17 +184,19 @@ tccli tke DescribeTKEEdgeClusters --region <EDGE_REGION>
 
 ## API 参考
 
-完整的边缘集群 API 共 21 个操作:
+本篇覆盖边缘集群相关 **26** 个 Action（与 chapter-plan 一致；应用转发类 ForwardTKEEdgeApplicationRequestV3 为设计排除、不在正文主流程演示）：
 
 | 分类 | API | 说明 |
 |------|-----|------|
-| 生命周期 | `CreateTKEEdgeCluster` / `DeleteTKEEdgeCluster` / `UpdateTKEEdgeCluster` | 创建/删除/更新 |
+| 生命周期 | `CreateTKEEdgeCluster`（禁止新建） / `DeleteTKEEdgeCluster` / `UpdateTKEEdgeCluster` | 创建对照/删除/更新 |
 | 查询 | `DescribeTKEEdgeClusters` / `DescribeTKEEdgeClusterStatus` | 列表/状态 |
 | 凭证 | `DescribeTKEEdgeClusterCredential` / `DescribeTKEEdgeExternalKubeconfig` | kubeconfig |
-| 节点 | `DescribeEdgeClusterInstances` / `DescribeTKEEdgeScript` | 节点/注册脚本 |
+| 节点 | `DescribeEdgeClusterInstances` / `DescribeTKEEdgeScript` / `DeleteEdgeClusterInstances` | 节点/注册脚本/删节点 |
+| Edge CVM | `CreateEdgeCVMInstances` / `DescribeEdgeCVMInstances` / `DeleteEdgeCVMInstances` | 边缘 CVM 实例 |
+| ECM | `CreateECMInstances` / `DescribeECMInstances` / `DeleteECMInstances` | 边缘计算模块实例 |
 | 升级 | `DescribeEdgeClusterUpgradeInfo` / `UpdateEdgeClusterVersion` / `DescribeAvailableTKEEdgeVersion` | 版本管理 |
 | 日志 | `CreateEdgeLogConfig` / `DescribeEdgeLogSwitches` / `InstallEdgeLogAgent` / `UninstallEdgeLogAgent` | 日志采集 |
-| 其他 | `ForwardTKEEdgeApplicationRequestV3` / `CheckEdgeClusterCIDR` | 应用转发/CIDR 检查 |
+| 其他 | `CheckEdgeClusterCIDR` | CIDR 冲突检查 |
 | 参数 | `DescribeEdgeAvailableExtraArgs` / `DescribeEdgeClusterExtraArgs` | 集群参数 |
 
 ## 集群更新与诊断

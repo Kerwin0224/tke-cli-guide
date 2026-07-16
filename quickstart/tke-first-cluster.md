@@ -64,10 +64,8 @@ tccli cam DescribeRoleList --Page 1 --Rp 100 \
 ```bash
 tccli tke DescribeVersions --region <REGION> \
     --filter "VersionInstanceSet[-3:].Version" --output text
-# expected (示例):
-# 1.30.0
-# 1.32.2
-# 1.34.1
+# expected (示例，text 为 tab 分隔单行；json 才是数组分行):
+# 1.30.0	1.32.2	1.34.1
 ```
 
 | 占位符 | 含义 | 约束 | 获取方式 |
@@ -198,16 +196,18 @@ tccli tke DescribeClusterStatus \
 
 > `--waiter` 参数必须用 **JSON 双引号**格式，不要用 Python dict 单引号。Shell 中整个 waiter JSON 用单引号包裹即可，内部 JSON key/value 用双引号。
 
-### 验证
+### 验证（控制面创建成功 ≠ 本机 kubectl 已通）
 
-从四个维度确认集群创建成功并可用。
+> **边界**：下面维度 1–2 只证明 **托管控制面已 `Running`**。  
+> **本机 / 公网 CI 的 kubectl 不会因此自动可用**——集群创建后默认 **无访问端点**；且部分环境对 kubeconfig 默认域名 `cls-*.ccs.tencent-cloud.com` **无法解析（NXDOMAIN）**。  
+> 要在本机连 API Server，必须另走完整路径（加节点 → 开公网端点 → ACL → 用 CLB 地址改写 `server`），见下方 **「本机 kubectl 可达（必做）」** 与 [管理端点](../tke/networking/endpoints.md)。
 
-| 维度 | 命令 | 预期 |
-|:-----|:-----|:-----|
-| 1. 状态 | `DescribeClusterStatus` → `ClusterState` | `Running` |
-| 2. 元数据 | `DescribeClusters` → `ClusterId`/`ClusterName`/`ClusterVersion`/`ClusterLevel` | 与创建参数一致 |
-| 3. 端点 | `DescribeClusterSecurity` → `Domain` | `cls-xxxxxxxx.ccs.tencent-cloud.com` |
-| 4. kubeconfig | `DescribeClusterSecurity` → `Kubeconfig` | 有效 YAML，可写文件 |
+| 维度 | 命令 | 预期 | 含义 |
+|:-----|:-----|:-----|:-----|
+| 1. 状态 | `DescribeClusterStatus` → `ClusterState` | `Running` | 控制面就绪 |
+| 2. 元数据 | `DescribeClusters` → `ClusterId`/`ClusterName`/`ClusterVersion`/`ClusterLevel` | 与创建参数一致 | 创建参数落库 |
+| 3. 域名字段（可选） | `DescribeClusterSecurity` → `Domain` | 常为 `cls-xxxxxxxx.ccs.tencent-cloud.com` | **仅元数据**；**不等于**本机 DNS 可解析或 kubectl 已通 |
+| 4. kubeconfig 文件 | `DescribeClusterKubeconfig` → `Kubeconfig` | 有效 YAML 可写盘 | **有凭证文件**；未开公网端点 + 未 patch `server` 时本机仍会失败 |
 
 ```bash
 # 维度 1: 状态 = Running，删除保护 = false
@@ -229,28 +229,103 @@ tccli tke DescribeClusters --region <REGION> --ClusterIds '["<CLUSTER_ID>"]' \
 ```
 
 ```bash
-# 维度 3: 集群端点可达
+# 维度 3（可选）: Domain 字段存在——不要把它当成「本机已可达」
 tccli tke DescribeClusterSecurity --region <REGION> --ClusterId <CLUSTER_ID> \
     --filter "Domain" --output text
-# expected: cls-xxxxxxxx.ccs.tencent-cloud.com
-```
-```text
-cls-xxxxxxxx.ccs.tencent-cloud.com
+# expected: 常为 cls-xxxxxxxx.ccs.tencent-cloud.com（仅字段值；dig 可能 NXDOMAIN）
 ```
 
-> kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
 ```bash
-# 维度 4: kubeconfig 可用
-tccli tke DescribeClusterSecurity --region <REGION> --ClusterId <CLUSTER_ID> \
+# 维度 4: 拉取 kubeconfig YAML（凭证敏感；此时通常仍不能本机 kubectl）
+tccli tke DescribeClusterKubeconfig --region <REGION> --ClusterId <CLUSTER_ID> \
     --filter "Kubeconfig" --output text > ~/.kube/config-qs
-# expected: 文件写入成功，kubeconfig 为有效 YAML
-export KUBECONFIG=~/.kube/config-qs
-# kubectl 验证 kubeconfig 可用 (tccli 取凭证后, 用 kubectl 验证集群连通, K8s 原生命令)
-kubectl cluster-info
-# expected: Kubernetes control plane is running at https://cls-xxxxxxxx.ccs.tencent-cloud.com
+# expected: 文件为有效 YAML；server 可能是 ccs 域名或内网 VIP
 ```
 
-> ⚠️ kubeconfig 包含访问凭证，勿提交到 git 或公开分享。
+> ⚠️ kubeconfig 含访问凭证，勿提交到 git 或公开分享。  
+> ⚠️ **不要**在未开公网端点、未确认 `ClusterExternalEndpoint` 前，把 `kubectl cluster-info` 成功当作本 Quickstart 的完成标准。
+
+### 本机 kubectl 可达（必做，若目标是本机/公网 CI 操作集群）
+
+空集群 `Running` 后，按顺序完成（**不可跳步**）。**现行唯一路径**：`CreateClusterEndpoint --IsExtranet true` → `ModifyClusterEndpointSP` → 用 `ClusterExternalEndpoint` 改写 kubeconfig `server`。  
+**禁止** `CreateClusterEndpointVip`（官方废弃）。细节与故障码：[管理端点](../tke/networking/endpoints.md)。
+
+| 步 | 动作 | 成功判据 |
+|:---|:-----|:---------|
+| 1 | 添加 ≥1 worker（节点池或 `CreateClusterInstances`） | 节点 Ready；**无 worker 不能开公网端点** |
+| 2 | `CreateClusterEndpoint --IsExtranet true`（常需 `--SecurityGroup` + `ExtensiveParameters`） | `DescribeClusterEndpointStatus --IsExtranet true` → **`Status=Created`**（不是 `Running`） |
+| 3 | `ModifyClusterEndpointSP --SecurityPolicies '["<出口IP>/32"]'`（**CIDR 字符串数组**） | `DescribeClusterEndpoints` → **`ClusterExternalACL` 非空且含该 CIDR**；**不要**用 `SecurityGroupId` 替代 ACL |
+| 4 | 读取 **`ClusterExternalEndpoint`**（CLB `host:port`） | 字段非空 |
+| 5 | 将 kubeconfig 的 `server` 改为 `https://` + `ClusterExternalEndpoint` | 不依赖可能 NXDOMAIN 的 `cls-*.ccs.tencent-cloud.com` |
+| 6 | `kubectl get --raw=/healthz` 与 `get nodes` | **`ok`**；节点列表或空列表但命令成功 |
+
+```bash
+# 占位符：REGION / CLUSTER_ID / SECURITY_GROUP_ID / 已有 worker
+REGION=ap-guangzhou
+CLUSTER_ID="<CLUSTER_ID>"
+SECURITY_GROUP_ID="<SECURITY_GROUP_ID>"
+KUBECONFIG_PATH="${KUBECONFIG_PATH:-kubeconfig-qs.yaml}"
+
+# 0) 出口 IP（写入 ACL）
+EGRESS_IP="$(curl -s --max-time 10 https://api.ipify.org)"
+echo "EGRESS_IP=$EGRESS_IP"
+test -n "$EGRESS_IP"
+
+# 1) 开公网端点（须已有 worker）
+tccli tke CreateClusterEndpoint --region "$REGION" \
+  --ClusterId "$CLUSTER_ID" --IsExtranet true \
+  --SecurityGroup "$SECURITY_GROUP_ID" \
+  --ExtensiveParameters '{"InternetAccessible":{"InternetChargeType":"TRAFFIC_POSTPAID_BY_HOUR","InternetMaxBandwidthOut":1}}'
+# expected: exit 0
+
+tccli tke DescribeClusterEndpointStatus --region "$REGION" \
+  --ClusterId "$CLUSTER_ID" --IsExtranet true \
+  --waiter '{"expr":"Status","to":"Created","timeout":300,"interval":10}'
+# expected: Status=Created
+
+# 2) ACL：仅在 Created 后；若 FailedOperation.LbCommon → 等 15–60s 重试本命令
+tccli tke ModifyClusterEndpointSP --region "$REGION" \
+  --ClusterId "$CLUSTER_ID" --SecurityPolicies "[\"${EGRESS_IP}/32\"]"
+# expected: exit 0
+
+# 3) 核对地址 + ACL（ACL 仍 [] 则不要 kubectl）
+tccli tke DescribeClusterEndpoints --region "$REGION" --ClusterId "$CLUSTER_ID" \
+  --filter "{ext:ClusterExternalEndpoint,acl:ClusterExternalACL}" --output json
+# expected: ext 非空；acl 含 ${EGRESS_IP}/32
+
+# 4) kubeconfig + 改写 server 为 ClusterExternalEndpoint
+tccli tke DescribeClusterKubeconfig --region "$REGION" --ClusterId "$CLUSTER_ID" \
+  --filter "Kubeconfig" --output text > "$KUBECONFIG_PATH"
+
+EXT="$(tccli tke DescribeClusterEndpoints --region "$REGION" --ClusterId "$CLUSTER_ID" \
+  --filter "ClusterExternalEndpoint" --output text | tr -d '[:space:]')"
+test -n "$EXT"
+case "$EXT" in
+  https://*) SERVER="$EXT" ;;
+  *) SERVER="https://${EXT}" ;;
+esac
+python3 - "$KUBECONFIG_PATH" "$SERVER" <<'PY'
+import re, sys
+path, server = sys.argv[1], sys.argv[2]
+text = open(path, encoding="utf-8").read()
+new, n = re.subn(r"(?m)^(\s*server:\s*).*$", r"\1" + server, text, count=1)
+if n != 1:
+    raise SystemExit(f"rewrite server failed: replacements={n}")
+open(path, "w", encoding="utf-8").write(new)
+print("server ->", server)
+PY
+
+# 5) Confirm 强制：/healthz=ok（ACL 空或未改写 server 时不要宣称完成）
+kubectl --kubeconfig "$KUBECONFIG_PATH" get --raw=/healthz --request-timeout=20s
+# expected: ok
+kubectl --kubeconfig "$KUBECONFIG_PATH" get nodes --request-timeout=20s
+# expected: 命令成功
+```
+
+> **Confirm（缺一不可）**：`Status=Created` + `ClusterExternalEndpoint` 非空 + **`ClusterExternalACL` 含出口 IP** + **`/healthz=ok`**。  
+> `LbCommon` / CAM / 空集群错误码与反模式：[管理端点](../tke/networking/endpoints.md)。  
+> 加节点：[创建节点池](../tke/nodes/nodepool-create.md) · [新建 CVM 作节点](../tke/nodes/instance-ops.md)。  
+> kubeconfig 证书面：[认证配置](../tke/security/auth.md)。
 
 ---
 
@@ -265,9 +340,11 @@ tccli tke DescribeClusters --region <REGION> \
     --filter "Clusters[?ClusterStatus=='Running'].{id:ClusterId,name:ClusterName,ver:ClusterVersion,type:ClusterType}" \
     --output text
 # expected: Tab 分隔的集群列表
+# 注意：--output text 多键投影列序按投影 key 名字母序（id,name,type,ver），
+# 非书写序；要固定列序请用 --output json
 ```
 ```text
-cls-xxxxxxxx    <CLUSTER_NAME>    1.34.1    MANAGED_CLUSTER
+cls-xxxxxxxx	<CLUSTER_NAME>	MANAGED_CLUSTER	1.34.1
 ```
 
 ### 单集群详情
@@ -314,7 +391,7 @@ false
 若输出 `true`，先关闭保护：
 
 ```bash
-tccli tke DisableClusterDeletionProtection --ClusterId <CLUSTER_ID>
+tccli tke DisableClusterDeletionProtection --region <REGION> --ClusterId <CLUSTER_ID>
 # expected: {"RequestId":"..."}
 ```
 
@@ -362,7 +439,7 @@ tccli tke DescribeClusters --region <REGION> --ClusterIds '["<CLUSTER_ID>"]' \
 | `InvalidParameter.CidrConflictWithVpcCidr` | 对比 `ServiceCIDR` 与 VPC CIDR | Service 网段与 VPC CIDR 重叠 | 换不重叠 CIDR（如 `10.100.0.0/17`） |
 | `EniSubnetIds must be set` | 检查是否传了 `EniSubnetIds` | VPC-CNI 模式缺弹性网卡子网 | 在 `ClusterCIDRSettings` 中加 `"EniSubnetIds":["<SUBNET_ID>"]` |
 | `DeleteCluster` 返回 exit 252 | 检查命令是否含 `--InstanceDeleteMode` | 缺少必填参数 `InstanceDeleteMode` | 补 `--InstanceDeleteMode terminate` 或 `retain` |
-| 删除被 API 拒绝 | `DescribeClusterStatus` 查 `ClusterDeletionProtection` | 删除保护开启中 | 先执行 `tccli tke DisableClusterDeletionProtection --ClusterId <CLUSTER_ID>` |
+| 删除被 API 拒绝 | `DescribeClusterStatus` 查 `ClusterDeletionProtection` | 删除保护开启中 | 先执行 `tccli tke DisableClusterDeletionProtection --region <REGION> --ClusterId <CLUSTER_ID>` |
 | 集群卡 `Creating` > 10min | `DescribeTasks --region <REGION> --ClusterId <CLUSTER_ID>` 查任务状态 | 子网 IP 不足或后端异常 | 换子网重试；若持续失败则提工单并附 `RequestId` |
 
 ### 命令成功但状态不对 (exit = 0)
@@ -409,10 +486,12 @@ Quickstart 闭环后、生产部署前，对照下列项（完整表见 [容器�
 | 部署 | **新建**用托管集群（独立已停止新建） | 误选独立则无法新建 | [集群管理](../tke/clusters/index.md) |
 | 工作负载 | 设 CPU/内存 limit；配存活/就绪探针 | 资源争抢或业务挂了 Pod 仍 Ready | 工作负载 YAML / 控制台 |
 
+- [给集群添加节点](../tke/nodes/nodepool-create.md) — 空集群 Running 后先加工人节点
+- [管理端点](../tke/networking/endpoints.md) — **本机/公网 CI 必读**：公网端点 + ACL + CLB 地址改写 kubeconfig
+- [认证配置](../tke/security/auth.md) — kubeconfig 获取与轮转
 - [创建集群详解](../tke/clusters/create.md) — 完整参数、高级配置（Global Router 模式、双栈、IPVS）
 - [查询和过滤集群](../tke/clusters/query.md) — JMESPath 高级过滤技巧
 - [删除集群详解](../tke/clusters/delete.md) — 残留资源清理、批量删除
-- [给集群添加节点](../tke/nodes/nodepool-create.md) — 创建节点池、扩容
 - [TKE 拉取 TCR 镜像](../cross-product/tke-pull-tcr.md) — 跨产品：集群工作负载使用 TCR 私有镜像
 
 ---

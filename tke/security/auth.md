@@ -114,10 +114,11 @@ tccli tke DescribeClusterKubeconfig --region ap-guangzhou --ClusterId "<CLUSTER_
   --filter "Kubeconfig" --output text > ~/.kube/tke-config
 # expected: YAML 含 apiVersion/clusters；server 为公网或内网 VIP
 
-# 2. 验证连通（本机须公网端点 + ACL；仅内网 VIP 时本机超时属网络路径，非证书问题）
+# 2. 若 Domain/server 为 cls-*.ccs.tencent-cloud.com 且 dig 失败：用 ClusterExternalEndpoint 改写 server（见 endpoints.md 步骤 5）
+# 3. 验证连通（本机须公网端点 Created + SecurityPolicies 含出口 IP；仅内网 VIP 时本机超时属网络路径，非证书问题）
 <!-- kubectl验证tccli获取的kubeconfig可连通集群，非tccli边界 -->
 kubectl --kubeconfig ~/.kube/tke-config get nodes --request-timeout=15s
-# expected: 节点列表；超时/Unable to connect → 查端点类型与 ACL，见 endpoints.md
+# expected: 节点列表；超时/Unable to connect/no such host → 查端点、ACL、是否改写为 ClusterExternalEndpoint，见 [管理端点](../networking/endpoints.md)
 ```
 
 ## 验证

@@ -29,7 +29,7 @@ TKE 集群拉取 TCR 镜像的三种典型场景：
 
 ## 准备工作
 
-> 本篇跨三个 CLI：TCCLI（管 TCR 凭证/TKE 端点）+ kubectl（部署 Pod 验证拉取，K8s 原生）+ docker（本地镜像操作）。kubectl 用于验证镜像拉取链路终点（Pod 级验证 TCCLI 做不到）。
+> 本篇主路径两个 CLI：TCCLI（管 TCR 凭证/端点）+ kubectl（配 Secret、部署并验证拉取；K8s 原生，TCCLI 做不到 Pod 级拉取确认）。本地 `docker tag/push` 见 [TCR 官方文档](https://cloud.tencent.com/document/product/1141)，不在本 Quickstart 主线。
 
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
 ```bash
@@ -63,7 +63,7 @@ tccli tcr CreateInstanceToken --region ap-guangzhou \
 
 ```json
 {
-    "Username": "100049208872",
+    "Username": "<USERNAME>",
     "Token": "eyJhbGciOiJSUzI1NiIs...",
     "ExpTime": 1782702866551,
     "RequestId": "xxx"
@@ -103,11 +103,12 @@ kubectl create secret docker-registry tcr-secret \
 
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
 ```bash
-# 部署应用，引用 imagePullSecret
-kubectl run my-app --image="<REGISTRY_DOMAIN>/<NAMESPACE>/<REPO>:<TAG>" \
-  --overrides='{"spec":{"template":{"spec":{"imagePullSecrets":[{"name":"tcr-secret"}]}}}}' \
-  --image-pull-policy=Always --replicas=1
+# 部署应用，引用 imagePullSecret（create deployment + patch 与 expected 资源类型一致）
+kubectl create deployment my-app --image="<REGISTRY_DOMAIN>/<NAMESPACE>/<REPO>:<TAG>"
 # expected: deployment.apps/my-app created
+
+kubectl patch deployment my-app -p '{"spec":{"template":{"spec":{"imagePullSecrets":[{"name":"tcr-secret"}]}}}}'
+# expected: deployment.apps/my-app patched（imagePullSecrets 生效）
 ```
 
 ### 验证
@@ -130,17 +131,40 @@ kubectl describe pod -l app=my-app | /usr/bin/grep -A2 "Events:"
 
 > Pod Running + Events 含 "Successfully pulled image" = TKE→TCR 镜像拉取链路通。
 
+---
+
+## 收尾确认
+
+> kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
+```bash
+# 业务可用性：Secret 仍在时再部署一次，确认链路可复现（Verify 已查首次 Running，此处不先删 Secret）
+kubectl create deployment verify-app --image="<REGISTRY_DOMAIN>/<NAMESPACE>/<REPO>:<TAG>"
+# expected: deployment.apps/verify-app created
+
+kubectl patch deployment verify-app -p '{"spec":{"template":{"spec":{"imagePullSecrets":[{"name":"tcr-secret"}]}}}}'
+# expected: deployment.apps/verify-app patched
+
+kubectl get pods -l app=verify-app -o jsonpath='{.items[0].status.containerStatuses[0].ready}'
+# expected: true → 镜像拉取+容器运行端到端成功
+
+# 清理验证 Deployment（保留 Secret，供可选清理段处理）
+kubectl delete deployment verify-app
+# expected: deployment.apps "verify-app" deleted
+```
+
+> Secret 仍在时二次部署 Pod ready=true = TKE 拉取 TCR 镜像链路可复现，端到端闭环完成。
+
 ## 清理
 
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
 ```bash
-# 1. 删除部署
-kubectl delete deployment my-app
-# expected: deployment.apps "my-app" deleted
+# 1. 删除业务部署（若仍存在）
+kubectl delete deployment my-app --ignore-not-found
+# expected: deployment.apps "my-app" deleted 或 not found
 
 # 2. 删除 imagePullSecret
-kubectl delete secret tcr-secret -n default
-# expected: secret "tcr-secret" deleted
+kubectl delete secret tcr-secret -n default --ignore-not-found
+# expected: secret "tcr-secret" deleted 或 not found
 
 # 3. （可选）删除 TCR Token
 tccli tcr DeleteInstanceToken --region ap-guangzhou --RegistryId "<REGISTRY_ID>" --TokenId "<TOKEN_ID>"
@@ -151,30 +175,8 @@ tccli tcr DeleteInstanceToken --region ap-guangzhou --RegistryId "<REGISTRY_ID>"
 
 ---
 
-## 收尾确认
-
-> kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
-```bash
-# 业务可用性端到端：清理后重新部署 Pod，kubectl get pods 返回 ready=true
-# 证明镜像拉取+运行成功（Verify 在清理前查 Pod Running，此处清理后重部署验证链路可复现）
-kubectl run verify-app --image="<REGISTRY_DOMAIN>/<NAMESPACE>/<REPO>:<TAG>" \
-  --overrides='{"spec":{"template":{"spec":{"imagePullSecrets":[{"name":"tcr-secret"}]}}}}' \
-  --image-pull-policy=Always --replicas=1
-# expected: deployment.apps/verify-app created
-
-kubectl get pods -l app=verify-app -o jsonpath='{.items[0].status.containerStatuses[0].ready}'
-# expected: true → 镜像拉取+容器运行端到端成功
-
-# 清理验证 Pod
-kubectl delete deployment verify-app
-# expected: deployment.apps "verify-app" deleted
-```
-
-> 清理后重部署 Pod ready=true = TKE 拉取 TCR 镜像链路可复现，端到端闭环完成。
-
----
-
 ## 下一步
 
+- [TCR 访问控制官方文档](https://cloud.tencent.com/document/product/1141) — 长期凭证与 VPC 内网配置
 - [TKE 快速入门](../quickstart/tke-first-cluster.md) — 创建 TKE 集群
 - [故障排查](../tke/troubleshooting.md) — `ImagePullBackOff` 诊断

@@ -44,7 +44,7 @@ fused: true
 
 ```bash
 tccli tke DescribeExternalNodePools --ClusterId <CLUSTER_ID> --region <REGION>
-# expected: exit 0, ExternalNodePoolSet 含目标池
+# expected: exit 0, NodePoolSet 含目标池
 ```
 
 ### 步骤 2：修改标签与删除保护
@@ -104,7 +104,7 @@ tccli tke ModifyExternalNodePool --region <REGION> \
 
 ```bash
 tccli tke DescribeExternalNodePools --ClusterId "<CLUSTER_ID>" --region ap-guangzhou \
-  --filter "ExternalNodePoolSet[?NodePoolId=='<NODEPOOL_ID>'].LifeState"
+  --filter "NodePoolSet[?NodePoolId=='<NODEPOOL_ID>'].LifeState"
 # expected: normal（配置已生效）
 ```
 

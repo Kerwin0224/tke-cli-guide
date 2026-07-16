@@ -24,7 +24,7 @@ tccli tke DescribeClusterInstances --region <REGION> --ClusterId "<CLUSTER_ID>"
 
 ## 集群状态 (ClusterState)
 
-> `ClusterState` 字段取自 `DescribeClusterStatus` 响应。常驻值为 `Running`；完整枚举见腾讯云官方数据结构文档。
+> **字段分源**：`DescribeClusterStatus` 返回的 `ClusterState` 与 `DescribeClusters` 返回的 `ClusterStatus` **不是同一字段**。本表以 `DescribeClusterStatus` → `ClusterStatusSet[].ClusterState` 的契约枚举为准（与 `help --detail` / api.json `ClusterStatus.ClusterState` 一致）。`DescribeClusters` 的 `ClusterStatus` 文档串另含 `Abnormal` / `Idling` / `Recovering` / `Scaling` / `WaittingForConnect` / `Trading` 等取值——轮询状态机请用 `DescribeClusterStatus`，列表页状态看 `DescribeClusters`。
 
 | 状态 | 含义 | 触发条件 | 用户可执行操作 | 终态 |
 |:-----|:-----|:---------|:--------------|:----:|
@@ -38,21 +38,17 @@ tccli tke DescribeClusterInstances --region <REGION> --ClusterId "<CLUSTER_ID>"
 | `ClusterLevelTrading` | 集群变配交易中 | 等级变配计费处理 | 等待 | 否 |
 | `Pause` | 集群升级暂停 | 升级暂停 | 恢复升级 | 否 |
 | `Deleting` | 集群删除中 | `DeleteCluster` | 等待 | 是 |
-| `Abnormal` | 集群异常 | 组件故障 / 网络不可达 | 诊断 + 修复 | 否 |
 | `Isolated` | 集群已隔离 | 欠费隔离 | 充值恢复 | 否 |
-| `Idling` | 闲置中 (Serverless) | 连续 7 天无 Pod | 激活唤醒 | 否 |
-| `Recovering` | 唤醒中 (Serverless) | 从闲置激活 | 等待 | 否 |
-| `Scaling` | 规模调整中 | 节点数调整 | 等待 | 否 |
 | `ResourceIsolate` | 执行隔离中 | 欠费隔离流程 | 等待 | 否 |
 | `ResourceIsolated` | 已隔离 | 隔离完成 | 充值恢复 | 否 |
 | `ResourceReverse` | 执行冲正中 | 隔离冲正流程 | 等待 | 否 |
 | `ResourceReversal` | 冲正中 | 冲正流程 | 等待 | 否 |
 | `ResourceDestroy` | 执行销毁中 | 销毁流程 | 等待 | 否 |
 | `ResourceDestroyed` | 已销毁 | 销毁完成 | — | 是 |
-| `WaittingForConnect` | 等待注册 | 独立集群 Master 待连接 | 配置 Master | 否 |
-| `Trading` | 集群开通中 | 开通计费处理 | 等待 | 否 |
 
-> 常驻工作状态：`Running`。异常分支：`Abnormal`（组件故障）/ `Isolated`（欠费）。终态：`Deleting` / `ResourceDestroyed`。
+> 常驻工作状态：`Running`。隔离分支：`Isolated` / `ResourceIsolate*`。终态：`Deleting` / `ResourceDestroyed`。
+>
+> **`DescribeClusters.ClusterStatus` 补充取值**（列表字段，勿与上表 `ClusterState` 混用）：`Trading`（开通中）、`Idling`（闲置）、`Recovering`（唤醒中）、`Scaling`（规模调整）、`WaittingForConnect`（独立集群待注册，拼写以 API 为准）、`Abnormal`（异常）。
 
 ## 集群节点健康 (ClusterInstanceState)
 

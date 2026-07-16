@@ -72,7 +72,7 @@ TKE 集群网络分两层：**访问端点**（kubectl/API Server 如何连接�
 ```bash
 # 查看集群端点状态
 tccli tke DescribeClusterEndpointStatus --region <REGION> --ClusterId "<CLUSTER_ID>"
-# expected: Status = "Creating"/"Running"/"NotFound"（未开启）
+# expected: Status = "Created"/"Creating"/"NotFound"/"CreateFailed"（未开启为 NotFound；无 Running）
 ```
 
 ## 文档

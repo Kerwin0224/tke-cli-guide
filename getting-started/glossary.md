@@ -16,7 +16,7 @@ fused: false
 | 子账号 | Sub-account / CAM 用户 | 主账号下创建的用户，授予最小权限。生产/CI/CD 应使用子账号密钥。 |
 | profile | — | TCCLI 的命名配置集。一个 profile 存一组凭证+地域，用 `--profile <NAME>` 切换，支持多账号。 |
 | 地域 | Region | 腾讯云数据中心的地理区域，如 `ap-guangzhou`（广州）、`ap-shanghai`（上海）。资源不可跨地域访问。 |
-| VPC | Virtual Private Cloud | 虚拟私有云。腾讯云上逻辑隔离的网络空间，TKE 集群和 TCR 实例都部署在 VPC 内。 |
+| VPC | Virtual Private Cloud | 虚拟私有云。腾讯云上逻辑隔离的网络空间，TKE 集群部署在 VPC 内。 |
 | 子网 | Subnet | VPC 内的 IP 地址段。TKE 节点、CVM 实例从子网分配内网 IP。 |
 | CIDR | Classless Inter-Domain Routing | 无类别域间路由，表示 IP 地址段（如 `10.0.0.0/16`）。TKE 集群的 Pod 网段、Service 网段用 CIDR 表示。 |
 | CVM | Cloud Virtual Machine | 腾讯云服务器。TKE 工作节点本质是带 K8s 组件的 CVM。 |
@@ -43,6 +43,7 @@ fused: false
 | CBS | Cloud Block Storage | 腾讯云云硬盘。TKE 节点系统盘/数据盘、PV 持久化卷常用 CBS。 |
 | L5 | L5 | 腾讯云软负载组件（旧名 CLB-L5）。部分 TKE 网络场景提及，新场景用 CLB 替代。 |
 | kubectl | kubectl | Kubernetes 命令行工具。操作集群资源（Pod/Service/Deployment）用，与 TCCLI（操作腾讯云资源）不同。安装见 [Kubernetes 官方文档](https://kubernetes.io/docs/tasks/tools/)。 |
+
 
 ## tccli
 

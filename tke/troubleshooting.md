@@ -58,10 +58,13 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_I
 ```bash
 # 1. 删除卡住的集群
 tccli tke DisableClusterDeletionProtection --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
+# expected: exit 0（已关删除保护或本就未开）
 tccli tke DeleteCluster --region ap-guangzhou --ClusterId "<CLUSTER_ID>" --InstanceDeleteMode terminate
+# expected: exit 0；删除保护未关时返回保护类错误
 # 2. 换可用区重建
 tccli tke CreateCluster --region ap-guangzhou --ClusterType MANAGED_CLUSTER \
   --ClusterBasicSettings '{"ClusterName":"<NEW_NAME>","ClusterVersion":"1.34.1",...}'
+# expected: { "ClusterId": "cls-xxxxxxxx" }；完整入参见 [创建集群](clusters/create.md)
 ```
 
 **验证**：
@@ -98,8 +101,10 @@ tccli tke DescribeClusterNodePoolDetail --region ap-guangzhou \
 # 如果节点完全无法恢复，移出并销毁
 tccli tke RemoveNodeFromNodePool --ClusterId "<CLUSTER_ID>" --NodePoolId "<POOL>" \
   --InstanceIds '["<INSTANCE_ID>"]'
+# expected: exit 0
 tccli tke DeleteClusterInstances --ClusterId "<CLUSTER_ID>" \
   --InstanceIds '["<INSTANCE_ID>"]'
+# expected: exit 0；节点从集群移除
 ```
 
 **验证**：
@@ -130,9 +135,11 @@ tccli tke DescribeClusterKubeconfig --region ap-guangzhou --ClusterId "<CLUSTER_
 ```bash
 # 如果端点未开启
 tccli tke CreateClusterEndpoint --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
+# expected: exit 0；端点创建受理（公网/内网参数见 [访问端点](networking/endpoints.md)）
 
 # 如果 kubeconfig 过期
 tccli tke UpdateClusterKubeconfig --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
+# expected: exit 0
 ```
 
 **验证**：
@@ -210,9 +217,11 @@ tccli tke DeleteCluster --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
 ```bash
 # 1. 集群基本信息
 tccli tke DescribeClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]' > cluster-info.json
+# expected: 文件写入成功，JSON 含 Clusters[]
 
 # 2. 集群状态详情
 tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]' > cluster-status.json
+# expected: 文件写入成功，含 ClusterStatusSet
 
 # 3. 最近操作日志（从控制台获取 CloudAudit 日志）
 # 或运行: tccli cloudaudit LookUpEvents --LookupAttributes '[{"AttributeKey":"ResourceName","AttributeValue":"<CLUSTER_ID>"}]'

@@ -72,6 +72,17 @@ TKE 标准集群支持 4 种节点类型，注册节点与常规 CVM 节点、�
 
 > 注册节点 ≠ 注册集群。注册集群是另一独立产品形态（控制台标「即将下线」），二者计费与配额不可混用。
 
+## 快速检查
+
+```bash
+# 列出集群下注册节点池（顶层键 NodePoolSet，非 ExternalNodePoolSet）
+tccli tke DescribeExternalNodePools --region ap-guangzhou --ClusterId "<CLUSTER_ID>" \
+  --filter "NodePoolSet[].{id:NodePoolId,name:Name,life:LifeState}" --output text
+# expected: 有池时列出 id/name/life；无池时 TotalCount=0 且 NodePoolSet 为空数组
+```
+
+> 注册节点特性是否已在集群开启，用 `DescribeExternalNodeSupportConfig --ClusterId` 看 `Enabled`/`Status`（未开启时 `Enabled=false`、`Status=Disabled`）。创建与接入步骤见下方链接。
+
 ## 快速开始
 
 - 专线版接入：[创建注册节点（专线版）](dedicated-line.md)

@@ -14,7 +14,7 @@ fused: true
 
 ## 触发条件
 
-- `DescribeAddon` → `Phase=Failed` 或长时间 `Pending`，插件安装/更新后状态异常
+- `DescribeAddon` → `Phase=InstallFailed`/`UpgradFailed` 或长时间 `Installing`/`Upgrading`，插件安装/更新后状态异常
 - `GetTkeAppChartList` 含目标插件但集群未安装，需 `InstallAddon` 部署
 - `kubectl get pods -n kube-system -l app=<ADDON_NAME>` 显示 Pod `ImagePullBackOff` 或 `CrashLoopBackOff` — 看 [故障恢复]段
 
@@ -196,7 +196,7 @@ tccli tke DescribeAddon --region ap-guangzhou --ClusterId "<CLUSTER_ID>" --Addon
 | 运行状态 | `kubectl get pods -n kube-system -l app=<ADDON_NAME>` | Pod Running |
 | 无异常 | `DescribeAddon` → `Addons[].Reason` | 空 |
 
-> `Phase` 枚举：`Pending`/`Succeeded`/`Failed`。`Failed` 时查 `Reason` 字段定位原因。
+> `Phase` 枚举：`Installing`/`Upgrading`/`Terminating`/`Succeeded`/`InstallFailed`/`UpgradFailed`（api 字面；`UpgradFailed` 无 e）。失败态查 `Reason`。
 
 ## 清理
 
@@ -230,8 +230,8 @@ tccli tke DescribeAddon --region ap-guangzhou --ClusterId "<CLUSTER_ID>" --Addon
 
 | 现象 | 诊断 | 根因 | 修复 |
 |:--------|:----------|:------------|:-----|
-| `Phase=Failed` | `DescribeAddon` → `Reason` | 配置错或镜像拉取失败 | 查 Reason，修正 RawValues 或镜像源 |
-| 长时间 `Phase=Pending` | `kubectl get pods -n kube-system` | Pod 未就绪（资源不足/调度失败） | 查 Pod 事件，补资源或修污点 |
+| `Phase=InstallFailed`/`UpgradFailed` | `DescribeAddon` → `Reason` | 配置错或镜像拉取失败 | 查 Reason，修正 RawValues 或镜像源 |
+| 长时间 `Phase=Installing`/`Upgrading` | `kubectl get pods -n kube-system` | Pod 未就绪（资源不足/调度失败） | 查 Pod 事件，补资源或修污点 |
 | 更新后版本未变 | `DescribeAddon` → `AddonVersion` | 更新未完成或版本号同 | 等异步完成；确认新版本号不同 |
 | 插件 Running 但功能异常 | `kubectl logs -n kube-system -l app=<ADDON>` | 配置不兼容 | 解码 RawValues 核对配置 |
 
@@ -278,7 +278,7 @@ tccli tke DeleteImageCaches --region <REGION> --ImageCacheIds '["<CACHE_ID>"]'
 ```bash
 # 插件 Phase=Succeeded（Verify 查 Phase/版本/Reason，此处端到端核 Pod 真运行 + 衔接前置）
 tccli tke DescribeAddon --region ap-guangzhou --ClusterId "<CLUSTER_ID>" --AddonName "<ADDON_NAME>" \
-  --filter "{name:AddonName,phase:Phase,version:Version}"
+  --filter "{name:AddonName,phase:Phase,version:AddonVersion}"
 # expected: phase=Succeeded
 
 # 业务可用性端到端：插件 Pod 真运行且 Ready（Verify 查 Phase=Succeeded 但未核 Pod Ready 数）

@@ -32,7 +32,7 @@ fused: true
 
 > 缩容会驱逐节点上的 Pod。若有 PDB（PodDisruptionBudget）保护，驱逐可能阻塞。详见 [节点实例运维](instance-ops.md)。
 
-操作是**异步**的。旧版 ASG 池：`ModifyNodePoolDesiredCapacityAboutAsg` → 轮询 `DescribeClusterNodePools` 的 `NodeCountSummary`。新版 Native 池：`ModifyNodePool --version 2022-05-01 --Native '{"Replicas":N}'` → 轮询 `DescribeNodePools` 的 `Native.Replicas` / `ReadyReplicas`（无 `NodeCountSummary`）。
+操作是**异步**的。旧版 ASG 池：`ModifyNodePoolDesiredCapacityAboutAsg` → 轮询 `DescribeClusterNodePools` 的 `NodeCountSummary`。新版 Native 池：`ScaleNodePool --version 2022-05-01 --Replicas N`（或 `ModifyNodePool --Native '{"Replicas":N}'`）→ 轮询 `DescribeNodePools` 的 `Native.Replicas` / `ReadyReplicas`（无 `NodeCountSummary`）。
 
 ## 准备工作
 
@@ -77,18 +77,23 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet
 
 #### 为什么区分扩缩容策略
 
-- **扩容**: 直接设 `DesiredCapacity` 为目标值，ASG 自动建 CVM。失败模式主要是机型售罄/配额不足
-- **缩容**: ASG 按"移出最老节点"策略缩容，**TKE 不跟踪具体被缩容节点**，无提前驱逐/封锁。要安全缩容，先手动 `DrainClusterVirtualNode` 或 `kubectl drain`
-- **默认推荐**: 缩容前先 drain 目标节点，避免 Pod 被强制终止
-- **弹性伸缩**: 若节点池开了 `EnableAutoscale`，不建议手动改 `DesiredCapacity`——让 ASG 按负载自动调整
+- **扩容**: 直接设 `DesiredCapacity`/`Replicas` 为目标值，底层建 CVM。失败模式主要是机型售罄/配额不足
+- **缩容**: ASG/Native 按策略移出节点，**TKE 不保证提前驱逐/封锁具体节点**。普通/原生节点安全缩容用 `kubectl drain`（`DrainClusterVirtualNode` 只驱逐超级节点，`DrainExternalNode` 只驱逐注册节点）
+- **默认推荐**: 缩容前先 `kubectl drain` 目标节点，避免 Pod 被强制终止
+- **弹性伸缩**: 若节点池开了自动伸缩，不建议手动改期望数——让控制器按负载调整
 
 ### 步骤 2：扩容
 
 ```bash
-# 扩容到 5 个节点
+# 旧版 ASG 节点池：扩容到 5 个节点
 tccli tke ModifyNodePoolDesiredCapacityAboutAsg --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" --NodePoolId "<NODE_POOL_ID>" --DesiredCapacity 5
 # expected: exit 0, 返回 RequestId
+
+# 新版 Native 节点池：ScaleNodePool 设 Replicas（与上二选一，按池版本）
+tccli tke ScaleNodePool --version 2022-05-01 --region ap-guangzhou \
+  --ClusterId "<CLUSTER_ID>" --NodePoolId "<NODE_POOL_ID>" --Replicas 5
+# expected: exit 0
 ```
 
 | 占位符 | 含义 | 约束 | 如何获取 |
@@ -98,19 +103,26 @@ tccli tke ModifyNodePoolDesiredCapacityAboutAsg --region ap-guangzhou \
 
 ### 步骤 3：缩容（安全）
 
-```bash
-# 1. 先 drain 目标节点（避免 Pod 被强杀）
-tccli tke DrainClusterVirtualNode --region ap-guangzhou \
-  --ClusterId "<CLUSTER_ID>" --NodeName "<NODE_NAME>"
-# expected: exit 0
+> **普通/原生节点**先用 kubectl 驱逐（`DrainClusterVirtualNode` 仅超级节点，见 [虚拟节点](virtual-nodes.md)；注册节点用 `DrainExternalNode`，见 [移除注册节点](registered-nodes/remove.md)）。再改期望数。
 
-# 2. 再缩容（DesiredCapacity 减小）
+```bash
+# 1. 先 drain 目标节点（避免 Pod 被强杀；kubectl，非 tccli）
+# <!-- kubectl 补普通/原生节点 drain：tccli 无对应 Action，非 tccli 边界 -->
+kubectl drain <NODE_NAME> --ignore-daemonsets --delete-emptydir-data
+# expected: node drained（SchedulingDisabled + 工作负载已迁走）
+
+# 2a. 旧版 ASG 节点池：DesiredCapacity 减小
 tccli tke ModifyNodePoolDesiredCapacityAboutAsg --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" --NodePoolId "<NODE_POOL_ID>" --DesiredCapacity 2
 # expected: exit 0
+
+# 2b. 新版 Native 节点池：ScaleNodePool 设 Replicas（与 2a 二选一，按池版本）
+tccli tke ScaleNodePool --version 2022-05-01 --region ap-guangzhou \
+  --ClusterId "<CLUSTER_ID>" --NodePoolId "<NODE_POOL_ID>" --Replicas 2
+# expected: exit 0
 ```
 
-> 不 drain 直接缩容：ASG 随机选节点移出，Pod 被强制终止。有状态服务（数据库）可能丢数据。
+> 不 drain 直接缩容：控制器选节点移出时可能强制终止 Pod。有状态服务（数据库）可能丢数据。
 
 ### 步骤 4：验证
 
@@ -246,7 +258,7 @@ tccli tke ModifyClusterNodePool --region ap-guangzhou \
 ## 清理
 
 > **副作用警告**：缩容会释放 CVM 实例，节点上数据不可恢复。扩容产生的新 CVM 按量计费，缩容后停止计费。
-> 若想保留节点但移出节点池，用 `RemoveNodeFromNodePool`（不销毁 CVM），见 [节点实例运维](instance-ops.md)。
+> 若想保留节点但移出节点池，用 `RemoveNodeFromNodePool`（不销毁 CVM），见 [创建节点池 — 节点池成员与机型管理](nodepool-create.md#节点池成员与机型管理)。
 
 ## 故障恢复
 
@@ -267,7 +279,7 @@ tccli tke ModifyClusterNodePool --region ap-guangzhou \
 | 扩容后节点数不增长 | `DescribeClusterAsGroups` 看 ASG 活动 | 机型售罄或子网 IP 不足 | 查 ASG 活动历史，换机型/加子网 |
 | 缩容后 Pod 处于 Pending | `kubectl get pods -A` | 缩容过度，剩余节点资源不足 | 扩容回原值，或优化 Pod 资源请求 |
 | 节点池卡在 `updating` | `DescribeClusterNodePools` → `LifeState` | ASG 操作未完成 | 等待；超 30 分钟查 `DescribeClusterAsGroups` |
-| 缩容节点上 Pod 被强杀 | `kubectl get events` | 未先 drain | 缩容前必须 `DrainClusterVirtualNode`；有状态服务用 PDB 保护 |
+| 缩容节点上 Pod 被强杀 | `kubectl get events` | 未先 drain | 缩容前对普通/原生节点 `kubectl drain`（超级节点才用 `DrainClusterVirtualNode`）；有状态服务用 PDB 保护 |
 
 > 扩容失败常是机型/子网问题（环境限制，非命令错误）；缩容失败常是 PDB 阻塞驱逐。两者诊断路径不同。
 
@@ -289,7 +301,7 @@ tccli tke DescribeNodePools --version 2022-05-01 --region ap-guangzhou \
 # 旧版 ASG 对照: DescribeClusterNodePools → LifeState=normal + DesiredNodesNum + NodeCountSummary.Total
 ```
 
-> 新版：`LifeState=Running` + `Native.Replicas`==`ReadyReplicas`==Ready 节点数；旧版：`LifeState=normal` + `DesiredNodesNum`==`NodeCountSummary.Total`==Ready。缩容前若用 `DrainClusterVirtualNode`/`kubectl drain` 驱逐节点，三者一致即链路终态。
+> 新版：`LifeState=Running` + `Native.Replicas`==`ReadyReplicas`==Ready 节点数；旧版：`LifeState=normal` + `DesiredNodesNum`==`NodeCountSummary.Total`==Ready。缩容前对普通/原生节点用 `kubectl drain`（超级节点才用 `DrainClusterVirtualNode`），三者一致即链路终态。
 
 ---
 

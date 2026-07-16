@@ -227,11 +227,11 @@ tccli tke AcquireClusterAdminRole --ClusterId "<CLUSTER_ID>" --region <REGION>
 ```bash
 tccli tke ModifyClusterRuntimeConfig --ClusterId "<CLUSTER_ID>" --region <REGION> \
   --DstK8SVersion "<VERSION>" \
-  --ClusterRuntimeConfig '{"RuntimeType":"containerd","RuntimeVersion":"1.7.28"}'
-# expected: exit 0
+  --ClusterRuntimeConfig '{"RuntimeType":"containerd","RuntimeVersion":"1.6.9"}'
+# expected: exit 0（RuntimeVersion 须在 DescribeSupportedRuntime 的 RuntimeVersions 内；1.30 常见仅 1.6.9，1.32+/1.34+ 另有 1.7.28）
 ```
 
-> `NodePoolRuntimeConfig[]` 可按节点池分别配置运行时。运行时变更滚动重建节点。
+> `NodePoolRuntimeConfig[]` 可按节点池分别配置运行时。运行时变更滚动重建节点。`RuntimeVersion` 禁止凭印象填——先 `DescribeSupportedRuntime --K8sVersion` 取 `DefaultVersion` 或列表内版本。
 
 ### 步骤 8：修改 Master 组件
 
