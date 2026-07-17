@@ -223,7 +223,7 @@ tccli tke DescribeClusterMaintenanceWindowAndExclusions --region <REGION> --Limi
 ## 收尾确认
 
 ```bash
-# 跨步骤汇总：集群级窗口 + 全局窗口 + 排除项一次性核对（三层协同效果）
+# 集群级窗口 + 全局窗口 + 排除项一次性核对（三层协同效果）
 tccli tke DescribeClusterMaintenanceWindowAndExclusions --region <REGION> --Limit 20 \
   --filter "MaintenanceWindowAndExclusions[?ClusterID=='<CLUSTER_ID>'].{time:MaintenanceTime,dur:Duration,days:DayOfWeek,excl:Exclusions}"
 # expected: 集群级时段（如 time=22:00:00, dur=2, days=["TU","TH","FR"]）+ Exclusions 含配置的排除项
@@ -233,7 +233,7 @@ tccli tke DescribeGlobalMaintenanceWindowAndExclusions --region <REGION> --Limit
 # expected: 全局窗口时段 + TargetRegions 含目标地域 → 集群级与全局窗口协同生效
 ```
 
-> 集群级窗口优先于全局窗口——同集群有两层时以集群级为准。汇总核对须确认目标集群的窗口来自预期层级（集群级未配时才回落到全局），且排除项 `StartAt`/`EndAt` 落在窗口时段内才会真正跳过本次自动升级（衔接下一步前置：排除项能否真跳过取决于时段交集，排除项与窗口无交集则不生效，见 [§故障恢复](#故障恢复)）。
+> 集群级窗口优先于全局窗口——同集群有两层时以集群级为准。汇总核对须确认目标集群的窗口来自预期层级（集群级未配时才回落到全局），且排除项 `StartAt`/`EndAt` 落在窗口时段内才会真正跳过本次自动升级（排除项能否跳过取决于与窗口时段的交集；无交集则不生效，见 [§故障恢复](#故障恢复)）。
 
 ## 下一步
 

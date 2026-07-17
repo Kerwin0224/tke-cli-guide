@@ -113,7 +113,7 @@ TKE 有两个 API 版本，TCCLI 默认走 `2018-05-25`，但**官方当前版�
 |:---------|:---------|:-----|
 | 节点池 CRUD / 机器启停 / 健康检查 / GPU 查询 | **2022-05-01** | 旧版无此 Action，或新版 Native 强类型抽象更优 |
 | 集群创建/删除/升级、网络、Prometheus、边缘、EKS、Release | **2018-05-25** | 新版无此 Action，只能用旧版 |
-| `DescribeClusters`（两版同名） | **2022-05-01**（默认） | 入参两版一致，无倾向时选官方当前版 |
+| `DescribeClusters`（两版同名） | **2022-05-01**（推荐显式 `--version`） | 入参两版一致，无倾向时选官方当前版；**省略则走 TCCLI 默认 `2018-05-25`** |
 
 **三条铁律**:
 1. **同名≠同契约**: `DescribeClusterInstances` 入参两版不兼容（旧 `InstanceIds`/`InstanceRole` vs 新 `SortBy`/`NeedTags`），切换前用 `--generate-cli-skeleton` 核契约

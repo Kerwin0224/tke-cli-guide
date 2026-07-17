@@ -4,6 +4,8 @@ doc_type: How-to
 # 安装 TCCLI
 
 > 安装腾讯云命令行工具 TCCLI，本指南所有命令的前置。已安装可跳到 [配置凭证](credentials.md)。
+>
+> 官方文档：[TCCLI 安装](https://cloud.tencent.com/document/product/440/6176)
 
 ## 概述
 
@@ -35,10 +37,10 @@ TCCLI 是腾讯云 API 的命令行客户端，用 Python 写成。本指南统�
 > uv tool upgrade tccli
 > # expected: exit 0（已是最新则显示 Nothing to upgrade）
 > tccli --version
-> # expected: 最新版本或更高
+> # expected: 输出当前已安装的 TCCLI 版本号
 > ```
 >
-> 本指南命令示例基于近期 `tccli` 版本；tccli 持续新增/调整 Action 与字段，若你的版本不同，优先以 `tccli <service> help` / `help --detail` 的实时契约为准。
+> 本指南命令示例基于近期 `tccli` 版本；TCCLI 持续新增/调整 Action 与字段，若你的版本不同，优先以 `tccli <service> help` / `help --detail` 的实时契约为准。
 
 ## 准备工作
 
@@ -52,6 +54,8 @@ uv 一次性安装，之后所有 Python 工具都用它管理。按平台选一
 | Windows（PowerShell） | `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 \| iex"` |
 | macOS（Homebrew） | `brew install uv` |
 | Windows（WinGet） | `winget install astral-sh.uv` |
+
+> 上述脚本地址必须保持为 uv 官方域名 `astral.sh`。安全敏感或受管环境不要直接执行未审阅的网络内容：先下载脚本并审阅，再由组织内部镜像、受管包管理器或固定版本流程安装。
 
 验证 uv 已就绪：
 
@@ -77,7 +81,7 @@ uv 会下载 TCCLI 及其依赖到独立环境，并把 `tccli` 命令链接到 
 
 ```bash
 tccli --version
-# expected: 最新版本或更高
+# expected: 输出当前已安装的 TCCLI 版本号
 ```
 ```text
 3.1.126.1
@@ -114,7 +118,7 @@ uv tool uninstall tccli
 ```bash
 # 衔接下一步：tccli 在 PATH 且可进产品域（安装闭环；凭证下一步再配）
 tccli --version
-# expected: 最新版本或更高
+# expected: 输出当前已安装的 TCCLI 版本号
 
 tccli tke help 2>&1 | head -3
 # expected: AVAILABLE VERSIONS 含 2018-05-25 / 2022-05-01 → 可进入 [配置凭证](credentials.md)
@@ -122,9 +126,9 @@ tccli tke help 2>&1 | head -3
 
 ## 下一步
 
-### 冷启动意图序（弱校验）
+### 新手操作顺序
 
-官方新手指引意图序（只对序、不抄操作流）：**注册实名 → 服务角色授权 → 创建标准集群 → 部署工作负载 → 运维（连接/升级/节点/网络/日志/监控）**。本仓库对应：
+官方新手指引顺序：**注册实名 → 服务角色授权 → 创建标准集群 → 部署工作负载 → 运维（连接/升级/节点/网络/日志/监控）**。本指南对应：
 
 | 序 | 意图 | 文档 |
 |:--:|:-----|:-----|
@@ -132,7 +136,7 @@ tccli tke help 2>&1 | head -3
 | 2 | 配凭证 + 首次 TKE 服务授权（`TKE_QCSRole`；VPC-CNI 另需 `IPAMDofTKE_QCSRole`） | [配置凭证](credentials.md) · [服务角色总表](credentials.md#服务角色tke--ipamd--as--可观测) · [服务授权 43416](https://cloud.tencent.com/document/product/457/43416) |
 | 3 | 备 VPC/子网 | [准备 VPC](prepare-vpc.md) |
 | 4 | 建托管标准集群 | [TKE Quickstart](../quickstart/tke-first-cluster.md) · [创建集群](../tke/clusters/create.md) |
-| 5 | 上线前检查 | [Quickstart — 上线前检查](../quickstart/tke-first-cluster.md#上线前检查弱校验) |
+| 5 | 上线前检查 | [Quickstart — 上线前检查](../quickstart/tke-first-cluster.md#上线前检查) |
 
 - [配置凭证](credentials.md) — 安装后配置 CAM 凭证
 - [TKE 快速入门](../quickstart/tke-first-cluster.md) — 创建第一个集群

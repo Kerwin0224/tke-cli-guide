@@ -4,7 +4,7 @@ subtype: 8B
 ---
 # TKE 状态机
 
-> 集群、节点池、节点三类资源的完整状态机。状态值来自 `DescribeClusterStatus` / `DescribeClusterNodePools` / `DescribeClusterInstances` 的响应字段，以官方文档为准。
+> 集群、节点池、节点三类资源的完整状态机。状态值来自 `DescribeClusterStatus` / `DescribeClusterNodePools` / `DescribeClusterInstances` 的响应字段，以官方文档为准。半常量与配额边界见 [购买集群配额限制](https://cloud.tencent.com/document/product/457/9087)。
 
 ## 查询命令
 
@@ -37,7 +37,7 @@ tccli tke DescribeClusterInstances --region <REGION> --ClusterId "<CLUSTER_ID>"
 | `ClusterLevelUpgrading` | 集群等级调整中 | `ModifyClusterLevel` | 等待 | 否 |
 | `ClusterLevelTrading` | 集群变配交易中 | 等级变配计费处理 | 等待 | 否 |
 | `Pause` | 集群升级暂停 | 升级暂停 | 恢复升级 | 否 |
-| `Deleting` | 集群删除中 | `DeleteCluster` | 等待 | 是 |
+| `Deleting` | 集群删除中 | `DeleteCluster` | 等待 | 否 |
 | `Isolated` | 集群已隔离 | 欠费隔离 | 充值恢复 | 否 |
 | `ResourceIsolate` | 执行隔离中 | 欠费隔离流程 | 等待 | 否 |
 | `ResourceIsolated` | 已隔离 | 隔离完成 | 充值恢复 | 否 |
@@ -46,7 +46,7 @@ tccli tke DescribeClusterInstances --region <REGION> --ClusterId "<CLUSTER_ID>"
 | `ResourceDestroy` | 执行销毁中 | 销毁流程 | 等待 | 否 |
 | `ResourceDestroyed` | 已销毁 | 销毁完成 | — | 是 |
 
-> 常驻工作状态：`Running`。隔离分支：`Isolated` / `ResourceIsolate*`。终态：`Deleting` / `ResourceDestroyed`。
+> 常驻工作状态：`Running`。隔离分支：`Isolated` / `ResourceIsolate*`。删除完成后资源会从查询结果消失；`ResourceDestroyed` 是状态表内的销毁终态。
 >
 > **`DescribeClusters.ClusterStatus` 补充取值**（列表字段，勿与上表 `ClusterState` 混用）：`Trading`（开通中）、`Idling`（闲置）、`Recovering`（唤醒中）、`Scaling`（规模调整）、`WaittingForConnect`（独立集群待注册，拼写以 API 为准）、`Abnormal`（异常）。
 
@@ -72,7 +72,7 @@ tccli tke DescribeClusterInstances --region <REGION> --ClusterId "<CLUSTER_ID>"
 | `deleting` | 节点池删除中 | `DeleteClusterNodePool` | 等待 | 否 |
 | `deleted` | 节点池已删除 | 删除完成 | — | 是 |
 
-> 注：2022-05-01 新版 API 的节点池（`CreateNodePool`）`LifeState` 用 `Running`；2018-05-25 旧版（`CreateClusterNodePool`）用小写 `normal`。两版抽象不同，切换前用 `--generate-cli-skeleton` 核契约。
+> 注：2022-05-01 新版 API 的节点池（`CreateNodePool`）`LifeState` 用 `Running`；2018-05-25 旧版（`CreateClusterNodePool`）用小写 `normal`。两版抽象不同，切换前分别执行 `tccli tke CreateNodePool help --detail --version 2022-05-01` 与 `tccli tke CreateClusterNodePool help --detail --version 2018-05-25` 核对目标 Action 契约。
 
 ## 节点状态 (InstanceState)
 

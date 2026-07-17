@@ -16,7 +16,7 @@ fused: true
 
 - `DescribeClusterReleases` → 目标命名空间无应用 Release，需 `CreateClusterRelease` 部署 Chart
 - `DescribeClusterReleases` → `Status=failed` 或长时间 `pending-upgrade`，Release 创建/升级后状态异常
-- `DescribeClusterReleaseHistory` 显示需回滚到历史版本，`RollbackClusterRelease` 后版本未生效 — 看 [故障恢复]段
+- `DescribeClusterReleaseHistory` 显示需回滚到历史版本，`RollbackClusterRelease` 后版本未生效 — 看 [故障恢复](#故障恢复)
 
 
 ## 概述
@@ -63,8 +63,9 @@ gatekeeper	kube-system	4	deployed	gatekeeper	1.3.0
 
 ```bash
 # 查询 TKE 内置可用 Chart（Kind/Arch/ClusterType 过滤；用于选 Chart 名与版本）
+# GetTkeAppChartList 的 ClusterType 仅 tke / eks（非 CreateCluster 的 MANAGED_CLUSTER）
 tccli tke GetTkeAppChartList --region ap-guangzhou \
-  --Kind "<CHART_KIND>" --ClusterType MANAGED_CLUSTER
+  --Kind "<CHART_KIND>" --ClusterType tke
 # expected: exit 0, 返回 AppCharts[]（含内置 Chart 名/版本/架构；匹配为空时 AppCharts=[]）
 ```
 
@@ -79,38 +80,38 @@ tccli tke GetTkeAppChartList --region ap-guangzhou \
 | Namespace | string | 是 | 部署的命名空间 | `InvalidParameterValue` |
 | Chart | string | 是 | Chart 名 | `InvalidParameterValue` |
 | ChartVersion | string | 否 | Chart 版本 | `InvalidParameterValue` |
-| ChartFrom | string | 否 | Chart 来源（`repo`/`tke`） | `InvalidParameterValue` |
-| ChartRepoURL | string | 否 | Chart 仓库 URL | `InvalidParameterValue` |
+| ChartFrom | string | 否 | Chart 来源：`tke-market`（默认）/ `other` | `InvalidParameterValue` |
+| ChartRepoURL | string | 否 | Chart 仓库 URL（`ChartFrom=other` 时） | `InvalidParameterValue` |
 | Values | string | 否 | 自定义 Values（JSON） | `InvalidParameterValue` |
 | Username | string | 否 | 私有仓库用户名 | `UnauthorizedOperation` |
 | Password | string | 否 | 私有仓库密码 | `UnauthorizedOperation` |
-| ClusterType | string | 否 | 集群类型 | — |
+| ClusterType | string | 否 | 集群类型：`tke` / `eks` / `tkeedge` / `external` | — |
 
-> `ChartFrom`: `tke`（TKE 内置 Chart）/ `repo`（外部仓库，需 `ChartRepoURL`）。私有仓库用 `Username`/`Password`。
+> `ChartFrom` **仅** `tke-market`（应用市场，默认）/ `other`（第三方 repo，需 `ChartRepoURL`）。**不是** `tke`/`repo`。私有仓库用 `Username`/`Password`。`ChartFrom=tke-market` 时 `ChartNamespace` 须非空（来自 `DescribeProducts`）。
 
 ## 操作步骤
 
 ### 步骤 1：决策 — Chart 来源 {#chart-来源决策}
 
-#### 为什么选 tke 内置 vs 外部仓库
+#### 为什么选 tke-market vs other
 
-- **tke 内置**: TKE 提供的官方 Chart（如 eniipamd），无需配仓库
-- **外部仓库**: 自建或第三方 Helm 仓库，需 `ChartRepoURL`
-- **默认推荐**: 官方应用用 `tke`；自定义应用用 `repo`
+- **tke-market**: TKE 应用市场 Chart，无需配仓库；须传 `ChartNamespace`
+- **other**: 自建或第三方 Helm 仓库，需 `ChartRepoURL`（Chart 参数可为 `*.tgz` 下载地址）
+- **默认推荐**: 官方应用用 `tke-market`；自定义应用用 `other`
 - **能换源吗?**: 能，`UpgradeClusterRelease` 改 Chart 来源
 
 ### 步骤 2：创建 Release
 
-`CreateClusterRelease` 必传 `ClusterId`/`Name`/`Namespace`/`Chart`/`ChartFrom`。按场景**二选一**：A 最小化（官方 tke 仓库）或 B 增强（外部仓库+自定义 Values）。
+`CreateClusterRelease` 必传 `ClusterId`/`Name`/`Namespace`/`Chart`；`ChartFrom` 可选（默认 `tke-market`）。按场景**二选一**：A 最小化（应用市场）或 B 增强（外部仓库+自定义 Values）。
 
 > ⚠️ **A 与 B 是二选一变体，不是先做 A 再做 B**——两者各调一次 `CreateClusterRelease` 会装**两个同名 Release（命名空间内冲突）或两份 Release**。Release 创建后改配置（版本/Values）用 `UpgradeClusterRelease`，**禁用第二次 `CreateClusterRelease` 改配置**。
 
-#### 选项 A：最小化（官方 tke 仓库）
+#### 选项 A：最小化（应用市场 tke-market）
 
 ```bash
 tccli tke CreateClusterRelease --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" --Name "<RELEASE_NAME>" --Namespace "<NAMESPACE>" \
-  --Chart "<CHART_NAME>" --ChartFrom tke
+  --Chart "<CHART_NAME>" --ChartFrom tke-market --ChartNamespace "<CHART_NS>"
 # expected: exit 0, 返回 RequestId
 ```
 
@@ -123,12 +124,12 @@ tccli tke CreateClusterRelease --region ap-guangzhou \
 
 #### 选项 B：增强（外部仓库 + 自定义 Values）
 
-> **与 A 二选一，非在 A 之后执行**。用 `ChartFrom repo` 指外部仓库，配 URL/版本/Values/认证。
+> **与 A 二选一，非在 A 之后执行**。用 `ChartFrom other` 指外部仓库，配 URL/版本/Values/认证。
 
 ```bash
 tccli tke CreateClusterRelease --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" --Name "<RELEASE_NAME>" --Namespace "<NAMESPACE>" \
-  --Chart "<CHART_NAME>" --ChartFrom repo \
+  --Chart "<CHART_NAME>" --ChartFrom other \
   --ChartRepoURL "https://charts.example.com" --ChartVersion "1.2.0" \
   --Values '{"replicaCount":3}' \
   --Username "<REPO_USER>" --Password "<REPO_PASS>"
@@ -154,7 +155,8 @@ tccli tke DescribeClusterReleaseHistory --region ap-guangzhou \
 
 # 回滚到某修订版
 tccli tke RollbackClusterRelease --region ap-guangzhou \
-  --ClusterId "<CLUSTER_ID>" --Name "<RELEASE_NAME>" --Namespace "<NAMESPACE>"
+  --ClusterId "<CLUSTER_ID>" --Name "<RELEASE_NAME>" --Namespace "<NAMESPACE>" \
+  --Revision <TARGET_REVISION>
 # expected: exit 0
 ```
 
@@ -172,7 +174,7 @@ tccli tke DescribeClusterReleases --region ap-guangzhou --ClusterId "<CLUSTER_ID
 | 版本一致 | `DescribeClusterReleases` → `ChartVersion` | 等于目标版本 |
 | 修订号 | `DescribeClusterReleases` → `Revision` | 创建=1，升级递增 |
 | 资源就绪 | `kubectl get all -n <NAMESPACE>` | Release 管理的资源 Ready |
-| 回滚生效 | `DescribeClusterReleaseHistory` | 回滚后 Revision 指向目标 |
+| 回滚生效 | `DescribeClusterReleases` / `DescribeClusterReleaseHistory` | 当前 Release 的目标 Chart/Values 内容与所选历史修订一致；回滚会形成新的当前修订，不要求当前 `Revision` 等于历史目标 |
 
 > `Status` 枚举：`deployed`/`failed`/`pending-upgrade`/`pending-rollback`。`deployed` 为终态成功。
 
@@ -247,7 +249,14 @@ tccli tke DescribeRollOutSequences --region <REGION> --Limit 10
 ```
 ```json
 {
-    "Sequences": [{"Name": "example-sequence", "SequenceFlows": [{"Tags": [{"Key": "Env", "Value": ["prod"]}]}]}]}
+    "Sequences": [
+        {
+            "Name": "example-sequence",
+            "SequenceFlows": [
+                {"Tags": [{"Key": "Env", "Value": ["prod"]}]}
+            ]
+        }
+    ]
 }
 ```
 
@@ -286,10 +295,9 @@ tccli tke ModifyClusterRollOutSequenceTags --region ap-guangzhou \
 ## 收尾确认
 
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
-<!-- tccli管Release生命周期，kubectl查部署资源状态；helm为能力边界（tccli无helm原生命令），非tccli边界 -->
 ```bash
-# 跨步骤汇总三项合一：Release Status=deployed + 历史版本数 + 关联资源 Ready
-# 1. Release 已部署（Verify 查 Status/版本/Revision，此处汇总）
+# 汇总核对三项：Release Status=deployed + 历史版本数 + 关联资源 Ready
+# 1. Release 已部署（上文已查 Status/版本/Revision，此处汇总）
 tccli tke DescribeClusterReleases --region ap-guangzhou --ClusterId "<CLUSTER_ID>" \
   --filter "ReleaseSet[?Name=='<RELEASE_NAME>'].{name:Name,status:Status,rev:Revision}"
 # expected: status=deployed
@@ -300,13 +308,13 @@ tccli tke DescribeClusterReleaseHistory --region ap-guangzhou \
   --filter "Total"
 # expected: Total ≥1（创建=1，升级/回滚后递增）
 
-# 3. 关联资源 Ready（业务可用性端到端：Release 管理的 K8s 资源真就绪）
+# 3. 关联资源 Ready（端到端：Release 管理的 K8s 资源真就绪）
 kubectl get all -n <NAMESPACE> -l app.kubernetes.io/instance=<RELEASE_NAME> \
   --no-headers | awk '{print $1, $2}' | head -10
 # expected: 资源列表非空且 STATUS 无 Failed → 应用发布闭环完成
 ```
 
-> Release deployed + 历史版本数 ≥1 + 关联资源 Ready = 跨步骤闭环。Verify 段查 Release 字段，此处汇总 Release 状态 + 修订历史 + 部署资源就绪三项，确认应用真可用（业务可用性端到端）。
+> Release deployed + 历史版本数 ≥1 + 关联资源 Ready = 配置完成。上文验证段查 Release 字段，此处汇总 Release 状态 + 修订历史 + 部署资源就绪三项，确认应用可用。
 
 ---
 
@@ -315,3 +323,11 @@ kubectl get all -n <NAMESPACE> -l app.kubernetes.io/instance=<RELEASE_NAME> \
 - [插件管理](../addons/manage.md) — 插件本质是 Release
 - [创建集群](../clusters/create.md) — 建集群后部署应用
 - [故障排查](../troubleshooting.md) — Release 失败诊断
+
+## 精确 Action 字段契约
+
+| 字段 | 所属 Action | 必填 | 说明 |
+|:---|:---|:---:|:---|
+| `Name` | `CreateClusterRelease` | 是 | Release 名称 |
+| `Chart` | `CreateClusterRelease` | 是 | Chart 名称 |
+| `Chart` | `UpgradeClusterRelease` | 是 | 目标 Chart 名称 |

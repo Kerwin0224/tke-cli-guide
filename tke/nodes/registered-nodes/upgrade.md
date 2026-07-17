@@ -7,94 +7,93 @@ fused: true
 >
 > 配额：升级无额外配额限制。[配额说明](https://cloud.tencent.com/document/product/457/9087)
 >
-> ⚠️ **高危操作**：升级期间节点不可用；升级失败致失联需重新注册；脚本版本与集群版本不兼容。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
+> ⚠️ **高危操作**：升级期间节点不可用；升级失败致失联；操作系统或组件版本不受集群支持。
 
 # 升级注册节点
 
-> 升级注册节点上的操作系统或运行时组件，使其与集群版本保持一致。
+> 在目标机器侧维护注册节点的操作系统，并在变更前后核验节点版本和就绪状态。
 > 控制台: [容器服务 - 节点池 - 注册节点](https://console.cloud.tencent.com/tke2/nodepool)
 
-TCCLI 不提供注册节点的「升级」动作。注册节点的升级在目标机器侧通过重新执行注册脚本完成：脚本会拉取并更新节点的 kubelet 与运行时组件，使其与集群控制面版本对齐。
+TCCLI 不提供注册节点操作系统或节点组件的升级 Action。注册脚本用于把机器注册到节点池；现有 API/help 没有承诺重新执行脚本会升级操作系统、kubelet 或容器运行时，因此不能把“重新注册”当作“升级完成”。
 
-> 注册节点是 K8s 原生对象，tccli 不直接管理其操作系统与组件升级。以下命令为 K8s 原生操作（非 tccli），用于确认节点状态与隔离调度，闭环到 kubectl。
+> 注册节点机器由你自备并维护。操作系统升级应使用组织批准且受该操作系统支持的运维流程；具体包管理、镜像替换与跨版本路径需以操作系统供应方和 TKE 当期兼容性要求为准，本文不猜测未裁决的升级命令。
 
 ## 触发条件
 
-- 控制台提示注册节点版本偏低，或集群升级后节点组件需同步。
-- 你要统一注册节点的 kubelet / 运行时版本。
+- 操作系统供应方要求安装安全更新，或计划变更节点操作系统版本。
+- 你需要确认升级前后 kubelet、容器运行时与节点就绪状态。
 
 ## 准备工作
 
 - 已注册节点（见[创建注册节点（专线版）](dedicated-line.md)）。
 - 已获取集群 kubeconfig（见[配置凭证](../../../getting-started/credentials.md)）。
 - 已安装 kubectl 且可连通集群 apiserver。
+- 已确认目标操作系统仍在 TKE 注册节点支持范围内，并准备机器级备份与回退方案。
+- 一次只处理一个节点；先确认 PodDisruptionBudget、本地数据与替代容量允许驱逐。
 
 ## 操作步骤
 
-### 步骤 1：查看节点当前版本
+### 步骤 1：记录升级前版本
 
-<!-- kubectl验证节点版本与标签，非tccli边界 -->
-> kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
+<!-- kubectl验证K8s原生Node版本，tccli不管理OS与组件升级，非tccli边界 -->
+> kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供机器操作系统升级能力）
 ```bash
-kubectl get nodes -o wide --show-labels
-# expected: 列出注册节点及其 Kubelet 版本（标签含注册节点池标识）
+kubectl get node <NODE_NAME> \
+  -o jsonpath='{.status.nodeInfo.osImage}{"\n"}{.status.nodeInfo.kubeletVersion}{"\n"}{.status.nodeInfo.containerRuntimeVersion}{"\n"}'
+# expected: 记录 OS、kubelet 与容器运行时版本，作为升级后对照
 ```
 
-### 步骤 2：隔离节点调度
+### 步骤 2：隔离并安全驱逐
 
-<!-- kubectl管理K8s原生Node调度，tccli不管理OS与组件升级，非tccli边界 -->
-> kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
+<!-- kubectl管理K8s原生Node调度与驱逐，非tccli边界 -->
+> kubectl（K8s 原生命令，非 tccli；TCCLI 不提供 cordon/drain 能力）
 ```bash
 kubectl cordon <NODE_NAME>
-# expected: node/<NODE_NAME> cordoned
+kubectl drain <NODE_NAME> --ignore-daemonsets --delete-emptydir-data
+# expected: 节点不可调度，允许驱逐的工作负载已迁移；PDB 阻断时先处理阻断原因，不要强行跳过
 ```
 
-### 步骤 3：重新执行注册脚本升级组件
+### 步骤 3：执行受支持的机器侧升级
 
-用 TCCLI 取注册脚本，再在目标机器上重新执行；脚本会拉取并更新节点的 kubelet 与运行时组件，使其与集群控制面版本对齐。
+在目标机器上按组织批准的操作系统运维流程执行升级，并按供应方要求重启。不要仅重新执行注册脚本后便宣告操作系统或组件已升级。
 
+若升级导致注册组件损坏、需要重新注册，按[创建注册节点（专线版）](dedicated-line.md#步骤-4获取节点注册脚本)的权威流程重新获取并执行注册脚本；这是故障恢复/重新注册，不是升级动作。
+
+### 步骤 4：验证后恢复调度
+
+<!-- kubectl验证K8s原生Node并恢复调度，非tccli边界 -->
+> kubectl（K8s 原生命令，非 tccli；TCCLI 不管理机器版本或 Node 调度）
 ```bash
-tccli tke DescribeExternalNodeScript \
-  --ClusterId "<CLUSTER_ID>" \
-  --NodePoolId "<NODEPOOL_ID>" \
-  --region ap-guangzhou
-# expected: 返回 Command（可执行脚本）/ Link / Token；在目标机器上执行 Command 完成组件升级
-```
+kubectl get node <NODE_NAME> \
+  -o jsonpath='{.status.nodeInfo.osImage}{"\n"}{.status.nodeInfo.kubeletVersion}{"\n"}{.status.nodeInfo.containerRuntimeVersion}{"\n"}{.status.conditions[?(@.type=="Ready")].status}{"\n"}'
+# expected: 版本与批准的升级目标一致，Ready=True
 
-> 无 NodePoolId 时先 `DescribeExternalNodePools` 取池 ID。脚本获取失败见[创建注册节点（专线版）](dedicated-line.md) 故障恢复。
-
-### 步骤 4：恢复调度并校验
-
-<!-- kubectl管理K8s原生Node调度，tccli不管理OS与组件升级，非tccli边界 -->
-> kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
-```bash
 kubectl uncordon <NODE_NAME>
 # expected: node/<NODE_NAME> uncordoned
 ```
 
 ## 验证
 
-<!-- kubectl验证升级后kubelet版本，非tccli边界 -->
-> kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
-```bash
-kubectl get nodes <NODE_NAME> -o jsonpath='{.status.nodeInfo.kubeletVersion}'
-# expected: 返回升级后的 kubelet 版本，与集群控制面一致
-```
+- OS、kubelet、容器运行时版本均与升级前记录和批准目标逐项对照。
+- `Ready=True` 后才恢复调度。
+- 恢复调度后确认业务 Pod 能在该节点正常启动；仅 `Ready=True` 不能证明业务兼容性。
 
 ## 故障恢复
 
 | 现象 | 根因 | 修复 |
 |:-----|:-----|:-----|
-| 重新执行脚本后版本未变 | 运行时缓存未清理 | 清理节点环境后重跑脚本 |
-| 节点 NotReady | 网络中断或组件启动失败 | 检查机器到集群网络与组件日志 |
+| 升级后版本未达到目标 | 机器侧升级未完成或重启未生效 | 保持 cordon，按操作系统供应方流程检查升级状态；不要用注册脚本替代升级 |
+| 节点 `NotReady` | 网络中断、节点组件失败或版本不兼容 | 保持隔离，检查机器到集群网络与组件日志；必要时执行已准备的机器级回退 |
+| 节点不再注册 | 注册组件损坏或节点身份失效 | 按专线版创建篇重新获取脚本并注册，再重新执行版本与就绪验收 |
 
 ## 收尾确认
 
-<!-- kubectl验证升级后节点就绪状态，非tccli边界 -->
-> kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
+<!-- kubectl验证升级后节点版本、就绪与可调度状态，非tccli边界 -->
+> kubectl（K8s 原生命令，非 tccli；TCCLI 不提供机器升级终态）
 ```bash
-kubectl get nodes <NODE_NAME> -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
-# expected: True（节点就绪，版本已对齐）
+kubectl get node <NODE_NAME> \
+  -o custom-columns='NAME:.metadata.name,OS:.status.nodeInfo.osImage,KUBELET:.status.nodeInfo.kubeletVersion,RUNTIME:.status.nodeInfo.containerRuntimeVersion,READY:.status.conditions[?(@.type=="Ready")].status,UNSCHEDULABLE:.spec.unschedulable'
+# expected: 版本符合批准目标，READY=True，UNSCHEDULABLE=<none>
 ```
 
 ## 下一步

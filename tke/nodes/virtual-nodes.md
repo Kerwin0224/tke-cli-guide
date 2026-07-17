@@ -22,7 +22,7 @@ fused: true
 
 - 标准集群内需要免 CVM、按 Pod 用量计费的容量 — 创建虚拟节点 / 超级节点池
 - `DescribeClusterVirtualNodePools` 返回空，或需新增超级节点池
-- 虚拟节点问题（Pod Pending / 排水失败 / 子网 IP 不足）— 看 [故障恢复]段
+- 虚拟节点问题（Pod Pending / 排水失败 / 子网 IP 不足）— 看 [故障恢复](#故障恢复)
 
 ## 准备工作
 
@@ -140,14 +140,26 @@ tccli tke DescribeClusterVirtualNodePools \
   --ClusterId "<CLUSTER_ID>"
 # expected: { "TotalCount": 0, "NodePoolSet": [], "RequestId": "..." }
 
-# 修改虚拟节点池
+# 修改虚拟节点池；接口要求至少修改一个可选参数
+# DeletionProtection=true 可防止误删节点池；关闭保护后才可执行删除
 tccli tke ModifyClusterVirtualNodePool \
   --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" \
   --NodePoolId "<POOL_ID>" \
-  --Labels '[{"Name":"workload-type","Value":"serverless"}]'
+  --Labels '[{"Name":"workload-type","Value":"serverless"}]' \
+  --DeletionProtection true
 # expected: exit 0
 ```
+
+## 跨字段约束
+
+`ModifyClusterVirtualNodePool` 用 `ClusterId` + `NodePoolId` 定位目标后，以下字段**至少修改一个**：`Name`、`SecurityGroupIds`、`Labels`、`Taints`、`DeletionProtection`。这些字段彼此不互斥，可以在一次调用中同时修改；“至少一个”不能误写成“五选一”。
+
+| 组合 | 是否有效 | 原因 |
+|:-----|:--------:|:-----|
+| 只传定位字段，不传上述修改字段 | 否 | 没有任何变更目标 |
+| 传任意一个修改字段 | 是 | 满足至少修改一项 |
+| 同时传多个修改字段 | 是 | 字段可组合更新 |
 
 ## 验证
 
@@ -205,12 +217,12 @@ tccli tke DeleteClusterVirtualNodePool --ClusterId "<ID>" --NodePoolId "<POOL>"
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
 <!-- tccli管虚拟节点池CRUD，kubectl验证节点Ready并测试Pod调度到虚拟节点(K8s层观测)，非tccli边界 -->
 ```bash
-# ②业务可用性端到端: 虚拟节点 eklet-xxx Ready 且 Pod 可调度到虚拟节点（Verify 只查 LifeState，未查 Pod 真能调度）
+# 端到端核对：虚拟节点 eklet-xxx Ready 且 Pod 可调度到虚拟节点（仅查 LifeState 不够，还须确认 Pod 可调度）
 kubectl get nodes | grep eklet
 # expected: 含 eklet-xxx 虚拟节点且 Ready（非仅节点池 LifeState=normal）
 
 kubectl run nginx-test --image=nginx --restart=Never --overrides='{"spec":{"nodeName":"<EKLET_NODE_NAME>"}}'
-# expected: Pod Pending→Running（Pod 成功调度到虚拟节点，业务可用性验证）
+# expected: Pod Pending→Running（Pod 成功调度到虚拟节点）
 kubectl delete pod nginx-test
 ```
 

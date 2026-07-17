@@ -4,7 +4,9 @@ subtype: 8D
 ---
 # TKE 错误码
 
-> 错误码按 API 返回原样写出。双版本相关错误码优先列出，TKE 特有错误码次之，通用错误码垫底。退出码仅三级（0 成功 / 252 参数解析错误 / 255 其他），定位问题须解析响应 JSON 的 `Response.Error.Code`。
+> 错误码按 API 返回原样写出。双版本相关错误码优先列出，TKE 特有错误码次之，通用错误码垫底。退出码仅三级（0 成功 / 252 参数解析错误 / 255 其他），定位问题须解析响应 JSON 的 `Error.Code`（tccli 默认剥离 `Response` 包装层，顶层即 `Error` + `RequestId`）。
+>
+> 官方文档：[公共错误码](https://cloud.tencent.com/document/product/457/31885)
 
 ## 双版本相关错误码
 
@@ -28,7 +30,7 @@ subtype: 8D
 | `FailedOperation.UnexpectedError` | 不可预知的错误 | 否 | 收集 RequestId | 提工单附 RequestId |
 | `InternalError.CamNoAuth` | CAM 权限不足 | 否 | 查 CAM 策略 | 授予 `tke:<Action>` 权限 |
 | `UnauthorizedOperation.CamNoAuth` | 无该接口 CAM 权限 | 否 | 查 CAM 策略 | 授予对应 Action 权限 |
-| `UnauthorizedOperation.AutoScalingRoleUnauthorized` | 未授权服务角色 `AS_QCSRole`（节点池/AS） | 否 | `tccli cam DescribeRoleList --Page 1 --Rp 100 --filter "List[?RoleName=='AS_QCSRole'].RoleName" --output text` | [创建节点池 — AS 服务角色](../nodes/nodepool-create.md#as-服务角色节点池创建前)；[配置凭证 — 服务角色](../../getting-started/credentials.md#服务角色tke--ipamd--as--tcr--可观测) |
+| `UnauthorizedOperation.AutoScalingRoleUnauthorized` | 未授权服务角色 `AS_QCSRole`（节点池/AS） | 否 | `tccli cam DescribeRoleList --Page 1 --Rp 100 --filter "List[?RoleName=='AS_QCSRole'].RoleName" --output text` | [创建节点池 — AS 服务角色](../nodes/nodepool-create.md#as-服务角色节点池创建前)；[配置凭证 — 服务角色](../../getting-started/credentials.md#服务角色tke--ipamd--as--可观测) |
 | （创建/VPC-CNI 中途失败，消息含服务授权/未授权） | 缺 `TKE_QCSRole` 或未挂 `QcloudAccessForTKERole` | 否 | `DescribeRoleList` 查 `TKE_QCSRole`；`ListAttachedRolePolicies --RoleName TKE_QCSRole` | [配置凭证 — 补 TKE_QCSRole](../../getting-started/credentials.md#补-tke_qcsrole主服务角色)；官方 [43416](https://cloud.tencent.com/document/product/457/43416) |
 | （VPC-CNI / ENI / IPAMD 授权失败） | 缺 `IPAMDofTKE_QCSRole` | 否 | `DescribeRoleList` 查 `IPAMDofTKE_QCSRole` | [VPC-CNI — IPAMD 服务角色](../networking/vpc-cni.md#ipamd-服务角色) |
 | `FailedOperation.AsCommon` | AS 侧失败（常嵌套 `UnknownParameter` 如 HostName/InstanceName） | 否 | 读 Message 内嵌字段名；核 `LaunchConfigurePara` | 去掉 CVM 专有键；见 [nodepool-create 旧版路径](../nodes/nodepool-create.md#旧版路径createclusternodepool-2018-05-25) |
@@ -63,7 +65,7 @@ tccli tke <Action> --version <VERSION> --generate-cli-skeleton
 # expected: 入参骨架 JSON
 ```
 
-> 错误响应结构：`{"Response":{"Error":{"Code":"...","Message":"..."},"RequestId":"..."}}`。用 `--language en-US` 锁定英文错误消息，便于脚本匹配。如遇未列出的错误码，查 [腾讯云 TKE 错误码文档](https://cloud.tencent.com/document/product/457)。`ResourceNotFound` 删不存在的集群时消息为 `[E404000 ResourceNotFound] record not found`。
+> 错误响应结构（HTTP API 原始）：`{"Response":{"Error":{"Code":"...","Message":"..."},"RequestId":"..."}}`。**tccli 默认剥离 `Response` 包装**，终端常见顶层即 `Error` + `RequestId`；SDK 异常行也会打印 `code:… message:…`。用 `--language en-US` 锁定英文错误消息，便于脚本匹配。如遇未列出的错误码，查 [腾讯云 TKE 错误码文档](https://cloud.tencent.com/document/product/457)。`ResourceNotFound` 删不存在的集群时消息为 `[E404000 ResourceNotFound] record not found`（Error.Code 常为 `InvalidParameter.Param`，Message 内嵌 ResourceNotFound）。
 
 ## 相关文档
 

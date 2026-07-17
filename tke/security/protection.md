@@ -46,7 +46,9 @@ fused: false
 
 ### 删除保护 / OPA 准入 / 事件持久化
 
-这三组操作入参仅需 `ClusterId`（删除保护/OPA），事件持久化需 `LogsetId`/`TopicId`/`TopicRegion`（CLS 日志集/主题）。
+- 删除保护 Action 仅需 `ClusterId`。
+- `DescribeOpenPolicyList` 需 `ClusterId`，`Category` 可选；`ModifyOpenPolicyList` 要实际修改策略时必须提供 `OpenPolicyInfoList`，先从 Describe 返回中取得规则 `Name`，再回传要修改的 `EnforcementAction`。本地 API 将该列表标为 Optional，但不传便没有待修改策略，不能据此概括为“OPA 仅需 ClusterId”。
+- 事件持久化除 `ClusterId` 外，还需 `LogsetId`/`TopicId`/`TopicRegion`（CLS 日志集/主题）。
 
 ## 应用
 
@@ -82,6 +84,23 @@ tccli tke EnableClusterDeletionProtection --region ap-guangzhou --ClusterId "<CL
 tccli tke DescribeOpenPolicyList --region ap-guangzhou --ClusterId "<CLUSTER_ID>" --Category "baseline"
 # expected: OpenPolicyInfoList[]（PolicyCategory/EnforcementAction/EnabledStatus=open|close）+ GatekeeperStatus；入参枚举详 [审计日志](audit.md)
 ```
+
+### 修改 OPA 准入策略
+
+```bash
+# 先查询并取得真实规则 Name
+tccli tke DescribeOpenPolicyList --region ap-guangzhou \
+  --ClusterId "<CLUSTER_ID>" --Category "baseline" \
+  --filter "OpenPolicyInfoList[].{name:Name,action:EnforcementAction}"
+
+# 将选定规则的 EnforcementAction 修改后回传
+tccli tke ModifyOpenPolicyList --region ap-guangzhou \
+  --ClusterId "<CLUSTER_ID>" --Category "baseline" \
+  --OpenPolicyInfoList '[{"Name":"<POLICY_NAME>","EnforcementAction":"dryrun"}]'
+# expected: exit 0, 返回 RequestId；再 DescribeOpenPolicyList 回读该 Name 的 EnforcementAction
+```
+
+> 静态 API/help 对 `ModifyOpenPolicyList` 的描述为“目前仅支持修改 `EnforcementAction`”。`OpenPolicyInfoList` 在模型中虽标为 Optional，但执行实际修改时必须传入待修改规则；不要凭空猜规则名。
 
 ### 开启事件持久化
 
@@ -121,9 +140,14 @@ tccli tke DescribeLogSwitches --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>
 > 配置型操作，回滚 = 关闭对应保护：
 
 ```bash
-# 关闭 etcd 加密（etcd 解密为异步，约数分钟）
+# 发起关闭 etcd 加密流程
 tccli tke DisableEncryptionProtection --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
-# expected: exit 0, 返回 RequestId（解密中）；DescribeEncryptionStatus 返回 Status=Closing
+# expected: exit 0, 返回 RequestId；RequestId 仅表示请求已受理
+
+# 轮询关闭状态机
+tccli tke DescribeEncryptionStatus --region ap-guangzhou --ClusterId "<CLUSTER_ID>" \
+  --filter "Status" --output text
+# expected: Closing 表示关闭中；Closed 表示已关闭，只有 Closed 才是完成终态
 
 # 关闭删除保护（删集群前必须）
 tccli tke DisableClusterDeletionProtection --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
@@ -157,10 +181,10 @@ tccli tke DisableEventPersistence --region ap-guangzhou --ClusterId "<CLUSTER_ID
 
 ## 收尾确认
 
-> 独立维度（跨步骤汇总 + 删除保护终态）：除逐功能 Verify 外，确认三策略整体已生效且集群处于「删除受保护」安全终态（Verify 仅逐功能核对，未汇总安全终态）。
+> 独立维度（汇总核对 + 删除保护终态）：除上文各功能逐项验证外，确认三策略整体已生效且集群处于「删除受保护」安全终态（上文仅逐功能核对，未汇总安全终态）。
 
 ```bash
-# 汇总核对：加密 + 删除保护 + 事件持久化 + OPA 准入（Verify 未覆盖 OPA）
+# 汇总核对：加密 + 删除保护 + 事件持久化 + OPA 准入（上文验证未覆盖 OPA）
 tccli tke DescribeEncryptionStatus --region ap-guangzhou --ClusterId "<CLUSTER_ID>" \
   --filter "Status"
 tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet[?ClusterId=='<CLUSTER_ID>'] | [0].ClusterDeletionProtection"

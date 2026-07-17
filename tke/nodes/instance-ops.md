@@ -64,6 +64,16 @@ tccli tke RebootMachines --version 2022-05-01 \
 # expected: exit 0
 ```
 
+`StopMachines` 与 `RebootMachines` 共用 `StopType` 停机方式：
+
+| `StopType` | 行为 |
+|:-----------|:-----|
+| `soft` | 仅执行软关机；`RebootMachines` 的静态默认值为此值 |
+| `soft_first` | 先执行软关机，失败后再强制关机 |
+| `hard` | 直接强制关机 |
+
+`StopMachines` 的默认值以该 Action 的 `help --detail` 为准；需要固定行为时显式传 `--StopType <值>`。
+
 > 旧版 (2018-05-25) 回退方案: TKE 无节点启停 Action，走 CVM 服务 `tccli cvm StopInstances --InstanceIds '["<INSTANCE_ID>"]'`。
 
 ## 删除节点
@@ -75,6 +85,13 @@ tccli tke DeleteClusterMachines --version 2022-05-01 \
   --MachineNames '["<MACHINE_NAME>"]' --EnableScaleDown false
 # expected: exit 0
 ```
+
+`InstanceDeleteMode` 决定删除后的实例资源：
+
+| 值 | 结果 |
+|:---|:-----|
+| `terminate` | 将节点移出集群并销毁实例；仅支持按量计费 CVM |
+| `retain` | 仅将节点移出集群，保留 CVM 实例 |
 
 > 旧版 (2018-05-25) 用 `DeleteClusterInstances --version 2018-05-25 --InstanceIds '["<INSTANCE_ID>"]'`（Instance 抽象）。两版抽象不同: 新版 Machine vs 旧版 Instance。
 
@@ -202,12 +219,26 @@ tccli tke AddExistedInstances --version 2018-05-25 \
 # expected: exit 0
 ```
 
+### 接入已有实例字段约束
+
+## 跨字段约束
+
+| Action | 字段组合 | 精确关系 |
+|:-------|:---------|:---------|
+| `DescribeExistedInstances` | `ClusterId`、`InstanceIds`、`Filters` | `InstanceIds` 不能与 `ClusterId` 或 `Filters` 同传。传 `ClusterId` 时，服务会把该集群的 VPC ID 附加为过滤条件；若 `Filters` 也指定 `vpc-id`，其值必须与集群 VPC 相同 |
+| `AddExistedInstances` | `InstanceIds[]`、`InstanceAdvancedSettings`、`InstanceAdvancedSettingsOverrides[]` | 覆盖数组与实例数组按下标同序对应；对应项覆盖公共设置，未提供覆盖项的实例沿用公共设置；覆盖数组长度不得大于实例数组 |
+
+| 字段 | 所属 Action | 必填 | 条件说明 |
+|:---|:---|:---:|:---|
+| `HostName` | `AddExistedInstances` | 条件 | 仅在重装接入且集群使用 HostName 模式时必传 |
+| `InstanceAdvancedSettingsOverrides[]` | `AddExistedInstances` | 否 | 按顺序与 `InstanceIds[]` 对应；长度不得大于 `InstanceIds[]`。数组较短时，未覆盖的实例使用公共 `InstanceAdvancedSettings` |
+
 ### 新建 CVM 作节点（CreateClusterInstances）
 
-> `CreateClusterInstances` 是新建 CVM 作节点（`RunInstancePara` 透传 CVM `RunInstances` JSON），与 `AddExistedInstances`（接入已有实例）区别。**不依赖 AS 节点池**，适合「只要 1 台普通 Worker 跑通」；缺 `AS_QCSRole` 时可用本路径绕过节点池。ECM/Edge 见 [边缘集群](../specialized/edge-cluster.md)。
+> `CreateClusterInstances` 是新建 CVM 作节点（`RunInstancePara` 透传 CVM `RunInstances` JSON），与 `AddExistedInstances`（接入已有实例）区别。**不依赖 AS 节点池**，适合「仅需 1 台普通 Worker 做最小验证」；缺 `AS_QCSRole` 时可用本路径绕过节点池。ECM/Edge 见 [边缘集群](../specialized/edge-cluster.md)。
 
 ```bash
-# 最小可跑：1 台 POSTPAID + 指定子网/安全组/机型（字段以 cvm RunInstances 契约为准）
+# 最小验证：1 台 POSTPAID + 指定子网/安全组/机型（字段以 cvm RunInstances 契约为准）
 # 机型无货时先 DescribeZoneInstanceConfigInfos 取 Status=SELL 最小规格
 tccli tke CreateClusterInstances --version 2018-05-25 \
   --ClusterId "<CLUSTER_ID>" --region ap-guangzhou \
@@ -296,13 +327,13 @@ tccli tke CreateClusterInstances --version 2018-05-25 \
 
 > 本篇是多操作合集（查询/启停/删除/驱逐/扩缩/修改/GPU/接入），无统一收尾命令。每类操作执行后用下表对应命令确认该操作产物：
 
-| 操作类型 | 确认命令 | 预期（②业务可用性端到端） |
+| 操作类型 | 确认命令 | 预期（端到端可用性） |
 |:---------|:---------|:--------------------------|
-| 启停/重启 | `tccli tke DescribeClusterMachines --version 2022-05-01 --ClusterId "<CLUSTER_ID>" --Filters '[{"Name":"InstanceIds","Values":["<ID>"]}]'` | ②业务可用性: InstanceState=Stopped(停止后)/Running(启动后)；启动后 `kubectl get nodes` 节点须 Ready |
-| 删除节点 | `tccli tke DescribeClusterInstances --version 2018-05-25 --ClusterId "<CLUSTER_ID>" --InstanceIds '["<ID>"]'` | ②业务可用性: 目标节点不在列表（已删）；剩余 `kubectl get nodes` 无 NotReady |
-| 驱逐 (kubectl) | `kubectl get nodes <NODE_NAME>` | ②业务可用性: 节点 SchedulingDisabled + Pod 已迁移无 Pending |
-| 扩缩容 | 见 [扩缩容节点池](nodepool-scale.md) 收尾确认 | ③跨步骤汇总: 新版 LifeState=Running + Replicas==ReadyReplicas；旧版 LifeState=normal + DesiredNodesNum==NodeCountSummary |
-| 接入已有 CVM | `tccli tke DescribeClusterInstances --version 2018-05-25 --ClusterId "<CLUSTER_ID>" --InstanceIds '["<ID>"]'` | ②业务可用性: 接入节点 InstanceState=running 且 `kubectl get nodes` 含该节点 Ready |
+| 启停/重启 | `tccli tke DescribeClusterMachines --version 2022-05-01 --ClusterId "<CLUSTER_ID>" --Filters '[{"Name":"InstanceIds","Values":["<ID>"]}]'` | InstanceState=Stopped(停止后)/Running(启动后)；启动后 `kubectl get nodes` 节点须 Ready |
+| 删除节点 | `tccli tke DescribeClusterInstances --version 2018-05-25 --ClusterId "<CLUSTER_ID>" --InstanceIds '["<ID>"]'` | 目标节点不在列表（已删）；剩余 `kubectl get nodes` 无 NotReady |
+| 驱逐 (kubectl) | `kubectl get nodes <NODE_NAME>` | 节点 SchedulingDisabled + Pod 已迁移无 Pending |
+| 扩缩容 | 见 [扩缩容节点池](nodepool-scale.md) 收尾确认 | 新版 LifeState=Running + Replicas==ReadyReplicas；旧版 LifeState=normal + DesiredNodesNum==NodeCountSummary |
+| 接入已有 CVM | `tccli tke DescribeClusterInstances --version 2018-05-25 --ClusterId "<CLUSTER_ID>" --InstanceIds '["<ID>"]'` | 接入节点 InstanceState=running 且 `kubectl get nodes` 含该节点 Ready |
 
 ---
 
@@ -311,3 +342,10 @@ tccli tke CreateClusterInstances --version 2018-05-25 \
 - [创建节点池](nodepool-create.md) — 节点池生命周期
 - [扩缩容节点池](nodepool-scale.md) — 调整节点数量
 - [API 版本选择](../index.md#api-版本选择) — 理解 TKE 双版本
+
+## 精确 Action 字段契约
+
+| 字段 | 所属 Action | 必填 | 说明 |
+|:---|:---|:---:|:---|
+| `InstanceIds` | `AddExistedInstances` | 是 | 待接入实例 ID 列表 |
+| `RunInstancePara` | `CreateClusterInstances` | 是 | 透传 CVM RunInstances 参数 |

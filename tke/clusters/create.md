@@ -20,7 +20,7 @@ fused: true
 
 | 选项                       | 最佳场景            | 关键限制            | 升级路径         | 新建 |
 | ------------------------ | --------------- | --------------- | ------------ | ---- |
-| MANAGED_CLUSTER (托管)     | 生产环境，免运维 Master | Master 不可 SSH；不可改 Master/Etcd **节点规模**（控制面参数/组件仍可由 tccli 改，见 [配置集群](configure.md)） | 控制台/API 一键升级 | ✅ |
+| MANAGED_CLUSTER (托管)     | 生产环境，免运维 Master | Master 不可 SSH；不可改 Master/Etcd **节点规模**（控制面参数/组件仍可由 tccli 改，见 [配置集群](configure.md)） | 控制台/API 发起升级 | ✅ |
 | INDEPENDENT_CLUSTER (独立) | 存量：完全控制 Master  | 需自行维护 Master HA | 手动升级 Master  | ❌ **已停止新建** |
 
 
@@ -50,7 +50,7 @@ tccli --version
 # expected: tccli 版本号（最新版或更高）
 
 tccli cvm DescribeRegions --region ap-guangzhou
-# expected: { "TotalCount": ..., "RegionSet": [...] }  → 凭证有效（tccli 默认剥离 Response 包装层）
+# expected: { "TotalCount": ..., "RegionInstanceSet": [...] }  → 凭证有效（顶层键是 RegionInstanceSet，非 RegionSet；tccli 默认剥离 Response 包装层）
 ```
 
 
@@ -101,7 +101,7 @@ tccli cam DescribeRoleList --Page 1 --Rp 100 \
 | **IPVS** | 仅新建时可开；**开启后不可关闭**；勿与 iptables 混用 | 重建集群 |
 | **Kube-proxy / Dataplane v2** | iptables↔ipvs **一经选择不支持更改**；`DataPlaneV2=true` 不再装 kube-proxy | 重建集群 |
 | **安全组** | 节点/Master 须按推荐放通（含容器 CIDR 的 DNS 53/udp 等） | 改错可能导致节点/Master 不可用，见 [安全组](https://cloud.tencent.com/document/product/457/9084) |
-| **服务授权** | 须有 `TKE_QCSRole`（+ 默认策略）；**VPC-CNI 另须 `IPAMDofTKE_QCSRole`**；节点池另须 `AS_QCSRole` | 探测与 CLI 补齐见 [配置凭证 — 服务角色](../../getting-started/credentials.md#服务角色tke--ipamd--as--tcr--可观测)；官方说明 [43416](https://cloud.tencent.com/document/product/457/43416) |
+| **服务授权** | 须有 `TKE_QCSRole`（+ 默认策略）；**VPC-CNI 另须 `IPAMDofTKE_QCSRole`**；节点池另须 `AS_QCSRole` | 探测与 CLI 补齐见 [配置凭证 — 服务角色](../../getting-started/credentials.md#服务角色tke--ipamd--as--可观测)；官方说明 [43416](https://cloud.tencent.com/document/product/457/43416) |
 
 ## 关键字段
 
@@ -200,7 +200,7 @@ tccli cam DescribeRoleList --Page 1 --Rp 100 \
 | 字段                                   | `NetworkType=GR` | `NetworkType=VPC-CNI`                    | `NetworkType=CiliumOverlay`              |
 | ------------------------------------ | ---------------- | ---------------------------------------- | ---------------------------------------- |
 | `IsDualStack`（IPv4/IPv6 双栈）          | ❌ 不支持            | ✅ 可设 `true`（须前序双栈 VPC，见下"集群 IP 类型决策树"）   | ❌ 不支持                                    |
-| `VpcCniType`（共享/独立网卡）                | ❌ 不适用            | ✅ `tke-route-eni`/`tke-direct-route-eni` | ❌ 不适用                                    |
+| `VpcCniType`（共享/独立网卡）                | ❌ 不适用            | ✅ `tke-route-eni`/`tke-direct-eni` | ❌ 不适用                                    |
 | `EniSubnetIds`/`ClaimExpiredSeconds` | ❌ 不适用            | ✅ ENI 子网相关                               | ❌ 不适用                                    |
 | `CiliumMode`/`DataPlaneV2`           | ❌ 不适用            | ❌ 不适用                                    | ✅ Cilium 数据面相关                           |
 | `SubnetId`（控制面子网）                    | 不强制              | 不强制                                      | ✅ **条件必填**，须预留 ≥2 IP（TKE 取 2 IP 建内网 CLB） |
@@ -266,7 +266,7 @@ tccli cam DescribeRoleList --Page 1 --Rp 100 \
 
 ## 操作步骤
 
-> ⚠️ **高危操作**：Region 选错不可迁移；NetworkType 创建后不可切换；IPVS 开启后不可关闭；删除保护未开 = 裸奔。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
+> ⚠️ **高危操作**：Region 选错不可迁移；NetworkType 创建后不可切换；IPVS 开启后不可关闭；删除保护未开则集群可被直接删除。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
 
 > ⚠️ **本文创建的是空集群（控制面）**：`CreateCluster` 后 `ClusterState=Running` 但 `ClusterRunningNodeNum=0`，**无法运行 Pod**。
 >
@@ -304,7 +304,7 @@ tccli cam DescribeRoleList --Page 1 --Rp 100 \
 
 > **判据**: 路径 A 分步可控，失败仅回退控制面；路径 B/C 单步完成但失败须连集群带节点一起排查；路径 D 与网络模型绑定（CiliumOverlay 创建时定型）。首次部署用 A，批量部署可用 B/C。
 
-> **4 路径共用同一** `CreateCluster` **Action**——返回结构一致（`ClusterId`/`RequestId`），区别仅在顶层嵌套入参组合。下方 B/C/D 的 `RunInstancesPara`/`ExistedInstancesPara`/`ExtensionAddons` 是字符串化 JSON 嵌套组合（`RunInstancesForNode` 透传 CVM `RunInstances` 全参数）；expected 与路径 A 同构。B/C 因会真实创建/重装 CVM（计费+副作用），命令块用占位符示参，调用前先核 CVM 机型/镜像/子网库存（见 [创建节点池 — 准备工作（机型查询）](../nodes/nodepool-create.md#准备工作)）。
+> **4 路径共用同一** `CreateCluster` **Action**——返回结构一致（`ClusterId`/`RequestId`），区别仅在顶层嵌套入参组合。形态差异：`RunInstancesPara` = **Array of String**（每个元素是 CVM `RunInstances` 的 JSON 字符串）；`ExistedInstancesPara` = **对象**；`ExtensionAddons[].AddonParam` = 字符串化 JSON。expected 与路径 A 同构。B/C 因会真实创建/重装 CVM（计费+副作用），命令块用占位符示参，调用前先核 CVM 机型/镜像/子网库存（见 [创建节点池 — 准备工作（机型查询）](../nodes/nodepool-create.md#准备工作)）。
 
 
 
@@ -317,11 +317,11 @@ tccli tke CreateCluster --region ap-guangzhou \
   --ClusterType MANAGED_CLUSTER \
   --ClusterBasicSettings '{"ClusterName":"<CLUSTER_NAME>","ClusterVersion":"1.34.1","VpcId":"<VPC_ID>"}' \
   --ClusterCIDRSettings '{"ClusterCIDR":"172.16.0.0/16","ServiceCIDR":"10.96.0.0/20"}' \
-  --RunInstancesForNode '[{"NodeRole":"WORKER","RunInstancesPara":"{\"InstanceType\":\"S5.MEDIUM4\",\"ImageId\":\"<IMAGE_ID>\",\"SubnetId\":\"<SUBNET_ID>\",\"InstanceCount\":2,\"SecurityGroupIds\":[\"<SG_ID>\"]}"}]'
+  --RunInstancesForNode '[{"NodeRole":"WORKER","RunInstancesPara":["{\"InstanceType\":\"S5.MEDIUM4\",\"ImageId\":\"<IMAGE_ID>\",\"SubnetId\":\"<SUBNET_ID>\",\"InstanceCount\":2,\"SecurityGroupIds\":[\"<SG_ID>\"]}"]}]'
 # expected: { "ClusterId": "cls-xxxxxxxx", "RequestId": "..." }（含节点正在启动）
 ```
 
-> ⚠️ `RunInstancesPara` 是**字符串化的 CVM RunInstances JSON**（嵌套 JSON，须转义引号）。CVM 参数结构见 [共享字段](../reference/shared-fields.md#instanceadvancedsettings-节点高级设置) + CVM 文档；机型/镜像查询见 [创建节点池 — 准备工作](../nodes/nodepool-create.md#准备工作)。
+> ⚠️ `RunInstancesPara` 是 **Array of String**：每个元素是 CVM `RunInstances` 参数的 **JSON 字符串**（不是对象、也不是单个字符串字段）。与 [Master 运维](master-ops.md) 扩容形态一致。CVM 参数结构见 [共享字段](../reference/shared-fields.md#instanceadvancedsettings-节点高级设置) + CVM 文档；机型/镜像查询见 [创建节点池 — 准备工作](../nodes/nodepool-create.md#准备工作)。
 
 
 
@@ -334,11 +334,11 @@ tccli tke CreateCluster --region ap-guangzhou \
   --ClusterType MANAGED_CLUSTER \
   --ClusterBasicSettings '{"ClusterName":"<CLUSTER_NAME>","ClusterVersion":"1.34.1","VpcId":"<VPC_ID>"}' \
   --ClusterCIDRSettings '{"ClusterCIDR":"172.16.0.0/16","ServiceCIDR":"10.96.0.0/20"}' \
-  --ExistedInstancesForNode '[{"NodeRole":"WORKER","ExistedInstancesPara":"{\"InstanceIds\":[\"ins-xxx\"],\"InstanceAdvancedSettings\":{\"LoginSettings\":{\"Password\":\"<PASSWORD>\"}},\"EnhancedService\":{}}"}]'
+  --ExistedInstancesForNode '[{"NodeRole":"WORKER","ExistedInstancesPara":{"InstanceIds":["ins-xxx"],"LoginSettings":{"Password":"<PASSWORD>"},"EnhancedService":{}}}]'
 # expected: { "ClusterId": "cls-xxxxxxxx", "RequestId": "..." }
 ```
 
-> `ExistedInstancesPara` 也是字符串化 JSON。`InstanceIds` 指向已存在 CVM，须与集群同 VPC 且可重装。登录/增强服务配置见 [共享字段](../reference/shared-fields.md#loginsettings-实例登录设置)。
+> `ExistedInstancesPara` 是 **对象**（非 JSON 字符串）：`InstanceIds`/`LoginSettings`/`EnhancedService`/`SecurityGroupIds` 等为对象字段。`InstanceIds` 指向已存在 CVM，须与集群同 VPC 且可重装。登录/增强服务配置见 [共享字段](../reference/shared-fields.md#loginsettings-实例登录设置)。
 
 
 
@@ -537,9 +537,9 @@ tccli tke DescribeClusterKubeconfig --region ap-guangzhou --ClusterId "<CLUSTER_
 
 ## 下一步
 
-> 集群 `Running` 只是第 1 步（空控制面）。若目标是「本机可操作、可跑 Pod」：
+> 集群 `Running` 只是第 1 步（空控制面）。若目标是「本机可操作、可运行 Pod」：
 
-- **[创建节点池](../nodes/nodepool-create.md)** / [新建 CVM 作节点](../nodes/instance-ops.md) — **必做**：无 worker 不能跑 Pod，也不能开公网端点
+- **[创建节点池](../nodes/nodepool-create.md)** / [新建 CVM 作节点](../nodes/instance-ops.md) — **必做**：无 worker 不能运行 Pod，也不能开公网端点
 - **[管理端点](../networking/endpoints.md)** — **本机/公网 CI 必做**：`CreateClusterEndpoint` → ACL → `ClusterExternalEndpoint` 改写 kubeconfig → `kubectl get --raw=/healthz`
 - [获取 kubeconfig](../security/auth.md) — 证书/凭证面（须配合端点）
 - [查询集群](query.md) — filter + JMESPath

@@ -18,7 +18,7 @@ fused: false
 
 - `DescribeClusterKubeconfig` 返回的 kubeconfig 用 `kubectl get nodes` 报 `certificate expired`，需轮转证书
 - 多团队需企业 SSO 登录集群，`DescribeClusterAuthenticationOptions` → `OIDCConfig` 为空，需配 OIDC
-- 子账号 `kubectl` 连集群报 `Unauthorized`，`DescribeUserPermissions` 返回空，需授予 RBAC 权限 — 看 [故障恢复]段
+- 子账号 `kubectl` 连集群报 `Unauthorized`，`DescribeUserPermissions` 返回空，需授予 RBAC 权限 — 看 [故障恢复](#故障恢复)
 
 
 ## 概述
@@ -45,9 +45,12 @@ fused: false
 ### kubeconfig 获取与轮转
 
 ```bash
-# 获取 kubeconfig（返回完整 kubeconfig YAML）
-tccli tke DescribeClusterKubeconfig --region <REGION> --ClusterId "<CLUSTER_ID>" > kubeconfig.yaml
-# expected: kubeconfig 文件生成，含 apiVersion/clusters/contexts/users
+# 获取 kubeconfig（响应含 Kubeconfig 与 RequestId，须提取 YAML 叶字段）
+tccli tke DescribeClusterKubeconfig --region <REGION> --ClusterId "<CLUSTER_ID>" \
+  --filter "Kubeconfig" --output text > kubeconfig.yaml
+# expected: kubeconfig 文件生成，首个顶层键为 apiVersion，并含 clusters/contexts/users
+kubectl --kubeconfig kubeconfig.yaml get nodes
+# expected: 返回节点列表
 ```
 
 ```bash
@@ -56,20 +59,35 @@ tccli tke UpdateClusterKubeconfig --region <REGION> --ClusterId "<CLUSTER_ID>"
 # expected: exit 0, 重新 DescribeClusterKubeconfig 获取新凭证
 ```
 
-> `DescribeClusterKubeconfig` 响应字段 `Kubeconfig` 含完整 YAML，重定向到文件即可用 `kubectl --kubeconfig kubeconfig.yaml get nodes`。
+> `DescribeClusterKubeconfig` 响应同时包含 `Kubeconfig` 与 `RequestId`；必须用 `--filter "Kubeconfig" --output text` 只提取完整 YAML，再重定向供 `kubectl --kubeconfig kubeconfig.yaml get nodes` 使用。
 
 ### 集群访问 Token 轮转
 
-> 完整入参以 `tccli tke RotateClusterToken help --detail` 为准（2018-05-25 版）。
+> 完整入参以 `tccli tke RotateClusterToken help --detail` 与实际 CLI 行为为准（2018-05-25）。
+
+**当前 TCCLI 契约缺口（已用命令核实）**：
+
+| 渠道 | 结果 |
+|:-----|:-----|
+| `tccli tke RotateClusterToken --generate-cli-skeleton` | `{}`（无业务字段） |
+| `help --detail` → AVAILABLE PARAMETERS | **无** |
+| 官方 Example | `tccli tke RotateClusterToken --cli-unfold-argument`（**无** `--ClusterId`） |
+| 不传业务参调用 | 服务端 `MissingParameter`：请求缺少必传参数 `ClusterId` |
+| 传 `--ClusterId cls-xxx` | TCCLI **本地** `Unknown options: --ClusterId`（参数未进 CLI 模型） |
+| `--cli-input-json file://` 写入 `{"ClusterId":"..."}` | 仍 `MissingParameter`（JSON 中非骨架字段被丢弃/不生效） |
+
+结论：**服务端要求 `ClusterId`，当前 TCCLI 未暴露该入参**，按文档写 `--ClusterId` 的命令**不可执行**。凭证轮换请用已暴露 `ClusterId` 的路径：
 
 ```bash
-# 轮转集群访问 Token（凭证泄露或定期安全轮换时）
-tccli tke RotateClusterToken --region <REGION> --ClusterId "<CLUSTER_ID>"
-# expected: exit 0（仅返回 RequestId）；轮转后旧 Token 失效，须重新 DescribeClusterKubeconfig 获取新凭证
+# 可执行：轮转 kubeconfig 证书面（skeleton 含 ClusterId）
+tccli tke UpdateClusterKubeconfig --region <REGION> --ClusterId "<CLUSTER_ID>"
+# expected: exit 0；再 DescribeClusterKubeconfig 取新凭证
+
+# 下列命令在当前 TCCLI 下不要照抄 --ClusterId（会 Unknown options）
+# tccli tke RotateClusterToken --region <REGION>   # 无 ClusterId → MissingParameter
 ```
 
-> ⚠️ **权限约束**：该 Action 受 CAM 强约束，资源策略要求 `qcs:resource_tag` 含 `billing`（或等同授权）才允许执行。对非自有/无授权集群调用返回 `AuthFailure.UnauthorizedOperation`（非 `ResourceNotFound`），属**授权缺失**而非资源不存在——排查时优先查 CAM 策略而非集群 ID。
-> 与 `UpdateClusterKubeconfig`（轮转 kubeconfig 证书）的区别：`RotateClusterToken` 轮转的是集群对外访问 Token（如 kube-apiserver 访问凭据），二者是不同凭证面，按需选用。
+> `UpdateClusterKubeconfig` 与 `RotateClusterToken` 是不同凭证面；后者需 TCCLI/API 模型补齐 `ClusterId` 后才能 CLI 闭环。权限上写操作仍受 CAM 约束（如资源标签 `billing`），未授权时常见 `AuthFailure.UnauthorizedOperation`。
 
 
 ### OIDC 配置
@@ -103,7 +121,7 @@ tccli tke GrantUserPermissions --region <REGION> \
 # expected: exit 0
 ```
 
-> ⚠️ **参数层级**: `GrantUserPermissions` 顶层参数是 `TargetUin`（非 `AccountUin`）+ `Permissions` 对象数组。`ClusterId`/`RoleName`/`RoleType`/`IsCustom`/`Namespace` 都在 `Permissions` 元素内（非顶层）。`RoleName` 取值见 [权限角色枚举](../index.md#核心概念)。Permission 结构见 [共享字段](../reference/shared-fields.md)。完整入参以 `tccli tke GrantUserPermissions help --detail` 为准。
+> ⚠️ **参数层级**: `GrantUserPermissions` 顶层参数是 `TargetUin`（非 `AccountUin`）+ `Permissions` 对象数组。`ClusterId`/`RoleName`/`RoleType`/`IsCustom`/`Namespace` 都在 `Permissions` 元素内（非顶层）。`RoleName` 取值见 [子账号权限管理](#子账号权限管理)。Permission 结构见 [共享字段](../reference/shared-fields.md)。完整入参以 `tccli tke GrantUserPermissions help --detail` 为准。
 
 ## 应用
 
@@ -149,8 +167,11 @@ tccli tke ModifyClusterAuthenticationOptions --region <REGION> \
   --ClusterId "<CLUSTER_ID>" --ServiceAccounts '{"UseTKEDefault":true}'
 # expected: exit 0
 
-# kubeconfig 旧文件覆盖（轮转后旧凭证失效，用新文件）
-tccli tke DescribeClusterKubeconfig --region <REGION> --ClusterId "<CLUSTER_ID>" > kubeconfig.yaml
+# 获取轮转后的新 kubeconfig（旧凭证失效）
+tccli tke DescribeClusterKubeconfig --region <REGION> --ClusterId "<CLUSTER_ID>" \
+  --filter "Kubeconfig" --output text > kubeconfig.yaml
+kubectl --kubeconfig kubeconfig.yaml get nodes
+# expected: YAML 首个顶层键为 apiVersion，且返回节点列表
 ```
 
 ## 故障恢复
@@ -210,8 +231,8 @@ tccli tke DeleteUserPermissions --TargetUin "<SUB_UIN>" --region <REGION> \
 
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
 ```bash
-# 跨步骤汇总三项合一：kubeconfig 可用 + OIDC 配置生效 + RBAC 权限授予
-# 1. kubeconfig 端到端可用（Verify 查 OIDC 配置，此处查 kubeconfig 真能连集群）
+# 汇总核对三项：kubeconfig 可用 + OIDC 配置生效 + RBAC 权限授予
+# 1. kubeconfig 端到端可用（上文已查 OIDC 配置，此处查 kubeconfig 真能连集群）
 <!-- kubectl端到端验证tccli认证配置可连通集群，非tccli边界 -->
 kubectl --kubeconfig kubeconfig.yaml get nodes
 # expected: 节点列表返回
@@ -227,7 +248,7 @@ tccli tke DescribeUserPermissions --TargetUin "<SUB_UIN>" --region <REGION> \
 # expected: 含目标集群与角色 → 认证配置闭环完成
 ```
 
-> kubeconfig 可连通 + OIDC 配置生效 + RBAC 权限授予 = 跨步骤闭环。Verify 段查各配置项字段存在，此处汇总三类认证方式（kubeconfig/OIDC/RBAC）端到端可用，是进下一阶段（部署应用/开启审计）的前置。
+> kubeconfig 可连通 + OIDC 配置生效 + RBAC 权限授予 = 跨步骤闭环。上文验证段查各配置项字段存在，此处汇总三类认证方式（kubeconfig/OIDC/RBAC）端到端可用，是进下一阶段（部署应用/开启审计）的前置。
 
 ---
 

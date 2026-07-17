@@ -12,12 +12,12 @@ fused: false
 
 - `DescribeClusterStatus` → `ClusterAuditEnabled=false`，生产集群需开启审计满足合规要求
 - 合规审计要求追溯"谁在什么时候对什么资源做了什么操作"，当前集群无 API 操作记录可查
-- `ClusterAuditEnabled=true` 但 CLS 检索无日志，需排查投递链路 — 看 [故障恢复]段
+- `ClusterAuditEnabled=true` 但 CLS 检索无日志，需排查投递链路 — 看 [故障恢复](#故障恢复)
 
 
 ## 概述
 
-审计日志记录"谁在什么时候对什么资源做了什么操作"。开启后，集群 API Server 的所有操作（kubectl <!-- tccli管控审计开关/日志集配置，kubectl操作作为审计对象被记录，非tccli边界 --> /TCCLI/控制台）写入 CLS 日志集。
+审计日志记录"谁在什么时候对什么资源做了什么操作"。开启后，目标集群 kube-apiserver 处理的操作（如 kubectl 或其他 Kubernetes API 客户端请求）写入 CLS 日志集；TCCLI 和控制台用于配置 TKE 管控面能力，不等同于目标集群的 kube-apiserver 审计事件。
 
 | 状态 | 含义 | 查询 |
 |:-----|:-----|:-----|
@@ -47,9 +47,9 @@ fused: false
 | ClusterId | string | 是 | — | `cls-xxxxxxxx` | `ResourceNotFound` |
 | LogsetId | string | 是 | — | CLS 日志集 ID | `ResourceNotFound` |
 | TopicId | string | 是 | — | CLS 日志主题 ID | `ResourceNotFound` |
-| TopicRegion | string | 是 | — | CLS 主题地域，如 `ap-guangzhou` | 地域不匹配 |
+| TopicRegion | string | 否 | 集群当前地域 | CLS 主题地域，如 `ap-guangzhou`；主题不在集群当前地域时，显式传入主题实际地域 | 地域不匹配 |
 
-> `LogsetId`/`TopicId` 须先在 CLS 服务创建。`TopicRegion` 是 CLS 主题所在地域，须与日志集一致。
+> `LogsetId`/`TopicId` 须先在 CLS 服务创建。`TopicRegion` 可省略，默认使用集群当前地域；CLS 主题位于其他地域时，显式传入主题实际地域。
 
 ## 应用
 
@@ -92,9 +92,9 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet
 |:-----|:-----|:-----|
 | 审计开关 | `DescribeClusterStatus` → `ClusterAuditEnabled` | `true` |
 | 日志投递 | `tccli cls SearchLog --TopicId <ID>`（CLS 侧） | 有审计日志记录 |
-| 操作可追溯 | 在 CLS 检索某 RequestId | 命中对应操作记录 |
+| 操作可追溯 | 用 `kubectl` 操作唯一命名的 Kubernetes 资源，再在 CLS 按 `verb/resource/name/time` 检索 | 命中对应 kube-apiserver 审计事件 |
 
-> 审计日志写入有秒级延迟。开启后做一次操作（如 `DescribeClusters`），再到 CLS 检索确认。
+> 审计日志写入有秒级延迟。开启后用 `kubectl` 对唯一命名的 Kubernetes 资源执行一次可识别操作，再到 CLS 按操作时间、`verb`、资源类型和资源名检索确认。
 
 ## 回滚
 
@@ -141,27 +141,32 @@ tccli tke DescribeEncryptionStatus --ClusterId "<CLUSTER_ID>" --region <REGION>
 ```
 
 ```bash
-# 关闭加密保护 (开启加密前的前置, 或完全关闭加密)
+# 发起关闭加密保护；返回 RequestId 只表示请求已受理
 tccli tke DisableEncryptionProtection --ClusterId "<CLUSTER_ID>" --region <REGION>
-# expected: exit 0
+# expected: exit 0, 返回 RequestId；继续轮询 DescribeEncryptionStatus
+
+# 轮询终态
+tccli tke DescribeEncryptionStatus --ClusterId "<CLUSTER_ID>" --region <REGION> --filter "Status" --output text
+# expected: Closing 表示关闭中；Closed 表示已关闭
 ```
 
-> `Status` 状态机：`Closed`（未加密）→ `Opening`（开启中）→ `Opened`（已开启）。`DisableEncryptionProtection` 关闭加密保护（非关闭加密本身），允许对加密集群做特殊操作。
+> `Status` 状态机：开启时 `Closed`（已关闭）→ `Opening`（开启中）→ `Opened`（已开启）；关闭时 `Opened` → `Closing`（关闭中）→ `Closed`（已关闭）。`DisableEncryptionProtection` 发起关闭流程，成功返回 `RequestId` 不代表完成，必须轮询到 `Closed`。静态契约未说明存量 Secret 是否逐条解密，本文不作扩写。
 
 ```bash
-# 开启加密保护（KMSConfiguration 传 KMS 加密配置）
+# 开启加密保护（KMSConfiguration 字段是 KeyId + KmsRegion，不是 KmsKeyId）
 tccli tke EnableEncryptionProtection --region <REGION> \
   --ClusterId "<CLUSTER_ID>" \
-  --KMSConfiguration '{"KmsRegion":"<KMS_REGION>","KmsKeyId":"<KMS_KEY_ID>"}'
+  --KMSConfiguration '{"KmsRegion":"<KMS_REGION>","KeyId":"<KMS_KEY_ID>"}'
 # expected: exit 0, Status 进入 Opening → Opened; 集群不存在报 ResourceNotFound
+# KeyId 可选：不传则采用 TKE 默认生成密钥（TKE-KMS）
 ```
 
 | 占位符 | 含义 | 如何获取 |
 |:-------|:-----|:---------|
 | `<KMS_REGION>` | KMS 密钥所在地域 | `tccli kms ListKeys --region <REGION>` |
-| `<KMS_KEY_ID>` | KMS 主密钥 ID | `tccli kms ListKeys` → `Keys[].KeyId` |
+| `<KMS_KEY_ID>` | KMS 主密钥 ID（对应字段名 `KeyId`） | `tccli kms ListKeys` → `Keys[].KeyId` |
 
-> `EnableEncryptionProtection` 的 `KmsConfiguration` 是嵌套对象（含 `KmsRegion`/`KmsKeyId`），开启后 etcd 数据用 KMS 密钥加密。开启是异步操作，用 `DescribeEncryptionStatus` 轮询 `Status` 到 `Opened`。开启前需先在 KMS 创建密钥并授权 TKE 使用。
+> `EnableEncryptionProtection` 的 `KMSConfiguration` 是嵌套对象（字段 **`KeyId`** / **`KmsRegion`**，**不是** `KmsKeyId`），开启后 etcd 数据用 KMS 密钥加密。开启是异步操作，用 `DescribeEncryptionStatus` 轮询 `Status` 到 `Opened`（`Closed`/`Opening`/`Opened`/`Closing`）。开启前需先在 KMS 创建密钥并授权 TKE 使用。
 
 ## 开放策略（OPA/Gatekeeper）
 
@@ -255,7 +260,7 @@ tccli tke ModifyOpenPolicyList --ClusterId "<CLUSTER_ID>" --region <REGION> \
 ## 收尾确认
 
 ```bash
-# 跨步骤汇总三项合一：审计开关已开 + CLS 日志集/主题存在 + 投递可查
+# 汇总核对三项：审计开关已开 + CLS 日志集/主题存在 + 投递可查
 # 1. 审计开关（TKE 侧）
 tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet[?ClusterId=='<CLUSTER_ID>'] | [0].ClusterAuditEnabled"
 # expected: true
@@ -264,13 +269,19 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet
 tccli cls DescribeLogsets --region <REGION> --LogsetId "<LOGSET_ID>"
 # expected: 返回日志集，含 TopicId
 
-# 3. 业务可用性端到端：做一次操作后 CLS 能检索到该操作
-tccli tke DescribeClusters --region ap-guangzhou --filter "TotalCount"
-tccli cls SearchLog --region <REGION> --TopicId "<TOPIC_ID>" --Content '"DescribeClusters"'
-# expected: 命中含 DescribeClusters 的审计记录 → 审计日志闭环完成
+# 3. 端到端：用唯一命名资源制造 kube-apiserver 审计事件，再到 CLS 检索
+# kubectl 操作目标集群的 Kubernetes API；TCCLI 仅负责审计开关与 CLS 配置
+AUDIT_NAME="d105-audit-check"
+kubectl create configmap "$AUDIT_NAME" --from-literal=probe=d105
+# expected: configmap/d105-audit-check created
+
+tccli cls SearchLog --region <REGION> --TopicId "<TOPIC_ID>" --Content '"d105-audit-check"'
+# expected: 命中 create/configmaps 事件，并可按操作时间、verb、resource、name 交叉确认
+kubectl delete configmap "$AUDIT_NAME"
+# expected: configmap/d105-audit-check deleted
 ```
 
-> 审计开关 true + CLS 日志集/主题存在 + 操作可检索 = 端到端闭环。Verify 段查开关状态与日志投递维度，此处跨步骤汇总 TKE 侧开关 + CLS 侧资源存在 + 真实操作可检索三项，确认投递链路完整可用。
+> 审计开关 true + CLS 日志集/主题存在 + 操作可检索 = 配置完成。上文验证段查开关状态与日志投递维度，此处汇总 TKE 侧开关 + CLS 侧资源存在 + 真实操作可检索三项，确认投递链路完整可用。
 
 ---
 

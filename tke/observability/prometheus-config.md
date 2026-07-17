@@ -19,7 +19,7 @@ fused: true
 
 - `DescribePrometheusConfig` 返回的 ServiceMonitors/PodMonitors 不含目标采集器，需创建采集配置
 - `DescribePrometheusRecordRules` 不含目标规则，或记录规则 PromQL 不生效，需创建/修改记录规则
-- 多实例需复用采集/告警规则，`DescribePrometheusTemp` 无合适模板，需建模板并 `Sync` 推送 — 看 [故障恢复]段
+- 多实例需复用采集/告警规则，`DescribePrometheusTemp` 无合适模板，需建模板并 `Sync` 推送 — 看 [故障恢复](#故障恢复)
 
 
 ## 概述
@@ -64,7 +64,7 @@ tccli tke DescribeClusters --region <REGION> --filter "Clusters[*].ClusterId" --
 |:-----|:-----|:----:|:-----|:-----------|
 | `InstanceId` | String | 是 | Prometheus 实例 | 实例不存在被拒 |
 | `ClusterId` | String | 是 | 已存在集群 | 集群不存在被拒 |
-| `ClusterType` | String | 是 | `MANAGED_CLUSTER`/`INDEPENDENT_CLUSTER` | 类型错被拒 |
+| `ClusterType` | String | 是 | `tke`/`eks`（非 CreateCluster 的 MANAGED/INDEPENDENT） | 类型错被拒 |
 | `ServiceMonitors[]` | Array | 否 | Create=对象{Name,Config,TemplateId}；Delete=字符串(Name) | Create/Delete 混用会参数错 |
 | `PodMonitors[]` | Array | 否 | 同上 | 同上 |
 | `RawJobs[]` | Array | 否 | 同上 | 同上 |
@@ -95,7 +95,7 @@ tccli tke DescribeClusters --region <REGION> --filter "Clusters[*].ClusterId" --
 
 ```bash
 tccli tke CreatePrometheusConfig --region <REGION> \
-  --InstanceId <PROM_INSTANCE_ID> --ClusterType MANAGED_CLUSTER --ClusterId <CLUSTER_ID> \
+  --InstanceId <PROM_INSTANCE_ID> --ClusterType tke --ClusterId <CLUSTER_ID> \
   --ServiceMonitors '[{"Name":"<SM_NAME>","Config":"<SM_YAML>"}]'
 # expected: exit 0, 返回 RequestId
 ```
@@ -129,7 +129,7 @@ tccli tke CreatePrometheusTemp --region <REGION> \
 # 同步模板到目标实例
 tccli tke SyncPrometheusTemp --region <REGION> \
   --TemplateId <TEMPLATE_ID> \
-  --Targets '[{"Region":"<REGION>","InstanceId":"<PROM_INSTANCE_ID>","ClusterId":"<CLUSTER_ID>","ClusterType":"MANAGED_CLUSTER"}]'
+  --Targets '[{"Region":"<REGION>","InstanceId":"<PROM_INSTANCE_ID>","ClusterId":"<CLUSTER_ID>","ClusterType":"tke"}]'
 # expected: exit 0, 返回 RequestId
 ```
 
@@ -159,7 +159,7 @@ tccli tke ModifyPrometheusTemplate --region <REGION> \
 # 4. 同步告警模板到目标实例（Targets 结构同 SyncPrometheusTemp）
 tccli tke SyncPrometheusTemplate --region <REGION> \
   --TemplateId <TEMPLATE_ID> \
-  --Targets '[{"Region":"<REGION>","InstanceId":"<PROM_INSTANCE_ID>","ClusterId":"<CLUSTER_ID>","ClusterType":"MANAGED_CLUSTER"}]'
+  --Targets '[{"Region":"<REGION>","InstanceId":"<PROM_INSTANCE_ID>","ClusterId":"<CLUSTER_ID>","ClusterType":"tke"}]'
 # expected: exit 0
 
 # 5. 删除告警模板
@@ -184,7 +184,7 @@ tccli tke CreatePrometheusDashboard --region <REGION> \
 
 ```bash
 tccli tke DescribePrometheusConfig --region <REGION> \
-  --InstanceId <PROM_INSTANCE_ID> --ClusterId <CLUSTER_ID> --ClusterType MANAGED_CLUSTER
+  --InstanceId <PROM_INSTANCE_ID> --ClusterId <CLUSTER_ID> --ClusterType tke
 # expected: exit 0, 返回 ServiceMonitors/PodMonitors 等当前配置
 ```
 
@@ -205,7 +205,7 @@ tccli tke DescribePrometheusGlobalConfig --region <REGION> --InstanceId <PROM_IN
 
 # 修改采集配置（覆盖式，ServiceMonitors 等为对象数组{Name,Config,TemplateId}，与 Create 同结构）
 tccli tke ModifyPrometheusConfig --region <REGION> \
-  --InstanceId <PROM_INSTANCE_ID> --ClusterType MANAGED_CLUSTER --ClusterId <CLUSTER_ID> \
+  --InstanceId <PROM_INSTANCE_ID> --ClusterType tke --ClusterId <CLUSTER_ID> \
   --ServiceMonitors '[{"Name":"<SM_NAME>","Config":"<SM_YAML>"}]'
 # expected: CAM 拦截 AuthFailure.UnauthorizedOperation；授权后 exit 0
 
@@ -241,7 +241,7 @@ tccli tke ModifyPrometheusRecordRuleYaml --region <REGION> \
 ```bash
 # 删除采集配置（传 Name 字符串数组）
 tccli tke DeletePrometheusConfig --region <REGION> \
-  --InstanceId <PROM_INSTANCE_ID> --ClusterType MANAGED_CLUSTER --ClusterId <CLUSTER_ID> \
+  --InstanceId <PROM_INSTANCE_ID> --ClusterType tke --ClusterId <CLUSTER_ID> \
   --ServiceMonitors '["<SM_NAME>"]'
 # expected: exit 0
 
@@ -265,7 +265,7 @@ tccli tke DeletePrometheusTemp --region <REGION> --TemplateId <TEMPLATE_ID>
 |:-----|:-----|:-----|:-----|
 | `AuthFailure.UnauthorizedOperation` (tke:CreatePrometheusConfig 等) | 查账号 CAM | 写 Prometheus 配置需对应 `tke:ActionName` 权限 | 申请写权限。此为环境限制 |
 | `UnauthorizedOperation` 您未授权访问该接口 (DescribePrometheus*) | 同上 | 读操作在云 API 网关层被拦 | 申请 `tke:DescribePrometheus*` 读权限 |
-| `Unknown options` | `tccli tke <Action> --generate-cli-skeleton` | Create/Delete 同名入参类型不同（对象 vs 字符串数组）混用 | 按 [§关键字段](#关键字段) 区分对象/字符串数组 |
+| `Unknown options` | `tccli tke <Action> --generate-cli-skeleton` | Create/Delete 同名入参类型不同（对象 vs 字符串数组）混用 | 按 [关键字段](#关键字段) 区分对象/字符串数组 |
 | 模板同步失败 | `DescribePrometheusTempSync` | `Targets[].InstanceId`/`ClusterId` 不存在或地域不符 | 核对目标实例与集群 |
 
 ### 命令成功但状态不对（exit = 0）
@@ -280,25 +280,26 @@ tccli tke DeletePrometheusTemp --region <REGION> --TemplateId <TEMPLATE_ID>
 ## 收尾确认
 
 ```bash
-# 跨步骤汇总三项合一：采集配置下发 + 记录规则生效 + 模板同步成功
-# 1. 采集配置已下发（Verify 查配置存在，此处查时间戳为最新）
+# 汇总核对三项：采集配置存在 + 记录规则存在 + Temp 同步成功
+# 1. 在嵌套采集器数组中核对目标名称
+# ServiceMonitor：
 tccli tke DescribePrometheusConfig --region <REGION> \
   --InstanceId <PROM_INSTANCE_ID> --ClusterId <CLUSTER_ID> \
-  --filter "{name:Name,update:LatestUpdateTimestamp}"
-# expected: 返回配置且时间戳为新
+  --filter "ServiceMonitors[?Name=='<SERVICE_MONITOR_NAME>'].{name:Name,config:Config}"
+# expected: 返回目标 ServiceMonitor；PodMonitor/RawJob/Probe 分别在 PodMonitors/RawJobs/Probes 中按 Name 查询
 
-# 2. 记录规则生效
+# 2. 记录规则存在
 tccli tke DescribePrometheusRecordRules --region <REGION> --InstanceId <PROM_INSTANCE_ID> \
-  --filter "RecordRules[].{name:Name}"
+  --filter "Records[].{name:Name}"
 # expected: 含创建的规则名
 
-# 3. 模板同步成功
+# 3. Temp 模板同步成功
 tccli tke DescribePrometheusTempSync --region <REGION> --TemplateId <TEMPLATE_ID> \
   --filter "Targets[].{instance:InstanceId,status:Status}"
-# expected: 目标实例同步 Status=Succeeded → 配置闭环完成
+# expected: 目标实例同步状态符合接口返回的成功终态
 ```
 
-> 采集配置下发 + 记录规则生效 + 模板同步 Succeeded = 跨步骤闭环。Verify 段查各维度存在性，此处汇总五类配置（Config/RecordRule/Temp/Template/Dashboard）的产物一次性核对，确认全链路生效。
+> 以上仅汇总核对 Config、RecordRule、Temp 三类产物。告警 Template 需另用 `DescribePrometheusTemplates` 与 `DescribePrometheusTemplateSync` 核对；本 API 版本没有 Dashboard 查询 Action，`CreatePrometheusDashboard` 只返回 `RequestId`，因此 Dashboard 必须到 Grafana/控制台确认存在并可渲染，不能由上述三条查询代证。
 
 ---
 

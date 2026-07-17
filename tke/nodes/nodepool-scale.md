@@ -18,7 +18,7 @@ fused: true
 
 - DescribeClusterNodePools 返回 LifeState=normal 但 DesiredNodesNum 不满足业务容量（需扩容或缩容）
 - 集群节点数已达 MaxNodesNum 上限，或扩容报 `LimitExceeded`/`ResourceInsufficient.SpecifiedInstanceType`（机型售罄）需调区间或换机型
-- 你遇到扩缩容节点池问题需查诊断路径 — 看 [故障恢复]段
+- 你遇到扩缩容节点池问题需查诊断路径 — 看 [故障恢复](#故障恢复)
 
 
 ## 概述
@@ -78,8 +78,8 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet
 #### 为什么区分扩缩容策略
 
 - **扩容**: 直接设 `DesiredCapacity`/`Replicas` 为目标值，底层建 CVM。失败模式主要是机型售罄/配额不足
-- **缩容**: ASG/Native 按策略移出节点，**TKE 不保证提前驱逐/封锁具体节点**。普通/原生节点安全缩容用 `kubectl drain`（`DrainClusterVirtualNode` 只驱逐超级节点，`DrainExternalNode` 只驱逐注册节点）
-- **默认推荐**: 缩容前先 `kubectl drain` 目标节点，避免 Pod 被强制终止
+- **缩容**: ASG/Native 只接收目标容量，不接收待删除实例 ID，因此缩容控制器自行选点；不能通过先 drain 节点 A 来保证最终删除 A
+- **默认推荐**: 若只降低容量，先按节点池删除策略识别全部潜在候选，并确保任一候选被移除都不会造成数据或可用性问题。若必须指定节点，改用支持 `InstanceIds` 的节点移出/删除流程，见 [节点实例操作](instance-ops.md)
 - **弹性伸缩**: 若节点池开了自动伸缩，不建议手动改期望数——让控制器按负载调整
 
 ### 步骤 2：扩容
@@ -103,13 +103,13 @@ tccli tke ScaleNodePool --version 2022-05-01 --region ap-guangzhou \
 
 ### 步骤 3：缩容（安全）
 
-> **普通/原生节点**先用 kubectl 驱逐（`DrainClusterVirtualNode` 仅超级节点，见 [虚拟节点](virtual-nodes.md)；注册节点用 `DrainExternalNode`，见 [移除注册节点](registered-nodes/remove.md)）。再改期望数。
+> `ModifyNodePoolDesiredCapacityAboutAsg` 与 `ScaleNodePool` 的请求只有目标容量，没有目标实例 ID。直接降低容量时控制器按节点池策略选点，无法保证删除某个预先 drain 的节点。执行前应确认池内任一潜在候选被移除都安全；需要定点移除时，不走本节容量缩减，改用支持 `InstanceIds` 的节点移出/删除流程（见 [节点实例操作](instance-ops.md)）。
 
 ```bash
-# 1. 先 drain 目标节点（避免 Pod 被强杀；kubectl，非 tccli）
-# <!-- kubectl 补普通/原生节点 drain：tccli 无对应 Action，非 tccli 边界 -->
-kubectl drain <NODE_NAME> --ignore-daemonsets --delete-emptydir-data
-# expected: node drained（SchedulingDisabled + 工作负载已迁走）
+# 1. 容量缩减前检查池内节点与工作负载；不要把 drain 单个节点当作定点删除保证
+kubectl get nodes
+kubectl get pods -A -o wide
+# expected: 已识别全部潜在缩容候选，任一候选被控制器选中都不会造成不可接受的数据或可用性影响
 
 # 2a. 旧版 ASG 节点池：DesiredCapacity 减小
 tccli tke ModifyNodePoolDesiredCapacityAboutAsg --region ap-guangzhou \
@@ -122,7 +122,7 @@ tccli tke ScaleNodePool --version 2022-05-01 --region ap-guangzhou \
 # expected: exit 0
 ```
 
-> 不 drain 直接缩容：控制器选节点移出时可能强制终止 Pod。有状态服务（数据库）可能丢数据。
+> 直接缩容时，控制器可能选择池内任一符合策略的节点并终止其 Pod；PDB、本地数据和剩余容量必须按全部潜在候选评估。若必须删除指定节点，使用支持实例 ID 的移出/删除 Action，而不是仅修改期望容量。
 
 ### 步骤 4：验证
 
@@ -170,18 +170,18 @@ tccli tke DescribeNodePools --version 2022-05-01 --region ap-guangzhou \
 - **InstanceDeleteMode 选择**: 缩容时 `terminate`（销毁 CVM，停止计费）/ `retain`（保留 CVM 作他用，继续计费）——默认 `terminate` 避免孤儿 CVM
 
 ```bash
-# 扩容 Master (RunInstancesForNode 透传 CVM RunInstances JSON, NodeRole=master)
+# 扩容 Master (RunInstancesForNode 透传 CVM RunInstances JSON, NodeRole=MASTER_ETCD)
 tccli tke ScaleOutClusterMaster --ClusterId "<CLUSTER_ID>" --region <REGION> \
-  --RunInstancesForNode '[{"NodeRole":"master","RunInstancesPara":["<CVM_JSON>"]}]'
+  --RunInstancesForNode '[{"NodeRole":"MASTER_ETCD","RunInstancesPara":["<CVM_JSON>"]}]'
 # expected: exit 0
 
 # 缩容 Master (按 InstanceId, InstanceDeleteMode 销毁方式)
 tccli tke ScaleInClusterMaster --ClusterId "<CLUSTER_ID>" --region <REGION> \
-  --ScaleInMasters '[{"InstanceId":"<INSTANCE_ID>","NodeRole":"master","InstanceDeleteMode":"terminate"}]'
+  --ScaleInMasters '[{"InstanceId":"<INSTANCE_ID>","NodeRole":"MASTER_ETCD","InstanceDeleteMode":"terminate"}]'
 # expected: exit 0
 ```
 
-> Master 扩缩容仅独立集群（INDEPENDENT_CLUSTER）需要——托管集群（MANAGED_CLUSTER）的 Master 由 TKE 管理。`InstanceDeleteMode` 如 `terminate`（销毁）/ `retain`（保留）。
+> Master 扩缩容仅独立集群（INDEPENDENT_CLUSTER）需要——托管集群（MANAGED_CLUSTER）的 Master 由 TKE 管理。扩容 `NodeRole` 为 `MASTER_ETCD`/`WORKER`；缩容 `NodeRole` 为 `MASTER`/`ETCD`/`MASTER_ETCD`。`InstanceDeleteMode` 为 `terminate`（销毁）/ `retain`（保留）。完整命令与多数派约束见 [Master 运维](../clusters/master-ops.md)。
 
 ### 集群级 ASG 选项
 
@@ -288,12 +288,12 @@ tccli tke ModifyClusterNodePool --region ap-guangzhou \
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
 <!-- kubectl验证tccli扩缩容操作结果，kubectl get nodes观察K8s层节点Ready与Pod调度状态，非tccli边界 -->
 ```bash
-# ②业务可用性端到端: 扩容新节点不仅 InstanceState=running 须 K8s Ready（缩容后无 Pod Pending）
+# 端到端核对：扩容新节点不仅 InstanceState=running 须 K8s Ready（缩容后无 Pod Pending）
 # 扩容后 kubectl get nodes 看新节点真 Ready（InstanceState=running 不等于 K8s Ready，kubelet 注册需时间）
 kubectl get nodes --show-labels | grep -v NotReady | wc -l
 # expected: Ready 节点数 == 扩容后 DesiredCapacity（缩容后无 Pod Pending: kubectl get pods -A 看无 Pending）
 
-# ③跨步骤多资源汇总（新版 Native）: LifeState=Running + Replicas == ReadyReplicas == Ready 节点数
+# 多字段汇总（新版 Native）: LifeState=Running + Replicas == ReadyReplicas == Ready 节点数
 tccli tke DescribeNodePools --version 2022-05-01 --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" --Filters '[{"Name":"NodePoolsId","Values":["<NODE_POOL_ID>"]}]' \
   --filter "NodePools[0].{state:LifeState,desired:Native.Replicas,ready:Native.ReadyReplicas}"

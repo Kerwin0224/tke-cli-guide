@@ -23,7 +23,7 @@ TKE 集群节点从子网分配内网 IP，Pod/Service 用 VPC CIDR 通信。创
 |:---|:-----|:-----|
 | VPC CIDR | `10.0.0.0/16`（65536 IP）/ `192.168.0.0/16` | `10.0.0.0/16`（与 IDC 冲突少） |
 | 子网 CIDR | VPC CIDR 的子段，如 `10.0.1.0/24`（254 IP） | `10.0.1.0/24` |
-| 可用区 | `ap-guangzhou-3` 等 | 选离你近的（`tccli cvm DescribeZones` 查看） |
+| 可用区 | 如 `ap-guangzhou-6` | 以 `tccli cvm DescribeZones` 返回的 `ZoneState=AVAILABLE` 为准（广州当前常见为 5/6/7，勿写死已下线可用区） |
 
 > CIDR 不可与已有 VPC 重叠。集群创建后 VPC CIDR 无法更改，子网可后加。
 
@@ -33,10 +33,10 @@ TKE 集群节点从子网分配内网 IP，Pod/Service 用 VPC CIDR 通信。创
 
 ```bash
 tccli --version
-# expected: 最新版本或更高
+# expected: 输出当前已安装的 TCCLI 版本号
 
 tccli cvm DescribeRegions --filter "TotalCount" --output text
-# expected: 数字（如 49）→ 凭证有效（凭证配置见 [配置凭证](credentials.md)）
+# expected: 数字（如 18；随账号/产品开通变化）→ 凭证有效（凭证配置见 [配置凭证](credentials.md)）
 ```
 
 ### 资源检查
@@ -45,7 +45,7 @@ tccli cvm DescribeRegions --filter "TotalCount" --output text
 # 查可用区
 tccli cvm DescribeZones --region <REGION> \
   --filter "ZoneSet[0].{zone:Zone,state:ZoneState}"
-# expected: AVAILABLE 状态的可用区，如 ap-guangzhou-3
+# expected: AVAILABLE 状态的可用区，如 ap-guangzhou-6
 
 # 查已有 VPC（避免 CIDR 冲突）
 tccli vpc DescribeVpcs --region <REGION> \
@@ -56,7 +56,7 @@ tccli vpc DescribeVpcs --region <REGION> \
 | 占位符 | 含义 | 约束 | 获取方式 |
 |--------|------|------|---------|
 | `<REGION>` | 地域 | 如 `ap-guangzhou` | `tccli tke DescribeRegions` |
-| `<ZONE>` | 可用区 | 如 `ap-guangzhou-3` | `tccli cvm DescribeZones --region <REGION> --filter "ZoneSet[?ZoneState=='AVAILABLE'].Zone" --output text` |
+| `<ZONE>` | 可用区 | 如 `ap-guangzhou-6` | `tccli cvm DescribeZones --region <REGION> --filter "ZoneSet[?ZoneState=='AVAILABLE'].Zone" --output text` |
 | `<VPC_NAME>` | VPC 名称 | 1-60 字符 | 自定义 |
 | `<SUBNET_NAME>` | 子网名称 | 1-60 字符 | 自定义 |
 
@@ -86,17 +86,21 @@ tccli vpc CreateVpc --region <REGION> \
 
 > 仅当集群要建 **IPv4/IPv6 双栈**（`NetworkType=VPC-CNI` + `IsDualStack=true`）时才需本步。单栈 IPv4 集群跳过，用上一步的 VPC 即可。双栈集群的前序资源约束：VPC 须已开 IPv6 + 子网须已分配 IPv6 CIDR，否则集群创建中途失败（见 [创建集群 — 集群 IP 类型决策树](../tke/clusters/create.md#集群-ip-类型决策树)）。
 
-`CreateVpc` 本身只声明"启用 IPv6 路由发布"标志，真正的 IPv6 CIDR 须创建 VPC 后用 `AssignIpv6CidrBlock` 分配：
+`CreateVpc` 本身不分配 IPv6 CIDR。双栈所需的 IPv6 地址段须创建 VPC 后用 `AssignIpv6CidrBlock` 分配；子网再 `AssignIpv6SubnetCidrBlock`。
 
 ```bash
-# 1. 创建 VPC 时启用 IPv6 路由发布（EnableRouteVpcPublishIpv6=true）
+# 1. 创建 VPC（IPv4 CIDR；IPv6 下一步再分配）
 tccli vpc CreateVpc --region <REGION> \
-  --VpcName "<VPC_NAME>" --CidrBlock "10.0.0.0/16" --EnableRouteVpcPublishIpv6 true
-# expected: exit 0，返回 Vpc.VpcId（含 IsDualStack 或可后续核 IPv6）
+  --VpcName "<VPC_NAME>" --CidrBlock "10.0.0.0/16"
+# expected: exit 0，返回 Vpc.VpcId
+#
+# 可选：--EnableRouteVpcPublishIpv6 控制 VPC 关联云联网时的 IPv6 路由发布策略
+# （true=CIDR 路由发布，须工单加白名单；false=子网路由发布，创建默认）。
+# 该标志**不等于**「给 VPC 开通 IPv6 地址段」，开通地址段看下一步 AssignIpv6CidrBlock。
 
-# 2. 给 VPC 分配 IPv6 CIDR（AssignIpv6CidrBlock）
+# 2. 给 VPC 分配 IPv6 CIDR（AssignIpv6CidrBlock；每个 VPC 只能申请一个 IPv6 网段）
 tccli vpc AssignIpv6CidrBlock --region <REGION> --VpcId "<VPC_ID>"
-# expected: { "Ipv6CidrBlock": "2402:xxxx::/56", "RequestId": "..." } → VPC 已开 IPv6
+# expected: { "Ipv6CidrBlock": "2402:xxxx::/56", "RequestId": "..." } → VPC 已有 IPv6 CIDR
 
 # 3. 给子网分配 IPv6 CIDR（AssignIpv6SubnetCidrBlock，子网创建后执行）
 tccli vpc AssignIpv6SubnetCidrBlock --region <REGION> \
@@ -111,7 +115,7 @@ tccli vpc AssignIpv6SubnetCidrBlock --region <REGION> \
 | `<SUBNET_ID>` | 子网 ID | 须在 VPC 内 | `### 2. 创建子网` 返回的 `SubnetId` |
 | `Ipv6SubnetCidrBlock` | 子网 IPv6 CIDR | 须在 VPC 的 IPv6 CIDR `/56` 范围内，子网用 `/64` | 自取（如 `2402:xxxx::/64`） |
 
-> ⚠️ **顺序约束**：`AssignIpv6SubnetCidrBlock` 须在 `### 2. 创建子网` 之后执行（须先有子网 ID）。故双栈集群的完整准备顺序是：创建 VPC(开 IPv6) → 分配 VPC IPv6 CIDR → 创建子网 → 分配子网 IPv6 CIDR → 创建集群(双栈)。`Ipv6CidrBlock` 由腾讯云分配（非自取），子网 IPv6 CIDR 须落在 VPC 的 `/56` 内。
+> ⚠️ **顺序约束**：`AssignIpv6SubnetCidrBlock` 须在 `### 2. 创建子网` 之后执行（须先有子网 ID）。故双栈集群的完整准备顺序是：创建 VPC → 分配 VPC IPv6 CIDR（`AssignIpv6CidrBlock`）→ 创建子网 → 分配子网 IPv6 CIDR → 创建集群(双栈)。`Ipv6CidrBlock` 由腾讯云分配（非自取），子网 IPv6 CIDR 须落在 VPC 的 `/56` 内。
 
 ### 2. 创建子网
 
@@ -151,18 +155,18 @@ tccli vpc CreateSecurityGroupPolicies --region <REGION> \
   }'
 # expected: RequestId
 
-# 3c. 入站（单独一次；按需收紧源 CIDR，勿长期 0.0.0.0/0 开管理面）
+# 3c. 入站（单独一次；默认只放通 VPC 内通信）
 tccli vpc CreateSecurityGroupPolicies --region <REGION> \
   --SecurityGroupId "<SECURITY_GROUP_ID>" \
   --SecurityGroupPolicySet '{
     "Ingress":[
-      {"Protocol":"ALL","Port":"ALL","CidrBlock":"<VPC_CIDR>","Action":"ACCEPT","PolicyDescription":"vpc-all"},
-      {"Protocol":"TCP","Port":"30000-32767","CidrBlock":"0.0.0.0/0","Action":"ACCEPT","PolicyDescription":"nodeport"},
-      {"Protocol":"TCP","Port":"80","CidrBlock":"0.0.0.0/0","Action":"ACCEPT","PolicyDescription":"http"}
+      {"Protocol":"ALL","Port":"ALL","CidrBlock":"<VPC_CIDR>","Action":"ACCEPT","PolicyDescription":"vpc-all"}
     ]
   }'
 # expected: RequestId
 ```
+
+> 默认路径不向公网开放 NodePort 范围。确需公网业务访问时，优先通过 CLB/Ingress 暴露；若必须直连节点端口，只按需开放实际端口，并把 `CidrBlock` 限制为可信出口 CIDR（例如办公出口 `<TRUSTED_CIDR>`），不要将 `30000-32767` 整段开放给 `0.0.0.0/0`。
 
 | 占位符 | 含义 |
 |:-------|:-----|
@@ -234,15 +238,15 @@ tccli vpc DeleteVpc --region <REGION> --VpcId "<VPC_ID>"
 ## 收尾确认
 
 ```bash
-# 跨步骤汇总：VPC + 子网 + 可用区三要素一次性核对齐备（Verify 分查各维度，此处合一确认）
+# 汇总核对：VPC + 子网 + 可用区三要素齐备（上文分查各维度，此处合一确认）
 tccli vpc DescribeSubnets --region <REGION> \
   --Filters '[{"Name":"vpc-id","Values":["<VPC_ID>"]}]' \
   --filter "SubnetSet[0].{subnet:SubnetId,vpc:VpcId,zone:Zone,cidr:CidrBlock,avail:AvailableIpAddressCount}" --output text
 # expected: 返回创建的子网行，avail ≥ 10，zone 为目标可用区，三要素齐备
 
-# 衔接下一步前置：VPC + 子网可进入创建集群（CreateCluster 必传 VpcId/SubnetId 均就绪）
+# 下一步前置：VPC + 子网可进入创建集群（CreateCluster 必传 VpcId/SubnetId 均就绪）
 tccli tke DescribeRegions --filter "TotalCount" --output text
-# expected: 数字（如 42）→ TKE 域可达，VPC+子网就绪可进入 [创建集群](../quickstart/tke-first-cluster.md)
+# expected: 数字（如 19；随账号/产品开通变化）→ TKE 域可达，VPC+子网就绪可进入 [创建集群](../quickstart/tke-first-cluster.md)
 ```
 
 > VPC 存在 + 子网可用 IP ≥ 10 + 可用区支持 TKE = 网络底座三要素齐备，满足 `CreateCluster` 的 `VpcId`/`SubnetId` 前置要求，可进入创建集群。

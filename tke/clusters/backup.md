@@ -14,24 +14,24 @@ fused: false
 
 ## 概述
 
-TKE 集群备份（基于 Velero）将集群资源（Deployment/Service/ConfigMap 等）备份到对象存储（COS）。备份存储位置（BackupStorageLocation）是备份的目标 COS 桶配置——配好位置后，集群备份会写入该桶。
+TKE 集群备份组件以 Velero 为基础，将 Kubernetes 资源对象备份到对象存储（COS）。备份存储位置（BackupStorageLocation）是备份的目标 COS 桶配置。控制台“备份中心”中的“备份仓库/存储仓库”对应本文的 `BackupStorageLocation`；备份与恢复由集群内的 `tke-backup` 组件通过 TKE 自定义 `Backup`、`BackupSchedule`、`Restore` 资源执行，不是同一个 TKE API 资源。
 
 > ⚠️ **产品边界（灾备生命周期三段，TCCLI 只覆盖第一段）**：
 > - **配置存储位置** → tccli `CreateBackupStorageLocation`（本文档）
-> - **执行一次备份** → **Velero 插件层**（`kubectl` 调 Velero CRD，非 tccli）
-> - **从备份恢复** → **Velero 插件层**（`kubectl` 调 Velero CRD，非 tccli）
+> - **执行备份** → TKE 控制台“运维中心 > 备份中心”创建备份
+> - **从备份恢复** → TKE 控制台“运维中心 > 备份中心”创建恢复
 >
 > ⚠️ **恢复边界**：当前**仅支持 Kubernetes 资源对象**的备份与恢复；**不支持**云硬盘 CBS、负载均衡 CLB 等云资源的恢复。跨集群恢复要求备份组件 ≥1.1.0。
 >
-> tke API 无 `ExecuteBackup`/`Restore` Action——备份/恢复执行由 Velero（集群内插件）承担。本文覆盖 TCCLI 能做的存储位置 CRUD，并指路 Velero kubectl 命令完成灾备闭环（见 [执行备份与恢复](#执行备份与恢复velero-边界) 段）。
+> TKE API 无 `ExecuteBackup`/`Restore` Action。本文覆盖 TCCLI 能完成的存储位置 CRUD；备份与恢复应通过 TKE 备份中心执行。
 
 > ⚠️ 备份存储位置是**全局命名资源**，不绑定集群（`--ClusterId` 不是其入参）。一个位置可被多个集群共用。多地域 TKE 集群备份到同一仓库无需重复创建。单账号最多创建 **100 个**备份仓库，超出需清理闲置仓库。
 
-> 配额：COS 桶桶名须 `tke-backup` 前缀；单账号最多 **100** 个备份仓库；COS 存储另有容量限制。[配额说明](https://cloud.tencent.com/document/product/457/9087)
+> 配额：COS 桶名须以 `tke-backup` 开头；单账号最多创建 **100** 个备份仓库。国内地域与国外地域不能共用同一个备份仓库。
 
 ## 触发条件
 
-- 生产/重要集群需灾备，但还没配备份存储位置（`DescribeBackupStorageLocations` 为空）— 用本文创建位置 + Velero 执行备份
+- 生产/重要集群需灾备，但还没配备份存储位置（`DescribeBackupStorageLocations` 为空）— 用本文创建位置，再通过 TKE 备份中心执行备份
 - 需跨地域迁移集群（备份后在新地域恢复）— 先用本文配存储位置
 - 已有位置需调整 COS 桶或路径 — 删旧位置重建（位置不可改名，覆盖式修改需先删后建）
 
@@ -47,8 +47,8 @@ TKE 集群备份（基于 Velero）将集群资源（Deployment/Service/ConfigMa
 
 | 项 | 要求 | 说明 |
 |:---|:-----|:-----|
-| 桶名前缀 | **必须以 `tke-backup` 开头** | 非此前缀报 `InvalidParameter: The bucket prefix must be tke-backup` |
-| `Provider` | `tencentcloud` | 枚举值（非 `qcloud`） |
+| 桶名前缀 | **必须以 `tke-backup` 开头** | 不符合前缀约束时，服务端返回 `InvalidParameter` |
+| `Provider` | `tencentcloud` | 默认值，可省略 |
 | `StorageRegion` | COS 桶所在地域 | 如 `ap-guangzhou` |
 | `Path` | 桶内路径 | 如 `/backup` |
 
@@ -68,7 +68,7 @@ TKE 集群备份（基于 Velero）将集群资源（Deployment/Service/ConfigMa
 |:-----|:-----------|:----:|:-----|
 | `Name` | Create/Delete | 是 | 存储位置名（全局唯一） |
 | `StorageRegion` | Create | 是 | COS 桶地域 |
-| `Bucket` | Create | 是 | COS 桶名（须 `tke-backup` 前缀） |
+| `Bucket` | Create | 是 | COS 桶名：须 `tke-backup` 前缀；help 声明字符长度 19（创建前以 `tccli tke CreateBackupStorageLocation help --detail` 为准） |
 | `Provider` | Create | 否 | `tencentcloud`（默认 `tencentcloud`，可省略） |
 | `Path` | Create | 否 | 桶内路径 |
 | `Names[]` | Describe | 否 | 按名查询（空则查全部） |
@@ -81,7 +81,7 @@ TKE 集群备份（基于 Velero）将集群资源（Deployment/Service/ConfigMa
 
 ### 步骤 1：创建合规 COS 桶
 
-在 COS 服务创建桶名以 `tke-backup` 开头的桶（如 `tke-backup-myteam-1250000000`，`1250000000` 为账号 APPID）。
+在 COS 服务创建桶名以 `tke-backup` 开头的桶。help 声明 `Bucket` 字符长度 19（含前缀）；创建前以 `tccli tke CreateBackupStorageLocation help --detail` 与 COS 实际命名规则为准。
 
 ### 步骤 2：创建备份存储位置
 
@@ -118,7 +118,7 @@ tccli tke DescribeBackupStorageLocations --region <REGION>
 }
 ```
 
-> `State` 状态机：创建后 `Available`（桶可达且权限正常）/ `Unavailable`（桶不存在或无权限，查 `Message`）。**创建初期 `State` 可能为空**（异步校验未完成），稍后重查才有 `Available`/`Unavailable` 值——勿据空 `State` 判断创建失败。空账号无仓库时响应常为 `"BackupStorageLocationSet": null`（非空数组 `[]`），JMESPath 取 `[0]` 前须先判空。
+> `State` 可取 `Available` 或 `Unavailable`；不可用时检查 `Message`，并核对 COS 桶、TKE 服务角色授权和仓库配置。
 
 ## 验证
 
@@ -126,7 +126,7 @@ tccli tke DescribeBackupStorageLocations --region <REGION>
 |:-----|:-----|:-----|
 | 位置已创建 | `DescribeBackupStorageLocations` | `BackupStorageLocationSet` 含该 Name |
 | 位置可用 | 同上 | `State=Available` |
-| 桶可达 | `State=Available` 且 `Message` 空 | 桶存在且有权限 |
+| 不可用诊断 | 同上 | `State=Unavailable` 时检查 `Message`、COS 桶、服务角色授权和仓库配置 |
 | 按名查询 | `DescribeBackupStorageLocations --Names '["<LOCATION_NAME>"]'` | 返回该位置 |
 
 | 占位符 | 含义 | 约束 | 获取方式 |
@@ -136,60 +136,19 @@ tccli tke DescribeBackupStorageLocations --region <REGION>
 | `<BUCKET_NAME>` | COS 桶名 | **`tke-backup` 前缀** | COS 控制台或 `coscli ls`（TCCLI 无 cos 服务） |
 | `<LOCATION_NAME>` | 存储位置名 | 全局唯一 | 自定义 |
 
-## 执行备份与恢复（Velero 边界）
+## 执行备份与恢复（TKE 备份中心边界）
 
-> 以下命令用 **Velero CLI**（非 tccli、非 kubectl 内置）——tke API 不提供执行备份/恢复的 Action，灾备执行由 Velero 集群内插件承担。前置：集群已装 Velero 插件（见 [插件管理](../addons/manage.md)）、本地装 Velero CLI（`velero` 命令，见 [Velero 安装文档](https://velero.io/docs/main/install-overview/)）、且配好本篇的存储位置。
->
-> ⚠️ `kubectl create backup/restore` **不是有效命令**——`kubectl create` 仅支持内置资源，Velero 备份/恢复须用 `velero` CLI 或提交 Backup/Restore CRD YAML。
+TCCLI 负责备份存储位置 CRUD。创建存储位置后，在 TKE 控制台进入“运维中心 > 备份中心”，使用 TKE 备份组件创建备份或恢复。TKE 备份组件位于 `tke-backup` namespace，其中 Deployment 和 Service 名称均为 `tke-backup`。
 
-### 前置：确认 Velero 已装
-
-> Velero CLI（非 tccli；tke API 无备份执行 Action，灾备由 Velero 插件承担）
-<!-- kubectl检查Velero Pod状态，tccli无K8s Pod管理能力，非tccli边界 -->
+<!-- kubectl检查TKE备份组件，tccli无K8s工作负载管理能力，非tccli边界 -->
 ```bash
-kubectl get pods -n velero-system
-# expected: velero pod Running（若不存在，先在 TKE 控制台或 addons 装 Velero 插件）
+kubectl get deployment,service -n tke-backup tke-backup
+# expected: Deployment 与 Service 均存在；Deployment AVAILABLE 为 1 或更大
 ```
 
-> Velero CLI（非 tccli；tke API 无备份执行 Action，灾备由 Velero 插件承担）
-```bash
-velero version --client-only
-# expected: Velero CLI 版本号（若 command not found，装 Velero CLI）
-```
+跨集群恢复前，确认目标集群的备份组件版本为 1.1.0 或更高。恢复仅包含 Kubernetes 资源对象；PVC 背后的 CBS、Service/Ingress 关联的 CLB 不随备份恢复，需要另行重建或重新绑定。
 
-### 执行一次备份
-
-> Velero CLI（非 tccli；tke API 无备份执行 Action，灾备由 Velero 插件承担）
-<!-- velero执行K8s资源备份，tccli无备份执行Action，非tccli边界 -->
-```bash
-# 备份 default 命名空间所有资源到已配的存储位置
-velero backup create <BACKUP_NAME> --include-namespaces default
-# expected: Backup request submitted successfully
-```
-
-> Velero CLI（非 tccli；tke API 无备份执行 Action，灾备由 Velero 插件承担）
-```bash
-# 查看备份状态（BackupPhase 由 New → InProgress → Completed）
-velero backup get <BACKUP_NAME>
-# expected: STATUS=Completed
-```
-
-### 从备份恢复
-
-> ⚠️ 恢复只会还原 K8s 对象（Deployment/Service/ConfigMap 等）。**PVC 背后的 CBS、Service/Ingress 关联的 CLB 不会随备份恢复**——须另行重建云资源或改 YAML 绑定已有资源。
-
-> Velero CLI（非 tccli；tke API 无备份执行 Action，灾备由 Velero 插件承担）
-<!-- velero执行K8s资源恢复，tccli无恢复Action，非tccli边界 -->
-```bash
-# 从指定备份恢复（恢复到原命名空间）
-velero restore create --from-backup <BACKUP_NAME>
-# expected: Restore request submitted successfully
-
-velero restore get
-# expected: <RESTORE_NAME> STATUS=Completed
-```
-
-> Velero 是 K8s 原生灾备工具，命令以 Velero CRD（`kubectl get backup/restore`）操作，非 tccli。完整 Velero 文档见 [Velero 官方](https://velero.io/docs/)。tccli 仅管存储位置 CRUD。
+> TKE 使用自定义 `Backup`、`BackupSchedule`、`Restore` 资源。本文不使用标准 Velero CLI 或未确认的资源短名直接操作这些资源；备份和恢复以 TKE 备份中心提供的操作路径为准。
 
 ## 清理
 
@@ -204,34 +163,36 @@ tccli tke DeleteBackupStorageLocation --region <REGION> --Name <LOCATION_NAME>
 
 | 现象 | 根因 | 修复 |
 |:-----|:-----|:-----|
-| `InvalidParameter: The bucket prefix must be tke-backup` | 桶名非 `tke-backup` 前缀 | 改用合规桶名 |
-| `State=Unavailable` | 桶不存在 / 无权限 | 检查 `Message`，确认桶存在且 TKE 有访问权限 |
+| `InvalidParameter` | 桶名不符合 `tke-backup` 前缀约束 | 改用合规桶名 |
+| `State=Unavailable` | 仓库当前不可用 | 检查 `Message`，核对桶、TKE 服务角色授权和仓库配置 |
 | `Unknown options: --ClusterId` | 误传 `--ClusterId` | 该接口不绑集群，用 `Names[]` 查询 |
-| `Provider` 无效 | 用了 `qcloud` 等错误值 | 改用 `tencentcloud` |
 | 按名查询返回空 | `Names[]` 大小写/拼写错 | 核对 `Name` 与创建时一致 |
-
-> 错误样本：桶名非前缀 → `code:InvalidParameter message:The bucket prefix must be tke-backup`。
 
 ## 收尾确认
 
-> Velero CLI（非 tccli；tke API 无备份执行 Action，灾备由 Velero 插件承担）
-<!-- kubectl检查Velero插件就绪，tccli无K8s Pod管理能力，非tccli边界 -->
+<!-- kubectl检查TKE备份组件，tccli无K8s工作负载管理能力，非tccli边界 -->
 ```bash
-# 衔接下一步前置：Velero 插件就绪（backup.md 声明的备份执行前置，Verify 查 State=Available 但没查 Velero 插件能否执行备份）
-kubectl get pods -n velero-system
-# expected: velero pod Running（Velero 插件就绪，可执行 velero backup create）
+# 核对 TKE 备份组件对象
+kubectl get deployment,service -n tke-backup tke-backup
+# expected: Deployment 与 Service 均存在；Deployment AVAILABLE 为 1 或更大
 
-# 存储位置可用（步骤 3 Verify 已核 State=Available，此处核对接通性）
+# 核对存储位置状态
 tccli tke DescribeBackupStorageLocations --region <REGION> \
   --Names '["<LOCATION_NAME>"]' \
   --filter "BackupStorageLocationSet[0].{name:Name,state:State,bucket:Bucket}" --output text
-# expected: state=Available → 存储位置可达
+# expected: state=Available
 ```
 
-> 存储位置 `State=Available` + Velero 插件 pod `Running` = 备份前置就绪，可衔接 [执行备份与恢复（Velero 边界）](#执行备份与恢复velero-边界) 段。**业务可用性边界**：tccli 仅管存储位置 CRUD，执行备份须 Velero 插件就绪（见 [§概述](#概述) 产品边界警告）；Velero 未装时存储位置配好也无法备份。
+> 存储位置为 `Available` 且 `tke-backup` Deployment 可用后，在 TKE 控制台“运维中心 > 备份中心”继续创建备份或恢复。**能力边界**：TCCLI 仅管理备份存储位置 CRUD，不直接执行备份或恢复。
 
 ## 下一步
 
 - 集群创建/删除（备份对象）：[创建集群](create.md)
 - 集群升级（升级前备份）：[升级集群版本](upgrade.md)
 - 集群状态查询：[查询集群](query.md)
+
+## 精确 Action 字段契约
+
+| 字段 | 所属 Action | 必填 | 说明 |
+|:---|:---|:---:|:---|
+| `Bucket` | `CreateBackupStorageLocation` | 是 | 备份存储桶 |

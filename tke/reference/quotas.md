@@ -4,7 +4,7 @@ subtype: 8C
 ---
 # TKE 配额与限制
 
-> 资源配额与 API 限频。**TKE 资源配额默认值**以官方「购买集群配额限制」为准（可提工单调高）；API 限频以 TKE API 概览为准。超限信号列给出触发限制时看到的错误码。数值为半常量，官方调额后以官网最新表为准。
+> 资源配额与 API 限频。**TKE 资源配额默认值**以官方 [购买集群配额限制](https://cloud.tencent.com/document/product/457/9087) 为准（可提工单调高）；API 限频以 TKE API 概览为准。超限信号列给出触发限制时看到的错误码。数值为半常量，官方调额后以官网最新表为准。
 
 ## 资源配额
 
@@ -83,7 +83,7 @@ tccli tke DescribeResourceUsage --ClusterId "<CLUSTER_ID>" --region <REGION>
     "PodUsage": 5,
     "RSUsage": 3,
     "ConfigMapUsage": 2,
-    "OtherUsage": {"Name": "Other", "Usage": 1}
+    "OtherUsage": {"Name": "Other", "Usage": 1, "Details": [{"Name": "services", "Usage": 1}]}
 }
 ```
 
@@ -93,7 +93,7 @@ tccli tke DescribePostNodeResources --ClusterId "<CLUSTER_ID>" --NodeName "<NODE
 # expected: exit 0, ReservedInstanceSet[]
 ```
 
-> `DescribeResourceUsage` 返回 5 类资源存量（`CRDUsage`/`PodUsage`/`RSUsage`/`ConfigMapUsage`/`OtherUsage`，核对是否接近上限）。`DescribePostNodeResources` 查节点资源含预留实例绑定。
+> `DescribeResourceUsage` 返回 5 类资源存量：`CRDUsage`/`OtherUsage` 为对象（`Name`/`Usage`/`Details[]`），`PodUsage`/`RSUsage`/`ConfigMapUsage` 为整数。核对是否接近 [集群规格配额表](#集群规格与-k8s-资源配额按规格)。`DescribePostNodeResources` 查节点资源含预留实例绑定。
 
 ## Pod 成本核算与预留实例抵扣
 

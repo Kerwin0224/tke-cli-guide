@@ -83,28 +83,21 @@ fused: true
 | `Containers[].GpuLimit` | 不传（CPU 实例无 GPU 概念） | 可选（该容器可用 GPU 上限，整数；须 ≤ `GpuCount`） | `Container.GpuLimit` 容器内 optional int |
 | 出参 `GpuType`/`GpuCount` | 空 / `0` | 与创建一致 | `DescribeEKSContainerInstances` 出参 |
 
-> **分叉铁律**：CPU 与 GPU 不是两个 Action、不是「先建 CPU 再升级 GPU」——同一 Action 调两次建**两个**实例；改规格走 `UpdateEKSContainerInstance`（`Containers[]` 覆盖式整体替换，须带上 `GpuLimit` 才能保留 GPU 配额）。GPU 库存不足时 Create 仍可能 exit 0 返回 `EksCiIds`，随后事件 `CreatePodSandboxFailed`（Message 含 `gpu instance types is empty` / `not found t4 gpu info`），须 `Describe`+`DescribeEKSContainerInstanceEvent` 确认 Running，勿凭 exit 码判可用。
+> **分叉约束**：CPU 与 GPU 不是两个 Action、不是「先建 CPU 再升级 GPU」——同一 Action 调两次建**两个**实例；改规格走 `UpdateEKSContainerInstance`（`Containers[]` 覆盖式整体替换，须带上 `GpuLimit` 才能保留 GPU 配额）。GPU 库存不足时 Create 仍可能 exit 0 返回 `EksCiIds`，随后事件 `CreatePodSandboxFailed`（Message 含 `gpu instance types is empty` / `not found t4 gpu info`），须 `Describe`+`DescribeEKSContainerInstanceEvent` 确认 Running，勿凭 exit 码判可用。
 
 ## 关键操作
 
-### 创建 EKS 集群（存量 / 勿用于新建）
+### 识别旧 EKS 集群创建脚本（禁止调用新建）
 
-> 控制台新建 Serverless/EKS 集群入口已关闭。新需求用 [标准集群](../clusters/create.md) + [虚拟节点](../nodes/virtual-nodes.md)。下列命令仅供存量脚本对照；调用可能被产品侧拒绝。
-
-```bash
-tccli tke CreateEKSCluster \
-  --region ap-guangzhou \
-  --ClusterName "<NAME>-eks" \
-  --VpcId "<VPC_ID>" \
-  --SubnetIds '["<SUBNET_ID>"]'
-# expected: 存量环境可能返回 { "ClusterId": "cls-xxxxxxxx" }；新建入口关闭后以实际 Error.Code 为准
-```
+控制台新建 Serverless/EKS 集群入口已关闭。旧脚本中的 `CreateEKSCluster` 仅用于识别待迁移资产，不得执行；历史字段包括 `ClusterName`、`VpcId` 和 `SubnetIds`。新建免 CVM 编排需求改用 [创建标准集群](../clusters/create.md) + [虚拟节点](../nodes/virtual-nodes.md)。
 
 ### 查询 EKS 集群
 
 ```bash
 # 列出所有 EKS 集群
-tccli tke DescribeEKSClusters --region ap-guangzhou
+# Filters 当前仅支持单一 ClusterName 条件
+tccli tke DescribeEKSClusters --region ap-guangzhou \
+  --Filters '[{"Name":"ClusterName","Values":["<CLUSTER_NAME>"]}]'
 # expected: 顶层 TotalCount/Clusters/RequestId (tccli 剥离 Response 包装层, 无 Response 键); Clusters[] 元素含 ClusterId/ClusterName/VpcId/SubnetIds/K8SVersion/Status/ClusterDesc/CreatedTime
 
 # 获取凭证（须传 EKS 集群 ID；标准托管集群 ID → ResourceNotFound: `… is not exist`）
@@ -221,6 +214,16 @@ tccli tke CreateEKSContainerInstances \
 
 > CBS 云盘随实例生命周期创建销毁；NFS 是外部共享存储。
 
+## 跨字段约束
+
+| `ExistedEipIds` | `AutoCreateEip` | `AutoCreateEipAttribute` | `Replicas` | 关系 |
+|:----------------|:----------------|:-------------------------|:-----------|:-----|
+| 传已有 EIP 列表 | `false` 或不传 | 不传 | 必须等于 EIP 数量 | 绑定已有 EIP |
+| 不传 | `true` | 可选，用于带宽与计费参数 | 任意合法副本数 | 自动创建 EIP |
+| 不传 | `false` 或不传 | 不传 | 任意合法副本数 | 不绑定 EIP |
+
+`ExistedEipIds` 与自动创建 EIP 的两项参数互斥；不能一边绑定已有 EIP，一边要求自动创建。
+
 ##### 自动 EIP（AutoCreateEip / AutoCreateEipAttribute）
 
 ```bash
@@ -256,10 +259,14 @@ tccli tke UpdateEKSContainerInstance --region ap-guangzhou \
 # 查询实例（出参 EksCis[]；CPU：GpuType=""、GpuCount=0；GPU：GpuType/GpuCount 与创建一致）
 tccli tke DescribeEKSContainerInstances \
   --region ap-guangzhou \
-  --EksCiIds '["<EKSCI_ID>"]' \
-  --filter "EksCis[0].{id:EksCiId,name:EksCiName,status:Status,cpu:Cpu,mem:Memory,cpuType:CpuType,gpuType:GpuType,gpuCount:GpuCount}"
-# expected: Status=Running 时 cpu/mem 与创建一致；Pending 时 cpu/mem 可能为 0
+  --Filters '[{"Name":"status","Values":["Running"]}]' \
+  --filter "EksCis[].{id:EksCiId,name:EksCiName,status:Status,cpu:Cpu,mem:Memory,cpuType:CpuType,gpuType:GpuType,gpuCount:GpuCount}"
+# expected: Status=Running 的实例列表；cpu/mem 与创建一致
+```
 
+`Filters[].Name` 支持 `eks-ci-name`、`status`、`private-ip`、`eip-address`、`vpc-id`；其中 `status` 的合法值为 `Pending`、`Running`、`Succeeded`、`Failed`。
+
+```bash
 # 查询实例事件（Create 成功后 Status 非 Running 时必查）
 tccli tke DescribeEKSContainerInstanceEvent \
   --region ap-guangzhou \
@@ -274,10 +281,15 @@ tccli tke RestartEKSContainerInstances --region ap-guangzhou \
 # 查询日志
 tccli tke DescribeEksContainerInstanceLog \
   --region ap-guangzhou \
-  --EksCiId "<EKSCI_ID>"
-# expected: 返回容器日志文本（实例未 Running 时可能为空）
+  --EksCiId "<EKSCI_ID>" \
+  --LimitBytes 1048576
+# expected: 返回不超过 1048576 字节的容器日志文本（实例未 Running 时可能为空）
+```
 
-# 更新容器实例 (EksCiId 定位，Containers[] 覆盖式更新镜像/资源，RestartPolicy 重启策略)
+`LimitBytes` 限制本次返回的日志总大小，单位为字节；需要缩小响应或控制终端输出量时显式设置。还可用 `SinceSeconds` 只查询最近一段时间的日志。
+
+```bash
+# 更新容器实例（EksCiId 定位，Containers[] 覆盖式更新镜像/资源，RestartPolicy 重启策略）
 tccli tke UpdateEKSContainerInstance --region ap-guangzhou \
   --EksCiId "<EKSCI_ID>" \
   --RestartPolicy "Always" \
@@ -330,39 +342,25 @@ tccli tke EnableEksEventPersistence --region ap-guangzhou \
 
 > `UpdateEKSCluster` 覆盖式更新集群属性（`SubnetIds[]`/`PublicLB`/`InternalLB`/`ServiceSubnetId`/`DnsServers[]` 等均可改）。`EnableEksEventPersistence` 需先在 CLS 创建日志集与主题，再把三个 ID 传入，集群事件（Pod 创建/失败等）即投递到 CLS 供检索。
 
-## 验证
+## 验证存量 EKS 集群健康状态
 
 ```bash
-# 验证 EKS 集群创建成功（须用 DescribeEKSClusters，非 DescribeClusters）
+# 核对存量 EKS 集群状态（须用 DescribeEKSClusters，非 DescribeClusters）
 tccli tke DescribeEKSClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]' \
   --filter "Clusters[0].{id:ClusterId,state:Status,name:ClusterName}"
-# expected: state=Running, id/name 与创建参数一致
+# expected: state=Running，id/name 与目标存量集群一致
+
+# 核对存量集群凭证仍可获取
+tccli tke DescribeEKSClusterCredential --region ap-guangzhou --ClusterId "<CLUSTER_ID>" \
+  --filter "Kubeconfig"
+# expected: 非空 kubeconfig 文本（含 apiVersion/clusters）
 ```
 
-> EKS 集群 state=Running = 创建成功, 可进入 [关键操作]段管理。`DescribeEKSClusters` 入参是 `--ClusterIds`（数组 JSON），不是 `--ClusterId`。
-
----
-
-## 清理
-
-```bash
-# 1. 删除容器实例
-tccli tke DeleteEKSContainerInstances --region ap-guangzhou \
-  --EksCiIds '["<EKSCI_ID>"]'
-# expected: exit 0
-
-# 2. 删除 EKS 集群
-tccli tke DeleteEKSCluster --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
-# expected: exit 0
-
-# 3. 验证
-tccli tke DescribeEKSClusters --region ap-guangzhou
-# expected: TotalCount 减少
-```
+`Status=Running` 且 kubeconfig 非空表示存量 EKS 集群控制面可继续运维，不表示可以创建新的 EKS 集群。
 
 ## API 参考
 
-本篇覆盖 EKS / 容器实例相关 **15** 个 Action（与 chapter-plan 一致）:
+本篇覆盖 EKS / 容器实例相关 **15** 个 Action:
 
 | 分类 | API | 说明 |
 |------|-----|------|
@@ -374,20 +372,38 @@ tccli tke DescribeEKSClusters --region ap-guangzhou
 | 日志采集 | `CreateEksLogConfig` | EKS 容器实例日志投递 CLS |
 | 持久化 | `EnableEksEventPersistence` | 开启事件持久化 |
 
-## 收尾确认
+## 清理与退役（二选一）
 
-> kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
+先按目标对象选择一个分支。容器实例没有 `ClusterId`；删除容器实例不会退役 EKS 集群，退役 EKS 集群时也不得把容器实例 ID 混入操作。
+
+### 分支 A：清理容器实例
+
+仅在确认 `<EKSCI_ID>` 对应的容器实例不再承载任务、日志和所需数据已保全后执行：
+
 ```bash
-# 维度 1（跨步骤汇总）：集群 Running（Verify 已查 Status；此处再核名称与 ID 一致）
-tccli tke DescribeEKSClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]' \
-  --filter "Clusters[0].{state:Status,name:ClusterName,id:ClusterId}"
-# expected: state=Running，id/name 与创建参数一致
-
-# 维度 2（衔接下一步前置）：kubeconfig 可拉取 → 可进入 kubectl / 容器实例管理
-tccli tke DescribeEKSClusterCredential --region ap-guangzhou --ClusterId "<CLUSTER_ID>" \
-  --filter "Kubeconfig"
-# expected: 非空 kubeconfig 文本（含 apiVersion/clusters）→ EKS 集群闭环完成，可进容器实例或业务部署
+tccli tke DeleteEKSContainerInstances --region ap-guangzhou \
+  --EksCiIds '["<EKSCI_ID>"]'
+# expected: exit 0
 ```
+
+执行本分支后停止；不要继续执行分支 B。
+
+### 分支 B：退役存量 EKS 集群
+
+仅用于完成迁移后的存量 EKS 集群。执行前确认工作负载和流量已迁至标准集群 + 虚拟节点，配置、密钥、日志及持久数据已备份或迁移，目标集群已通过业务验证，并保留回退窗口。再次核对 `<CLUSTER_ID>` 后进行二次确认：
+
+```bash
+read -r -p "输入 DELETE 确认退役存量 EKS 集群 <CLUSTER_ID>: " CONFIRM
+[ "$CONFIRM" = "DELETE" ] || { printf '%s\n' "已取消删除"; exit 1; }
+
+tccli tke DeleteEKSCluster --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
+# expected: exit 0
+
+tccli tke DescribeEKSClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]'
+# expected: Clusters 为空或目标 ClusterId 不存在
+```
+
+任一迁移或业务保全条件未满足时，不执行分支 B。
 
 ---
 
@@ -397,3 +413,9 @@ tccli tke DescribeEKSClusterCredential --region ap-guangzhou --ClusterId "<CLUST
 - [虚拟节点 (超级节点)](../nodes/virtual-nodes.md) — 标准集群内免 CVM 容量（新建推荐：先 `CreateCluster` 再虚拟节点）
 - [专用工作负载概览](index.md) — EKS 集群 / 容器实例 / 边缘选型
 - [标准集群概览](../clusters/index.md) — 对比标准集群
+
+## 精确 Action 字段契约
+
+| 字段 | 所属 Action | 必填 | 说明 |
+|:---|:---|:---:|:---|
+| `EksCiIds` | `DeleteEKSContainerInstances` | 是 | 待删除容器实例 ID 列表 |

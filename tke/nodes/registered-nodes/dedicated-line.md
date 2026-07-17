@@ -32,23 +32,25 @@ fused: true
 
 ### 网络模式
 
-`DescribeExternalNodeSupportConfig` 返回集群外部节点支持依赖的网络模式：
+`DescribeExternalNodeSupportConfig` 返回集群外部节点支持的网络模式（**入参**与**出参**可能不同）：
 
-| NetworkType | 含义 | 适用 |
-|:------------|:-----|:-----|
-| `GR`（Global Router） | 容器网段独立，节点走 VPC 路由 | 目标机器可路由到集群容器网段 |
-| `VPC-CNI` | Pod 直接占用 VPC 子网 IP | 目标机器可访问 VPC 子网 |
+| NetworkType（Enable 入参） | 含义 | 适用 |
+|:---------------------------|:-----|:-----|
+| `HostNetwork` | 主机网络模式 | 目标机器与集群同 VPC / 可达；**无需** `ClusterCIDR` |
+| `CiliumBGP` | Cilium BGP 模式 | 需 BGP 互通；可配 `ClusterCIDR` |
 
-接入前先查网络模式，据此配置目标机器的网络可达性。
+> ⚠️ `EnableExternalNodeSupport` 的 `ClusterExternalConfig.NetworkType` **仅** `HostNetwork` / `CiliumBGP`。**不是** `GR` / `VPC-CNI`（那是集群容器网络模型，见 `CreateCluster` 的 `NetworkType`）。
+
+接入前先查当前配置，再按目标网络可达性选型。
 
 ## 关键字段
 
 | 参数 | 所属 Action | 必填 | 说明 |
 |:-----|:-----------|:----:|:-----|
-| `ClusterExternalConfig.NetworkType` | EnableExternalNodeSupport | 是 | 网络模式 `GR` / `VPC-CNI` |
+| `ClusterExternalConfig.NetworkType` | EnableExternalNodeSupport | 是 | **仅** `HostNetwork` / `CiliumBGP` |
 | `ClusterExternalConfig.SubnetId` | EnableExternalNodeSupport | 是 | 子网 ID |
-| `ClusterExternalConfig.ClusterCIDR` | EnableExternalNodeSupport | 是 | 集群容器网段 |
-| `ClusterExternalConfig.Enabled` | EnableExternalNodeSupport | 是 | 是否开启 |
+| `ClusterExternalConfig.ClusterCIDR` | EnableExternalNodeSupport | 否 | 集群容器网段；`HostNetwork` 时无需填 |
+| `ClusterExternalConfig.Enabled` | EnableExternalNodeSupport | 否 | **已废弃**；是否开启专线连接能力 |
 | `Name` | CreateExternalNodePool | 是 | 节点池名 |
 | `ContainerRuntime` | CreateExternalNodePool | 是 | 容器运行时，如 `containerd` |
 | `RuntimeVersion` | CreateExternalNodePool | 是 | 运行时版本，如 `1.6.9` |
@@ -68,7 +70,7 @@ tccli tke DescribeExternalNodeSupportConfig --ClusterId <CLUSTER_ID> --region <R
 ```
 ```json
 {
-    "NetworkType": "GR",
+    "NetworkType": "HostNetwork",
     "Enabled": false,
     "Status": "Disabled",
     "FailedReason": "",
@@ -77,14 +79,15 @@ tccli tke DescribeExternalNodeSupportConfig --ClusterId <CLUSTER_ID> --region <R
 }
 ```
 
-`Status` 状态机：`Disabled`（未开启）→ `enabling`（开启中）→ `Enabled`（已开启）。`FailedReason` 非空表示开启失败原因。
+`Status` 合法枚举：`Disabled`（未开启）→ `Initializing`（开启中）→ `Enabled`（已开启）/ `InitFailed`（开启失败）。`FailedReason` 非空表示开启失败原因。`Enabled` 布尔可能与 `Status` 不同步，**以 `Status` 为准**。
 
 ### 步骤 2：开启外部节点支持（若 Status=Disabled）
 
 ```bash
+# NetworkType 仅 HostNetwork / CiliumBGP（非 GR/VPC-CNI）
 tccli tke EnableExternalNodeSupport --region <REGION> \
   --ClusterId <CLUSTER_ID> \
-  --ClusterExternalConfig '{"NetworkType":"GR","SubnetId":"<SUBNET_ID>","ClusterCIDR":"<CLUSTER_CIDR>","Enabled":true}'
+  --ClusterExternalConfig '{"NetworkType":"HostNetwork","SubnetId":"<SUBNET_ID>"}'
 # expected: exit 0
 ```
 
@@ -103,14 +106,14 @@ tccli tke CreateExternalNodePool --region <REGION> \
 
 ```bash
 tccli tke DescribeExternalNodeScript --ClusterId <CLUSTER_ID> --NodePoolId <NODEPOOL_ID> --region <REGION>
-# expected: exit 0, 返回可在目标机器执行的注册脚本
+# expected: exit 0, 顶层含 Command（下载/执行命令）、Link（COS 链接）、Token（临时密钥）
 ```
 
-> `--NodePoolId` 必填，缺失报 `the following arguments are required: --NodePoolId`（exit 252）。必须先完成步骤 3 拿到 NodePoolId。
+> `--NodePoolId` 必填，缺失报 `the following arguments are required: --NodePoolId`（exit 252）。必须先完成步骤 3 拿到 NodePoolId。在目标机执行的是响应里的 `Command`。
 
 ### 步骤 5：在目标机器执行注册脚本
 
-将步骤 4 返回的脚本在目标机器执行，节点注册上线后出现在节点池中。
+将步骤 4 返回的 `Command` 在目标机器执行，节点注册上线后出现在节点池中。
 
 ## 验证
 
@@ -119,7 +122,7 @@ tccli tke DescribeExternalNodeScript --ClusterId <CLUSTER_ID> --NodePoolId <NODE
 | 支持已开启 | `DescribeExternalNodeSupportConfig` | `Status=Enabled` |
 | 节点池存在 | `DescribeExternalNodePools --ClusterId <CLUSTER_ID>` | `TotalCount >= 1` |
 | 节点已注册 | `DescribeExternalNode --ClusterId <CLUSTER_ID> --NodePoolId <NODEPOOL_ID>` | 返回节点对象 |
-| 注册脚本可用 | `DescribeExternalNodeScript` | 返回非空脚本 |
+| 注册脚本可用 | `DescribeExternalNodeScript` | `Command`/`Link` 非空 |
 
 ```bash
 tccli tke DescribeExternalNodePools --ClusterId <CLUSTER_ID> --region <REGION>
@@ -137,8 +140,8 @@ tccli tke DescribeExternalNode --ClusterId <CLUSTER_ID> \
 |--------|------|---------|
 | `<CLUSTER_ID>` | 集群 ID | `tccli tke DescribeClusters --region <REGION>` |
 | `<REGION>` | 地域，如 `ap-guangzhou` | `tccli tke DescribeRegions` |
-| `<SUBNET_ID>` | 子网 ID | `tccli vpc DescribeSubnets` |
-| `<CLUSTER_CIDR>` | 集群容器网段（CIDR） | `DescribeClusterStatus` 或自定义 |
+| `<SUBNET_ID>` | 子网 ID | `tccli vpc DescribeSubnets`；或 `DescribeClusters --version 2018-05-25` → `Clusters[].ClusterNetworkSettings.SubnetId` |
+| `<CLUSTER_CIDR>` | 集群容器网段（CIDR；CiliumBGP 等场景） | `DescribeClusters --version 2018-05-25` → `Clusters[].ClusterNetworkSettings.ClusterCIDR`（**非** `DescribeClusterStatus`） |
 | `<NODEPOOL_NAME>` | 节点池名（集群内唯一） | 自定义 |
 | `<NODEPOOL_ID>` | 节点池 ID（步骤 3 返回） | `DescribeExternalNodePools` |
 
@@ -151,25 +154,33 @@ tccli tke DescribeExternalNode --ClusterId <CLUSTER_ID> \
 | 现象 | 根因 | 修复 |
 |:-----|:-----|:-----|
 | `the following arguments are required: --NodePoolId`（exit 252） | `DescribeExternalNodeScript` 缺 NodePoolId | 先 `CreateExternalNodePool` 拿 NodePoolId |
+| `InvalidParameter.Param`（`invalid NetworkType`） | `ClusterExternalConfig.NetworkType` 传了 `GR`/`VPC-CNI` 等集群网络模型值 | 改用 `HostNetwork`（默认）或 `CiliumBGP` |
+| `InvalidParameter.Param`（`clusterCIDR should not be empty`） | `CiliumBGP` 未传 `ClusterCIDR` | 从 `DescribeClusters --version 2018-05-25` → `ClusterNetworkSettings.ClusterCIDR` 取值后重试 |
 | `AuthFailure.UnauthorizedOperation` (tke:CreateExternalNodePool) | CAM 策略要求集群带特定标签 | 给集群加授权标签或申请权限 |
-| `Status=Disabled` 始终不变 | `EnableExternalNodeSupport` 未成功 | 查 `FailedReason` 字段定位原因 |
+| `Status=Disabled`/`InitFailed` | `EnableExternalNodeSupport` 未成功或初始化失败 | 查 `FailedReason`/`Progress`；修正子网/网络后重试 Enable |
 | 脚本执行后节点未上线 | 目标机器网络不可达集群 / 运行时版本不兼容 | 检查网络连通性、`ContainerRuntime` / `RuntimeVersion` 匹配 |
 | `DeleteExternalNode` 报节点不存在 | `Names[]` 用了节点池 ID 而非节点名 | 用 `DescribeExternalNode` 返回的节点名 |
 
 ## 收尾确认
 
 ```bash
-# 业务可用性：节点已注册上线（核心交付物）
+# 端到端核对：节点已注册上线（核心交付物）
 tccli tke DescribeExternalNode --ClusterId "<CLUSTER_ID>" \
   --NodePoolId "<NODEPOOL_ID>" --region ap-guangzhou
 # expected: 返回 Nodes[]+TotalCount>=1，节点对象非空
 
-# 跨步骤汇总：支持开启 → 池存在 → 节点注册 → 脚本可用
+# 汇总核对：支持开启 → 池存在 → 节点注册 → 脚本可用
 tccli tke DescribeExternalNodeSupportConfig --ClusterId "<CLUSTER_ID>" --region ap-guangzhou \
   --filter "{status:Status,network:NetworkType}" \
   && tccli tke DescribeExternalNodePools --ClusterId "<CLUSTER_ID>" --region ap-guangzhou \
-  --filter "NodePoolSet[0].{state:LifeState,name:Name}"
-# expected: Status=Enabled + 节点池 LifeState=normal + DescribeExternalNode 返回节点
+  --filter "NodePoolSet[0].{state:LifeState,name:Name}" \
+  && tccli tke DescribeExternalNode --ClusterId "<CLUSTER_ID>" \
+  --NodePoolId "<NODEPOOL_ID>" --region ap-guangzhou \
+  --filter "{total:TotalCount,nodes:Nodes}" \
+  && tccli tke DescribeExternalNodeScript --ClusterId "<CLUSTER_ID>" \
+  --NodePoolId "<NODEPOOL_ID>" --region ap-guangzhou \
+  --filter "{command:Command,link:Link}"
+# expected: Status=Enabled；节点池 LifeState=normal；节点 total>=1 且 nodes 非空；Command 或 Link 非空
 ```
 
 ## 下一步

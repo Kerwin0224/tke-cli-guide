@@ -4,6 +4,8 @@ doc_type: Overview
 # 可观测性
 
 > 集群的监控、告警、日志。决定如何发现集群问题、排查故障。
+>
+> 官方文档：[容器服务可观测体系概述](https://cloud.tencent.com/document/product/457/118975)
 
 ## 是什么
 

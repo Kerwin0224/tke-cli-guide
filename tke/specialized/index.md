@@ -11,7 +11,7 @@ TKE 标准集群覆盖通用场景。本目录覆盖边缘与存量 EKS / 容器
 
 ## 触发条件
 
-- 你要在边缘位置（IoT/门店/CDN）运行 K8s 集群，节点处于弱网环境 — 看 [边缘集群](edge-cluster.md)（`CreateTKEEdgeCluster`；已迁移到[注册节点公网版](https://cloud.tencent.com/document/product/457/57916)）
+- 你要在边缘位置（IoT/门店/CDN）运行 K8s 集群，节点处于弱网环境 — 新建走 [标准集群](../clusters/create.md) + [注册节点公网版](https://cloud.tencent.com/document/product/457/57916)；已有 TKEEdge 资源的查询、迁移和受保护清理见 [边缘集群](edge-cluster.md)
 - 你已有存量 EKS 集群（`DescribeEKSClusters` 返回资源），需查询/扩缩容/删除 — 去 [EKS / 容器实例](eks-cluster.md)
 - 你要运行单次或常驻容器，不要 K8s 控制面 — 用 `CreateEKSContainerInstances`，见 [容器实例](eks-cluster.md#创建容器实例-部署-pod)
 - 你要新建免 CVM、仍要 K8s 编排，不确定用 `CreateEKSCluster` 还是 `CreateCluster` + 虚拟节点 — 看 [选型指南](#选型指南)
@@ -30,7 +30,7 @@ TKE 标准集群覆盖通用场景。本目录覆盖边缘与存量 EKS / 容器
 
 | 概念 | 含义 | 主 Action | 为什么重要 |
 |:-----|:-----|:----------|:-----|
-| TKEEdge | 边缘 K8s 集群 | `*TKEEdge*` | 弱网/边缘位置 |
+| TKEEdge（存量） | 已下线的边缘 K8s 集群 | `DescribeTKEEdgeClusters` / `*TKEEdge*` 存量运维接口；`CreateTKEEdgeCluster` 仅用于识别旧脚本，禁止调用新建 | 新建改用标准集群 + 注册节点公网版 |
 | 虚拟/超级节点 | 标准集群内免 CVM 容量 | `CreateCluster` + `*VirtualNode*` / `CreateNodePool Type=Super` | **新建**免 CVM 编排负载的推荐路径 |
 | EKS 集群（存量） | 独立 Serverless K8s 控制面 | `*EKSCluster*` | 新建已关；勿与 `CreateCluster` 混用 |
 | EKS 容器实例 | 无集群容器（控制台 CPU/GPU 实例） | `*EKSContainerInstance*` | 无 `ClusterId`；与虚拟节点、EKS 集群都不同 |
@@ -39,7 +39,7 @@ TKE 标准集群覆盖通用场景。本目录覆盖边缘与存量 EKS / 容器
 
 | 维度 | 标准集群 + CVM | 标准集群 + 虚拟节点 | EKS 集群（存量） | 容器实例 | 边缘集群 |
 |:-----|:---------------|:--------------------|:-----------------|:---------|:---------|
-| 先调 | `CreateCluster` | `CreateCluster` 再虚拟节点 | `CreateEKSCluster` | `CreateEKSContainerInstances` | `CreateTKEEdgeCluster` |
+| 首个操作 | `CreateCluster` | `CreateCluster` 再虚拟节点 | `DescribeEKSClusters` | `CreateEKSContainerInstances` | 新建：`CreateCluster` 后接注册节点；存量：`DescribeTKEEdgeClusters` |
 | 节点 | 自管/托管 CVM | eklet 虚拟节点 | 无自管 CVM | 无 K8s Node | 边缘机器注册 |
 | 计费 | 集群费 + CVM | 集群费 + Pod 用量 | 按 Pod 用量 | 按实例规格 | 集群费 + 边缘机 |
 | 适用 | 生产常态 | **新建**免 CVM 编排 | 存量运维 | 无编排任务 | 边缘场景 |
@@ -67,7 +67,7 @@ tccli tke DescribeTKEEdgeClusters --region <EDGE_REGION> --Limit 1
 
 ## 文档
 
-- [边缘集群](edge-cluster.md) — TKEEdge 创建、管理、注册节点
+- [边缘集群](edge-cluster.md) — TKEEdge 存量查询、迁移与受保护清理；新建改用标准集群 + 注册节点公网版
 - [EKS / 容器实例](eks-cluster.md) — 存量 EKS 集群运维 + 控制台「CPU/GPU 实例」（`CreateEKSContainerInstances`）
 - [虚拟节点 (超级节点)](../nodes/virtual-nodes.md) — 标准集群内免 CVM 容量（新建推荐；先 `CreateCluster`）
 - [标准集群概览](../clusters/index.md) — 对比标准集群

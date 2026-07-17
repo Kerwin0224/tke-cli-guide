@@ -39,7 +39,7 @@ tccli --version
 # expected: tccli 版本号
 
 tccli cvm DescribeRegions --region ap-guangzhou
-# expected: RegionSet 列表返回 → 凭证有效
+# expected: RegionInstanceSet 列表返回 → 凭证有效（顶层键 RegionInstanceSet，非 RegionSet）
 ```
 
 ### 资源检查
@@ -63,7 +63,7 @@ tccli tke DescribeClusters --region ap-guangzhou --version 2022-05-01 --output t
 
 ### 跨版本字段缺失的静默返回
 
-> `--filter`（JMESPath）按所调版本的响应结构取字段。**跨版本套用 `--filter` 表达式会取不到字段**——期待的字段在另一版不存在，JMESPath 不报错但返回 `None`（空），agent 据此判断会误以为"集群无此属性"。
+> `--filter`（JMESPath）按所调版本的响应结构取字段。**跨版本套用 `--filter` 表达式会取不到字段**——期待的字段在另一版不存在，JMESPath 不报错但返回 `None`（空），据此判断会误以为“集群无此属性”。
 
 | 跨版本套用 | 旧版取新版独有 | 新版取旧版独有 |
 |:-----|:-----|:-----|
@@ -109,7 +109,7 @@ tccli tke DescribeClusters --region ap-guangzhou --version 2022-05-01 --Limit 1 
 
 ```bash
 tccli tke DescribeClusters --region ap-guangzhou --version 2022-05-01 --Limit 10
-# expected: TotalCount + Clusters 列表（10 字段精简结构，顶层含 Errors）
+# expected: TotalCount + Clusters 列表（9 字段精简结构，顶层含 Errors）
 ```
 
 ```json
@@ -172,9 +172,11 @@ tccli tke DescribeClusters --region ap-guangzhou --version 2018-05-25 \
 ```
 
 ```text
-cls-example1	prod	vpc-example	4	containerd	True
-cls-example2	test	vpc-example	0	containerd	False
+True	cls-example1	prod	vpc-example	4	containerd
+False	cls-example2	test	vpc-example	0	containerd
 ```
+
+> 此投影的 text 列序按 key 名字母序固定为 `del,id,name,net,nodes,rt`，不是对象中的书写顺序；上例两行依次解释为删除保护、集群 ID、名称、VPC、节点数、运行时。若需按字段名稳定读取，改用 `--output json`。
 
 > 旧版 `Clusters[]` 28 字段中，19 个新版没有：`ClusterNetworkSettings`（含 VpcId/子网/CIDR）、`ClusterNodeNum`/`ClusterMaterNodeNum`/`ClusterEtcdNodeNum`（节点计数）、`ContainerRuntime`/`RuntimeVersion`（运行时）、`DeletionProtection`（删除保护）、`ClusterOs`/`ImageId`/`OsCustomizeType`（镜像）、`Property`/`ProjectId`/`CdcId`/`IsHighAvailability`/`ClusterCategory`/`SecurityModeConfig`/`EnableExternalNode`/`AutoUpgradeClusterLevel`/`QGPUShareEnable`。查这些字段必须走旧版。
 
@@ -371,7 +373,7 @@ tccli tke DescribeBatchModifyTagsStatus --ClusterId "<CLUSTER_ID>" --region <REG
 ## 收尾确认
 
 ```bash
-# 衔接下一步前置：查询通道可用 + 可进入写操作前目标核对（只读操作无残留资源/业务可用性维度，此处核对查询通道就绪供后续写操作用）
+# 核对查询通道可用 + 写操作前目标集群状态（只读操作无残留资源维度；此处确认后续写操作可依赖本查询）
 tccli tke DescribeClusters --region <REGION> --filter "TotalCount" --output text
 # expected: 数字 ≥ 0 → 列表查询通道正常
 
@@ -379,7 +381,7 @@ tccli tke DescribeClusterStatus --region <REGION> --filter "ClusterStatusSet[?Cl
 # expected: state=Running → 目标集群健康，可进入写操作（删除/升级/配置）前的目标核对
 ```
 
-> 查询通道可用 + 目标集群 `Running` = 只读闭环完成，可衔接写操作（[删除](delete.md)/[升级](upgrade.md)/[配置](configure.md)）前用本文核对目标集群 ID 与状态。只读操作无残留资源/业务可用性维度，Confirm 核对查询通道就绪作为下一步前置。
+> 查询通道可用 + 目标集群 `Running` = 只读闭环完成，可进入写操作（[删除](delete.md)/[升级](upgrade.md)/[配置](configure.md)）前用本文核对目标集群 ID 与状态。只读操作无残留资源维度，此处核对查询通道就绪作为下一步前置。
 
 ## 下一步
 

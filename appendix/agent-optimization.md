@@ -4,6 +4,8 @@ doc_type: Concept
 # Agent 优化模式
 
 > 如何用 TCCLI 的 Agent 优化 flag 组合来省 token、等异步、模板化调用、标记身份。这些模式让 agent 高效驱动 TCCLI 完成长任务。
+>
+> 官方文档：[TCCLI 使用](https://cloud.tencent.com/document/product/440/6177)
 
 ## 概述
 
@@ -113,7 +115,7 @@ tccli cvm DescribeInstances --profile prod
 # 跨账号 STS 角色切换
 # expected: 假定角色成功后返回目标账号实例列表；RoleArn 无效则 AuthFailure
 tccli cvm DescribeInstances --profile master \
-  --role-arn arn:aws:sts::123456789:role/cross-account-readonly \
+  --role-arn qcs::cam::uin/100000000001:roleName/cross-account-readonly \
   --role-session-name agent-session
 ```
 

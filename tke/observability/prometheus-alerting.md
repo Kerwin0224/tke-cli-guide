@@ -19,7 +19,7 @@ fused: true
 
 - `DescribePrometheusAlertPolicy` 返回空，需为 Prometheus 实例创建告警策略监控指标越阈
 - 告警触发但通知未送达，`DescribePrometheusGlobalNotification` → `Enabled=false` 或接收组为空
-- `DescribePrometheusAlertHistory` 无记录，规则 PromQL 永假或 Agent 采集未生效 — 看 [故障恢复]段
+- `DescribePrometheusAlertHistory` 无记录，规则 PromQL 永假或 Agent 采集未生效 — 看 [故障恢复](#故障恢复)
 
 
 ## 概述
@@ -90,7 +90,7 @@ tccli tke DescribePrometheusInstancesOverview --region <REGION>
 tccli tke CreatePrometheusAlertPolicy --region <REGION> \
   --InstanceId <PROM_INSTANCE_ID> \
   --AlertRule '{"Name":"<POLICY_NAME>","Rules":[{"Name":"<RULE_NAME>","Rule":"up == 0","For":"5m"}]}'
-# expected: exit 0, 返回 RequestId（含 AlertId）
+# expected: exit 0，返回业务告警 ID `Id` 与请求追踪 ID `RequestId`；保存 `Id` 供后续修改/删除
 ```
 
 | 占位符 | 含义 | 约束 | 获取方式 |
@@ -234,11 +234,26 @@ tccli tke DeletePrometheusAlertRule --region <REGION> \
 
 ## 收尾确认
 
+以下查询只确认规则配置、通知开关与接收组；完整闭环还必须用可控条件触发规则，并在告警历史和实际接收端分别确认触发与送达。
+
 ```bash
-# 一次性核对：告警规则已创建（出参 AlertRules[]+Total，结构以实际响应为准）
-tccli tke DescribePrometheusAlertRule --region <REGION> --InstanceId <PROM_INSTANCE_ID>   --filter "{total:Total,rules:AlertRules[].{name:Name}}"
-# expected: total>=1 → 告警配置闭环完成
+# 1. 规则存在
+tccli tke DescribePrometheusAlertRule --region <REGION> --InstanceId <PROM_INSTANCE_ID> \
+  --filter "{total:Total,rules:AlertRules[].{name:Name,id:Id}}"
+# expected: total>=1，且含目标规则名和业务 ID
+
+# 2. 通知已启用且接收组非空
+tccli tke DescribePrometheusGlobalNotification --region <REGION> --InstanceId <PROM_INSTANCE_ID>
+# expected: Notification.Enabled=true，ReceiverGroups 非空，通知渠道与预期一致
+
+# 3. 用可控条件触发后查询历史
+tccli tke DescribePrometheusAlertHistory --region <REGION> \
+  --InstanceId <PROM_INSTANCE_ID> --RuleName <RULE_NAME> \
+  --StartTime <START_TIME> --EndTime <END_TIME>
+# expected: 时间窗内出现目标规则的触发记录；随后到 SMS/EMAIL/WebHook 等实际接收端确认送达
 ```
+
+> 若当前环境不允许安全触发测试告警，只能确认“规则与通知配置已创建”，不能宣称通知闭环完成。
 
 ---
 

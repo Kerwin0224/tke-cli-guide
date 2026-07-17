@@ -5,6 +5,8 @@ fused: false
 # 术语表
 
 > 本指南涉及的腾讯云与 Kubernetes 术语速查。文档中首次出现时链接到本表对应条目。
+>
+> 官方文档：[TKE 产品概述](https://cloud.tencent.com/document/product/457/6759)
 
 ## 腾讯云
 
@@ -15,8 +17,8 @@ fused: false
 | 主账号 | Root account | 腾讯云注册账号，拥有全部权限。其 API 密钥风险最高，生产环境用子账号。 |
 | 子账号 | Sub-account / CAM 用户 | 主账号下创建的用户，授予最小权限。生产/CI/CD 应使用子账号密钥。 |
 | profile | — | TCCLI 的命名配置集。一个 profile 存一组凭证+地域，用 `--profile <NAME>` 切换，支持多账号。 |
-| 地域 | Region | 腾讯云数据中心的地理区域，如 `ap-guangzhou`（广州）、`ap-shanghai`（上海）。资源不可跨地域访问。 |
-| VPC | Virtual Private Cloud | 虚拟私有云。腾讯云上逻辑隔离的网络空间，TKE 集群部署在 VPC 内。 |
+| 地域 | Region | 腾讯云数据中心的地理区域，如 `ap-guangzhou`（广州）、`ap-shanghai`（上海）。多数资源的创建、查询和默认端点具有地域作用域；复制、同步或网络互通等跨地域能力以具体产品功能为准。 |
+| VPC | Virtual Private Cloud | 腾讯云上逻辑隔离的网络空间。TKE 节点位于用户选择的 VPC 子网；TCR 企业版是托管 Registry，可配置连接用户 VPC 的私网访问链路，不等于实例本身部署在用户 VPC 内。 |
 | 子网 | Subnet | VPC 内的 IP 地址段。TKE 节点、CVM 实例从子网分配内网 IP。 |
 | CIDR | Classless Inter-Domain Routing | 无类别域间路由，表示 IP 地址段（如 `10.0.0.0/16`）。TKE 集群的 Pod 网段、Service 网段用 CIDR 表示。 |
 | CVM | Cloud Virtual Machine | 腾讯云服务器。TKE 工作节点本质是带 K8s 组件的 CVM。 |
@@ -35,13 +37,13 @@ fused: false
 | RBAC | Role-Based Access Control | K8s 基于角色的访问控制。TKE 子账号权限通过 RBAC 授予。 |
 | OIDC | OpenID Connect | 企业身份系统单点登录协议。TKE 支持用 OIDC 接企业 SSO 认证集群。 |
 | 端点 | Endpoint | 集群 API 的访问入口。有内网端点（VPC 内访问）和公网端点（互联网访问）。 |
-| GlobalRouter | GR | TKE 的一种容器网络模型：Pod 共享 VPC 子网 CIDR，每个 Pod 占一个子网 IP。配置简单，但 IP 数受子网大小限制。 |
-| VPC-CNI | VPC-CNI | TKE 的另一种容器网络模型：Pod 直接绑定弹性网卡（ENI）的辅助 IP，Pod 与节点同 VPC 二层网络。性能好、IP 不占子网，但需 subnet 预留。 |
+| GlobalRouter | GR | TKE 容器网络模型之一：为每个节点预分配独立于 VPC 的 Pod CIDR，Pod IP 来自该段（不占 VPC 子网 IP）；跨节点经 VPC 全局路由转发。创建时须设 `ClusterCIDR`，且不得与 VPC CIDR / 同 VPC 其他集群 Pod CIDR 重叠。 |
+| VPC-CNI | VPC-CNI | TKE 推荐的容器网络模型：IPAMD 将弹性网卡（ENI）的辅助 IP 分配给 Pod，Pod 与节点同属 VPC 二层网络。**Pod IP 占用 VPC 子网地址**，须为容器预留子网（`EniSubnetIds`）；支持共享网卡 / 独立网卡及固定 Pod IP。 |
 | ENI | Elastic Network Interface | 弹性网卡。CVM/节点的虚拟网卡，VPC-CNI 模式下 Pod 通过 ENI 辅助 IP 通信。 |
 | EIP | Elastic IP | 弹性公网 IP。可绑定 CVM/CLB，提供互联网访问。公网端点常通过 EIP 暴露。 |
 | CLB | Cloud Load Balancer | 腾讯云负载均衡。TKE Service 类型 LoadBalancer 自动创建 CLB。 |
 | CBS | Cloud Block Storage | 腾讯云云硬盘。TKE 节点系统盘/数据盘、PV 持久化卷常用 CBS。 |
-| L5 | L5 | 腾讯云软负载组件（旧名 CLB-L5）。部分 TKE 网络场景提及，新场景用 CLB 替代。 |
+| L5 | L5 | **TKE 托管集群规格（ClusterLevel）** 的最低档（`L5`～`L5000`）。规格决定管理费与 K8s 资源配额（Pod/ConfigMap/CRD 等上限），见 [TKE 配额](../tke/reference/quotas.md)。与 CLB 产品无关。 |
 | kubectl | kubectl | Kubernetes 命令行工具。操作集群资源（Pod/Service/Deployment）用，与 TCCLI（操作腾讯云资源）不同。安装见 [Kubernetes 官方文档](https://kubernetes.io/docs/tasks/tools/)。 |
 
 

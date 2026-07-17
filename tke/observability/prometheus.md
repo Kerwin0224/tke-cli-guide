@@ -6,7 +6,7 @@ fused: true
 # Prometheus 监控入门
 
 > 控制台: [容器服务控制台 - Prometheus 监控](https://console.cloud.tencent.com/tke2/prometheus)
-> 创建 Prometheus 实例、关联集群 Agent、查询采集目标。Prometheus 是 TKE 监控的核心。异步操作。
+> 初始化已有 Prometheus 实例、关联集群 Agent、查询采集目标。Prometheus 是 TKE 监控的核心。异步操作。
 >
 > 官方文档：[可观测体系概述](https://cloud.tencent.com/document/product/457/118975)
 >
@@ -14,18 +14,18 @@ fused: true
 
 ## 触发条件
 
-- `DescribePrometheusInstancesOverview` 返回空，需创建独立 Prometheus 实例采集集群指标
-- `DescribePrometheusClusterAgents` 不含目标集群，Prometheus 实例已建但集群未装 Agent
-- `DescribePrometheusTargets` → 目标全 down 或无数据，Agent 已关联但采集未生效 — 看 [故障恢复]段
+- 已有 `prom-` 实例尚未初始化，需用 `RunPrometheusInstance` 初始化后再接入集群
+- `DescribePrometheusClusterAgents` 不含目标集群，Prometheus 实例已初始化但集群未装 Agent
+- `DescribePrometheusTargets` → 目标全 down 或无数据，Agent 已关联但采集未生效 — 看 [故障恢复](#故障恢复)
 
 
 ## 概述
 
-Prometheus 监控三步：创建实例 → 关联集群 Agent（采集） → 查询目标与指标。
+Prometheus 监控三步：取得已有实例 ID 并初始化 → 关联集群 Agent（采集） → 查询目标与指标。`RunPrometheusInstance` 不创建实例；它初始化 `prom-` 实例，实例购买/创建走控制台或 TMP 对应服务。
 
 | 操作 | 接口 | 作用 |
 |:-----|:-----|:-----|
-| 创建实例 | `RunPrometheusInstance` | 部署独立 Prometheus 服务 |
+| 初始化实例 | `RunPrometheusInstance` | 初始化已有 Prometheus 实例；不负责购买/创建实例 |
 | 关联 Agent | `CreatePrometheusClusterAgent` | 集群内装 Agent，上报指标 |
 | 查询目标 | `DescribePrometheusTargets` | 看采集目标状态 |
 | 查询实例 | `DescribePrometheusInstancesOverview` | 看实例列表 |
@@ -84,7 +84,7 @@ tccli cam CreateServiceLinkedRole help --detail
 | 项 | 说明 |
 |:---|:-----|
 | 用户 CAM vs LinkedRole | 用户策略决定**你**能否调 API；LinkedRole 决定**监控服务**能否访问云资源 |
-| 总表 | [配置凭证 — 服务角色](../../getting-started/credentials.md#服务角色tke--ipamd--as--tcr--可观测) |
+| 总表 | [配置凭证 — 服务角色](../../getting-started/credentials.md#服务角色tke--ipamd--as--可观测) |
 
 ## 关键字段
 
@@ -94,25 +94,25 @@ tccli cam CreateServiceLinkedRole help --detail
 
 | 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
 |:------|------|:--------:|------------|---------------|
-| InstanceId | string | 是 | 实例名，全局唯一 | `InvalidParameterValue` |
-| SubnetId | string | 是 | VPC 子网 ID | `ResourceNotFound.SubnetId` |
+| InstanceId | string | 是 | 已有 Prometheus 实例 ID（`prom-` 开头），不是自定义实例名 | `InvalidParameterValue` |
+| SubnetId | string | 否 | 初始化时可改用的新子网；省略则使用实例原子网 | `ResourceNotFound.SubnetId` |
 
-> `RunPrometheusInstance` 入参极简（仅 InstanceId + SubnetId），其他配置（规格/地域）用默认或后续修改。
+> `RunPrometheusInstance` 仅初始化已有实例，返回 `RequestId`，不返回新实例 ID。先从控制台或 `DescribePrometheusInstancesOverview` 取得 `prom-` 实例 ID。
 
 ### CreatePrometheusClusterAgent
 
 | 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
 |:------|------|:--------:|------------|---------------|
 | InstanceId | string | 是 | Prometheus 实例 ID | `ResourceNotFound` |
-| Agents | list | 是 | Agent 列表（含 ClusterId） | `InvalidParameterValue` |
+| Agents | list | 是 | 每项必填 `Region`、`ClusterType`、`ClusterId`、`EnableExternal` | `InvalidParameterValue` |
 
 ### DescribePrometheusTargets
 
 | 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
 |:------|------|:--------:|------------|---------------|
 | InstanceId | string | 是 | Prometheus 实例 ID | `ResourceNotFound` |
-| ClusterType | string | 否 | 集群类型 | — |
-| ClusterId | string | 否 | 集群 ID | `ResourceNotFound` |
+| ClusterType | string | 是 | 集群类型 | — |
+| ClusterId | string | 是 | 集群 ID | `ResourceNotFound` |
 | Filters | list | 否 | 过滤器 | `InvalidParameterValue` |
 
 ## 操作步骤
@@ -126,29 +126,31 @@ tccli cam CreateServiceLinkedRole help --detail
 - **默认推荐**: 生产用独立实例；测试可用集群内置
 - **可更换**： 独立实例创建后可改规格，但不能转为集群内置
 
-### 步骤 2：创建实例
+### 步骤 2：初始化已有实例
+
+先从控制台或实例概览取得 `prom-` 实例 ID；若账号尚无实例，先在 Prometheus/TMP 产品入口创建，不能用本 Action 代替购买。
 
 ```bash
 tccli tke RunPrometheusInstance --version 2018-05-25 --region ap-guangzhou \
-  --InstanceId "<INSTANCE_NAME>" --SubnetId "<SUBNET_ID>"
-# expected: exit 0, 返回实例 ID
+  --InstanceId "<INSTANCE_ID>" --SubnetId "<SUBNET_ID>"
+# expected: exit 0，返回 RequestId；再用 DescribePrometheusInstanceInitStatus 轮询初始化状态
 ```
 
 | 占位符 | 含义 | 约束 | 如何获取 |
 |:------------|:-----|:-----|:---------|
-| `<INSTANCE_NAME>` | Prometheus 实例名 | 全局唯一 | 自定义，如 `prod-monitor` |
-| `<SUBNET_ID>` | VPC 子网 ID | 须存在 | `tccli vpc DescribeSubnets` |
+| `<INSTANCE_ID>` | Prometheus 实例 ID | `prom-` 开头的已有实例 | `DescribePrometheusInstancesOverview` 或控制台 |
+| `<SUBNET_ID>` | 初始化使用的 VPC 子网 ID | 可省略；传入时须存在 | `tccli vpc DescribeSubnets` |
 
 ### 步骤 3：关联集群 Agent
 
 ```bash
 tccli tke CreatePrometheusClusterAgent --version 2018-05-25 --region ap-guangzhou \
   --InstanceId "<INSTANCE_ID>" \
-  --Agents '[{"ClusterId":"<CLUSTER_ID>","EnableScaling":true}]'
-# expected: exit 0, Agent 以 DaemonSet 部署到集群
+  --Agents '[{"Region":"ap-guangzhou","ClusterType":"tke","ClusterId":"<CLUSTER_ID>","EnableExternal":false}]'
+# expected: exit 0，返回 RequestId；再用 DescribePrometheusClusterAgents 确认关联
 ```
 
-> `Agents` 是数组，可一次关联多个集群。`EnableScaling=true` 允许 Agent 随节点扩缩容自动调度。
+> `Agents` 是数组，可一次关联多个集群。每项的 `Region`、`ClusterType`、`ClusterId`、`EnableExternal` 均必填；`ClusterType` 必须使用当前接口支持的集群类型值，执行前以 `CreatePrometheusClusterAgent help --detail` 和目标集群类型为准。
 
 ### 步骤 4：查询采集目标
 
@@ -200,9 +202,9 @@ tccli monitor DestroyPrometheusInstance --version 2018-07-24 --region ap-guangzh
 
 | 现象 | 诊断 | 根因 | 修复 |
 |:--------|:----------|:------------|:-----|
-| `InvalidParameterValue.InstanceId` | 查实例名格式 | 实例名含非法字符或已存在 | 换全局唯一名称 |
+| `InvalidParameterValue.InstanceId` | 查 `DescribePrometheusInstancesOverview` 是否存在该 `prom-` ID | 把自定义名称当成实例 ID，或实例不存在 | 改用已有 `prom-` 实例 ID；无实例先从产品入口创建 |
 | `ResourceNotFound.SubnetId` | `tccli vpc DescribeSubnets` | 子网不存在 | 用存在子网 |
-| `ResourceNotFound` (InstanceId) | `DescribePrometheusInstancesOverview` | Prometheus 实例不存在 | 先 `RunPrometheusInstance` |
+| `ResourceNotFound` (InstanceId) | `DescribePrometheusInstancesOverview` | Prometheus 实例不存在 | 到 Prometheus/TMP 产品入口创建实例并取得新的 `prom-` ID；`RunPrometheusInstance` 只初始化已有实例 |
 | `FailedOperation` | `DescribeClusterStatus` 查看集群状态 | 集群非 Running | 等集群 Running |
 | `UnknownAction` | 检查 `--version` | 未带 `--version 2018-05-25` 误走新版 | 显式带 `--version 2018-05-25` |
 
@@ -256,11 +258,12 @@ tccli tke DeletePrometheusTemplateSync --TemplateId "<TEMPLATE_ID>" --region <RE
 
 ## 收尾确认
 
+实例、Agent、采集目标与指标查询分别按上文“步骤 5：验证”执行；不要用实例存在性代替整条采集链路的终态证据。仅需确认实例本身存在时，可运行：
+
 ```bash
-# 一次性核对：Prometheus 实例已就绪
 tccli tke DescribePrometheusInstance --region <REGION> --InstanceId <INSTANCE_ID> \
   --filter "{name:Name,id:InstanceId}"
-# expected: id 与创建返回一致，name 非空 → Prometheus 监控闭环完成
+# expected: id 与目标实例一致，name 非空；此结果只确认实例存在，不证明 Agent、Target 或指标链路正常
 ```
 
 ---
