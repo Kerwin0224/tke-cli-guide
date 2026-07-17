@@ -50,7 +50,7 @@ tccli tke DescribeClusters --region ap-guangzhou --version 2022-05-01 --output t
 # expected: 数字 ≥ 1
 ```
 
-## 两版同名 Action：DescribeClusters
+## 两版同名 Action：DescribeClusters {#两版同名-actiondescribeclusters}
 
 > `DescribeClusters` 在 TKE 两个 API 版本中**同名存在**，**入参两版完全一致**（5 字段：`ClusterIds`/`ClusterType`/`Filters`/`Limit`/`Offset`，可跨版本传参），但**响应结构不同**——同名≠同契约。调用时用 `--version` 显式指定版本，避免静默走默认版与意图错位。
 
@@ -61,7 +61,7 @@ tccli tke DescribeClusters --region ap-guangzhou --version 2022-05-01 --output t
 
 > **本文主示例走新版（2022-05-01，官方当前版）**。需要网络配置/节点数/运行时等丰富字段时走旧版（见 [§取丰富字段（旧版独有）](#取丰富字段旧版独有)）。两版 `Clusters[]` 共有 9 字段：`ClusterId`/`ClusterName`/`ClusterDescription`/`ClusterVersion`/`ClusterType`/`ClusterStatus`/`ClusterLevel`/`CreatedTime`/`TagSpecification`。
 
-### 跨版本字段缺失的静默返回
+### 跨版本字段缺失的静默返回 {#跨版本字段缺失的静默返回}
 
 > `--filter`（JMESPath）按所调版本的响应结构取字段。**跨版本套用 `--filter` 表达式会取不到字段**——期待的字段在另一版不存在，JMESPath 不报错但返回 `None`（空），据此判断会误以为“集群无此属性”。
 
@@ -105,7 +105,7 @@ tccli tke DescribeClusters --region ap-guangzhou --version 2022-05-01 --Limit 1 
 
 > ⚠️ **高危操作**：查询无写副作用，但 `--ClusterIds` 暴露集群 ID 需保密；`--filter` 字段名拼错静默返回 `None` 而非报错，可能误导判断。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
 
-### 最小化 — 列表查询（新版，官方当前版）
+### 最小化 — 列表查询（新版，官方当前版） {#最小化-列表查询新版官方当前版}
 
 ```bash
 tccli tke DescribeClusters --region ap-guangzhou --version 2022-05-01 --Limit 10
@@ -160,7 +160,7 @@ tccli tke DescribeClusters --region ap-guangzhou --version 2022-05-01 --Limit 10
 # expected: 第 11-20 个集群；不足时 TotalCount 不变但 Clusters 变少
 ```
 
-### 取丰富字段（旧版独有）
+### 取丰富字段（旧版独有） {#取丰富字段旧版独有}
 
 > 需要网络配置、节点数、容器运行时、删除保护等字段时走旧版——这些字段新版 `Clusters[]` 已精简（19 个旧版独有字段在新版丢失）。旧版是 TCCLI 默认版，可省略 `--version`；为明确意图建议显式标注。
 
@@ -241,7 +241,7 @@ tccli tke DescribeClusterEndpoints --region ap-guangzhou --ClusterId "<CLUSTER_I
 
 > `ClusterExternalEndpoint`/`ClusterIntranetEndpoint` 为空表示未开启外网/内网访问端点，见 [管理端点](../networking/endpoints.md)。`ClusterExternalACL`（非 `SecurityPolicy`）是外网访问白名单；`SecurityGroup`/`IntranetSecurityGroup` 分别是外网/内网端点的安全组。
 
-### 集群访问凭证
+### 集群访问凭证 {#集群访问凭证}
 
 `DescribeClusterSecurity` 返回完整访问凭证（kubeconfig/密码/CA），用于配置 kubectl，见 [认证配置](../security/auth.md)。
 

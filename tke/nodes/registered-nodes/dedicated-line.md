@@ -102,7 +102,7 @@ tccli tke CreateExternalNodePool --region <REGION> \
 # expected: exit 0, 返回 NodePoolId
 ```
 
-### 步骤 4：获取节点注册脚本
+### 步骤 4：获取节点注册脚本 {#步骤-4获取节点注册脚本}
 
 ```bash
 tccli tke DescribeExternalNodeScript --ClusterId <CLUSTER_ID> --NodePoolId <NODEPOOL_ID> --region <REGION>

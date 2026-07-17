@@ -65,7 +65,7 @@ tccli tke GetClusterLevelPrice --ClusterLevel L20 --region <REGION>
 # expected: exit 0, 返回 Cost/TotalCost/Policy（价目随计费策略与地域变，以实际返回为准）
 ```
 
-#### 为什么选这个等级
+#### 为什么选这个等级 {#为什么选这个等级}
 
 - **L5 (5 节点)**: 测试/小项目，配额够用，费用低
 - **L20+ (20 节点以上)**: 生产，需更多 Pod/CRD 配额（无 L10，最小生产档是 L20）
@@ -147,7 +147,7 @@ tccli tke ModifyClusterAttribute --ClusterId "<CLUSTER_ID>" --region <REGION> \
 
 > `ClusterLevel` 变更触发计费调整。`AutoUpgradeClusterLevel.IsAutoUpgrade` 控制自动升级。
 
-### 步骤 2：修改集群标签
+### 步骤 2：修改集群标签 {#步骤-2修改集群标签}
 
 ```bash
 tccli tke ModifyClusterTags --ClusterId "<CLUSTER_ID>" --region <REGION> \
@@ -183,7 +183,7 @@ tccli tke DescribeOSImages --version 2018-05-25 --region <REGION>
 |:-------|:-----|:---------|
 | `<IMAGE_ID>` | OS 镜像 ID | `DescribeOSImages` → `OSImageSeriesSet[].ImageId` |
 
-### 步骤 4：修改组件额外参数（覆盖式）
+### 步骤 4：修改组件额外参数（覆盖式） {#步骤-4修改组件额外参数覆盖式}
 
 ```bash
 # 先备份 (见决策依据), 再覆盖
@@ -203,7 +203,7 @@ tccli tke ModifyClusterExtraArgsTaskState --ClusterId "<CLUSTER_ID>" --region <R
 > 2. **仅托管集群可用**（CAM 放行后）：`ModifyClusterExtraArgs` 只支持托管集群（MANAGED_CLUSTER），独立集群调用被拒。
 > 3. **参数校验**：`KubeAPIServer` 等组件参数必须是该 K8s 版本真实支持的 feature-gates，传不存在的参数报 `InvalidParameter.Param`（如 `Args not found: [1.34.1] is not in --feature-gates available args list`）。可用参数用 `DescribeClusterAvailableExtraArgs` 查。
 
-### 步骤 5：扩容容器网段
+### 步骤 5：扩容容器网段 {#步骤-5扩容容器网段}
 
 ```bash
 tccli tke AddClusterCIDR --ClusterId "<CLUSTER_ID>" --region <REGION> \

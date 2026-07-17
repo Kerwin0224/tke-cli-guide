@@ -116,7 +116,7 @@ tccli tke DescribeClusterSchedulerPolicy --ClusterId "<CLUSTER_ID>" --region <RE
 | `UnauthorizedOperation.CamNoAuth` | 查子账号权限 | 无 `tke:ModifyClusterSchedulerPolicy` 权限 | CAM 授权 `QcloudTKEFullAccess` |
 | 集群状态不允许 | `DescribeClusterStatus` 查状态 | 集群非 Running | 等集群就绪再修改 |
 
-## 回滚
+## 回滚 {#回滚}
 
 ```bash
 # 恢复默认调度策略（SchedulerPolicyConfig 设为空数组）

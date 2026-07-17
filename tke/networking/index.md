@@ -30,7 +30,7 @@ TKE 集群网络分两层：**访问端点**（kubectl/API Server 如何连接�
 | Global Router | 容器网段独立于 VPC | API `NetworkType` 的默认值，适合规模相对固定、无特殊 IP 和性能需求的简单业务 |
 | CiliumOverlay | Cilium Overlay 隧道承载 Pod 网络 | 仅用于分布式云第三方节点或注册节点场景 |
 
-## 网络模型对比
+## 网络模型对比 {#网络模型对比}
 
 > **按场景选择**：公有云集群推荐 **VPC-CNI**；分布式云第三方节点或注册节点推荐 **CiliumOverlay**。**Global Router（GR）**适合规模相对固定、对 IP 分配和网络性能没有特殊需求的简单业务。  
 > API 的 `NetworkType` 未传时默认 **GR**，这是入参默认值，**不等于产品推荐**；选定场景后将对应值写入 `ClusterAdvancedSettings.NetworkType`。
@@ -43,7 +43,7 @@ TKE 集群网络分两层：**访问端点**（kubectl/API Server 如何连接�
 
 > 创建 `ClusterAdvancedSettings.NetworkType` 时从 `GR`、`VPC-CNI`、`CiliumOverlay` 三选一，但不能据此断言运行态能力绝对互斥：GR 集群可通过 `EnableVpcCniNetworkType` 附加 VPC-CNI。当前公开 API 没有事后改为 CiliumOverlay 的开关或修改路径。VPC-CNI 开启约束见 [配置 VPC-CNI](vpc-cni.md)；CiliumOverlay 的创建约束见 [配置 CiliumOverlay](cilium-overlay.md)。
 
-### 转发模式半常量（与 NetworkType 正交）
+### 转发模式半常量（与 NetworkType 正交） {#转发模式半常量与-networktype-正交}
 
 | 项 | 约束 |
 |:---|:-----|

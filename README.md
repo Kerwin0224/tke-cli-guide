@@ -16,6 +16,10 @@ doc_type: Overview
 - 你已在终端装好 TCCLI 并配好凭证，想找某操作的**可执行命令** — 直接看下方快速导航
 - 你是 agent，需要一条 `tccli tke <Action>` 命令的权威写法与可执行验证 — 每篇操作文档都给命令+`# expected:`+故障恢复
 
+## Agent 先读（必读）
+
+若你是 agent：在执行任何 `tccli tke` 操作前，先读 [Agent 操作手册](appendix/agent-optimization.md)（`--filter` + `--output text`、`--cli-input-json`、`--waiter`、多键投影列序规则），再按下方导航进入具体操作篇。人类读者可跳过，直接看准备工作。
+
 ## 准备工作
 
 第一次使用？先完成以下准备，否则任何 `tccli` 命令都会因无凭证失败：
@@ -26,6 +30,7 @@ doc_type: Overview
 | 保持 TCCLI 最新 | `uv tool upgrade tccli`（旧版可能缺新接口/字段） |
 | 配置 CAM 凭证 | [配置凭证](getting-started/credentials.md) |
 | 不认识的术语 | [术语表](getting-started/glossary.md) |
+| Agent 操作手册（flag 组合） | [Agent 操作手册](appendix/agent-optimization.md) |
 
 ## 快速导航
 
@@ -34,7 +39,7 @@ doc_type: Overview
 | 5 分钟创建一个集群 | [TKE 快速入门](quickstart/tke-first-cluster.md) |
 | 查看所有 TKE 操作 | [TKE 文档](tke/index.md) |
 | 理解 TKE 双 API 版本 | [TKE 概览 - API 版本选择](tke/index.md#api-版本选择) |
-| 了解 Agent 优化 | [附录](appendix/agent-optimization.md) |
+| Agent 操作手册（先读） | [Agent 操作手册](appendix/agent-optimization.md) |
 
 ## 何时不用这套文档？
 
@@ -42,7 +47,7 @@ doc_type: Overview
 - 你用的是 Terraform / Pulumi → 去看对应的 Provider 文档
 - 你需要的是 K8s 原生 kubectl 操作 → [Kubernetes 文档](https://kubernetes.io/docs/)
 
-## 本指南不覆盖哪些操作？
+## 本指南不覆盖哪些操作？ {#本指南不覆盖哪些操作}
 
 并非所有 `tccli tke` 的 Action 都在本指南范围内。以下 Action 不在本指南——遇到它们时按对应去向处理：
 

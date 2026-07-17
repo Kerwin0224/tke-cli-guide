@@ -126,13 +126,13 @@ tccli tke DescribeClusterKubeconfig --region ap-guangzhou --ClusterId "<CLUSTER_
 | MaxNotReadyPercent | float | 否 | 升级容忍度，0-100 | `InvalidParameterValue` |
 | SkipPreCheck | boolean | 否 | 跳过前置检查，**危险**，默认 false | 跳过后可能升级失败 |
 
-> `DstVersion` 必须是 `DescribeAvailableClusterVersion` 返回的版本之一，不能用 `DescribeVersions` 的全量版本——后者含不可升级到的版本。`UpdateClusterVersion` **无** `Operation`/`UpgradeType`；节点路径的 `UpgradeType` 三值不可互换：`reset` 重装系统盘（兼容性最强）；`hot` 仅小版本原地滚动；`major` 仅大版本原地滚动。选错（如大版本传 `hot`）报 `InvalidParameterValue`。三条路径的决策见 [步骤 1](#步骤-1决策-—-选升级策略)。
+> `DstVersion` 必须是 `DescribeAvailableClusterVersion` 返回的版本之一，不能用 `DescribeVersions` 的全量版本——后者含不可升级到的版本。`UpdateClusterVersion` **无** `Operation`/`UpgradeType`；节点路径的 `UpgradeType` 三值不可互换：`reset` 重装系统盘（兼容性最强）；`hot` 仅小版本原地滚动；`major` 仅大版本原地滚动。选错（如大版本传 `hot`）报 `InvalidParameterValue`。三条路径的决策见 [步骤 1](#步骤-1决策--选升级策略)。
 
 ## 操作步骤
 
 > ⚠️ **高危操作**：集群版本升级**不可回滚**，失败需重建集群。升级前须备份 kubeconfig 并验证工作负载 API 兼容性。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
 
-### 步骤 1：决策 — 选升级策略
+### 步骤 1：决策 — 选升级策略 {#步骤-1决策--选升级策略}
 
 #### 为什么逐版本升级
 
@@ -212,7 +212,7 @@ tccli tke UpdateClusterVersion --region ap-guangzhou \
 
 > `MaxNotReadyPercent 30` 允许 30% 节点在升级期间 NotReady。值越大升级越快但风险越高，生产环境建议默认（低值）。
 
-### 步骤 4：节点跟随升级 — 按 UpgradeType 选路径
+### 步骤 4：节点跟随升级 — 按 UpgradeType 选路径 {#步骤-4节点跟随升级--按-upgradetype-选路径}
 
 Master 升级后节点未自动跟随时，用 `UpgradeClusterInstances` 按选定的 `UpgradeType` 升级节点。三值三条路径，命令结构相同，仅 `--UpgradeType` 不同：
 
@@ -263,7 +263,7 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet
 
 > 升级期间 `ClusterState=Upgrading`，可 `CancelUpgradePlan --ClusterID "<ID>" --PlanID "<PLAN_ID>"` 暂停（不是回滚，注意 `ClusterID`/`PlanID` 均大写 ID）。暂停后恢复需重新触发。
 
-## 清理
+## 清理 {#清理}
 
 > **不可回滚**：集群版本升级后无法降级到旧版本。若升级失败导致集群不可用，只能 `DeleteCluster` 重建并用备份的 kubeconfig/配置恢复工作负载（升级前必备份，见 [集群备份](backup.md)；重建见 [删除集群](delete.md) + [创建集群](create.md)）。
 >
@@ -293,7 +293,7 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet
 
 > 升级卡住超 30 分钟属异常，用 `DescribeUpgradeTaskDetail --ID "<ID>"` 看具体步骤，必要时 `CancelUpgradePlan --ClusterID "<ID>" --PlanID "<PLAN_ID>"` 后提工单附 RequestId。
 
-## 单独升级节点版本
+## 单独升级节点版本 {#单独升级节点版本}
 
 > Master 升级后节点未跟随升级时，用 `UpgradeClusterInstances` 对指定节点单独升级。这是异步任务型接口：`Operation` 控制任务生命周期，`UpgradeType` 仅在 `Operation=create` 时生效。
 
@@ -315,7 +315,7 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet
 | `resume` | 继续已暂停的任务 |
 | `abort` | 终止任务 |
 
-`Operation=create` 的三值命令演示见 [步骤 4](#步骤-4节点跟随升级-—-按-upgradetype-选路径)（hot/major/reset 三路径）。本段补 `MaxNotReadyPercent` 金丝雀变体：
+`Operation=create` 的三值命令演示见 [步骤 4](#步骤-4节点跟随升级--按-upgradetype-选路径)（hot/major/reset 三路径）。本段补 `MaxNotReadyPercent` 金丝雀变体：
 
 ```bash
 # 金丝雀升级指定节点（UpgradeType 同步骤 4，加 MaxNotReadyPercent 容忍度）

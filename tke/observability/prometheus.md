@@ -62,7 +62,7 @@ tccli vpc DescribeSubnets --region <REGION> --Filters '[{"Name":"vpc-id","Values
 > 2. **服务相关角色**：官方创建监控实例前需授权 **`TKE_QCSLinkedRoleInPrometheusService`**（名称以控制台/当前账号为准），见下节。  
 > 未授权时后续 Create/Run 同样会被拒，勿将 CAM 拒绝误判为参数错误。
 
-### 服务相关角色
+### 服务相关角色 {#服务相关角色}
 
 > 官方 [创建监控实例](https://cloud.tencent.com/document/product/457/71897)：**服务授权** 创建 LinkedRole，授权 Prometheus 访问相关云产品。与用户 `QcloudTKEFullAccess` 不是同一层。
 
@@ -117,7 +117,7 @@ tccli cam CreateServiceLinkedRole help --detail
 
 ## 操作步骤
 
-### 步骤 1：决策 — 实例规格
+### 步骤 1：决策 — 实例规格 {#步骤-1决策-实例规格}
 
 #### 为什么用独立 Prometheus 实例
 
@@ -202,7 +202,7 @@ tccli monitor DestroyPrometheusInstance --version 2018-07-24 --region ap-guangzh
 
 > 实例删除 Action 为 `monitor DestroyPrometheusInstance`（tke 无实例级删除 Action）。按量计费实例销毁后停止计费；包年包月实例销毁按退费规则处理。
 
-## 故障恢复
+## 故障恢复 {#故障恢复}
 
 ### 命令返回错误 (exit ≠ 0)
 

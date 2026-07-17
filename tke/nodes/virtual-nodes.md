@@ -211,7 +211,7 @@ tccli tke DeleteClusterVirtualNodePool --ClusterId "<ID>" --NodePoolId "<POOL>"
 # expected: exit 0
 ```
 
-## 故障恢复
+## 故障恢复 {#故障恢复}
 
 | 现象 | 诊断 | 根因 | 修复 |
 |---------|----------|------------|-----|

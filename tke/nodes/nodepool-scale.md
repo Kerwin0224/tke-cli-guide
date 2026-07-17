@@ -79,7 +79,7 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet
 
 ## 操作步骤
 
-### 步骤 1：决策 — 扩容 vs 缩容
+### 步骤 1：决策 — 扩容 vs 缩容 {#步骤-1决策-扩容-vs-缩容}
 
 #### 为什么区分扩缩容策略
 
@@ -277,7 +277,7 @@ tccli tke ModifyClusterNodePool --region ap-guangzhou \
 > **副作用警告**：缩容会释放 CVM 实例，节点上数据不可恢复。扩容产生的新 CVM 按量计费，缩容后停止计费。
 > 若想保留节点但移出节点池，用 `RemoveNodeFromNodePool`（不销毁 CVM），见 [创建节点池 — 节点池成员与机型管理](nodepool-create.md#节点池成员与机型管理)。
 
-## 故障恢复
+## 故障恢复 {#故障恢复}
 
 ### 命令返回错误 (exit ≠ 0)
 

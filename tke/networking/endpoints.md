@@ -95,7 +95,7 @@ tccli tke DescribeClusterEndpointStatus --region <REGION> \
 3. 独立集群的客户端需要公网访问时，可使用新接口创建公网端点。
 4. 托管集群使用新接口时仅创建内网端点；其老外网端口安全策略见[管理托管集群老外网端口](#管理托管集群老外网端口)。
 
-### 步骤 2：开启公网端点（本机 / 公网 CI）
+### 步骤 2：开启公网端点（本机 / 公网 CI） {#步骤-2开启公网端点本机--公网-ci}
 
 ```bash
 tccli tke CreateClusterEndpoint --region <REGION> \
@@ -113,7 +113,7 @@ tccli tke DescribeClusterEndpointStatus --region <REGION> \
 
 公网端点使用外网 CLB。检查绑定到外网 CLB 的安全组，确保其入站规则仅对客户端来源 IP 放通 TCP 443。
 
-### 步骤 3：开启内网端点（同 VPC）
+### 步骤 3：开启内网端点（同 VPC） {#步骤-3开启内网端点同-vpc}
 
 独立集群和托管集群均可使用新接口创建内网端点：
 
@@ -126,7 +126,7 @@ tccli tke CreateClusterEndpoint --region <REGION> \
 
 内网端点可自动创建或复用已有 CLB。客户端必须位于集群 VPC 可达的网络环境中；公网客户端应先通过专线、VPN 等方式接入 VPC，或在受支持的集群模式下使用公网端点。
 
-### 管理托管集群老外网端口
+### 管理托管集群老外网端口 {#管理托管集群老外网端口}
 
 `ModifyClusterEndpointSP` 仅适用于**托管集群老外网端口**。`SecurityPolicies` 接受 CIDR 字符串数组；该接口还可通过 `SecurityGroup` 修改外网访问安全组。两者字段不同，但不能据此否定安全组对外网访问的控制能力。
 

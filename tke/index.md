@@ -36,6 +36,8 @@ graph TD
 - 你已读完 [快速入门](../quickstart/tke-first-cluster.md)，需查阅某个具体操作（节点池/网络/安全/可观测）— 看下方下一步或 [集群管理](clusters/index.md)
 - 你遇到 TKE API 双版本困惑（`2018-05-25` vs `2022-05-01` 哪个该用）— 直接看 [API 版本选择](#api-版本选择)
 
+> Agent：调用 `tccli tke` 前先掌握 [Agent 操作手册](../appendix/agent-optimization.md) 的 flag 组合（压缩管道 / 模板入参 / waiter）。
+
 ## 核心概念
 
 | 概念 | 含义 | 为什么重要 |
@@ -55,13 +57,13 @@ graph TD
 | MANAGED_CLUSTER (托管) | 生产环境 | 腾讯云运维 | 控制台/API 一键 | 集群管理费 + 节点费 | ✅ |
 | INDEPENDENT_CLUSTER (独立) | 存量：完全控制 Master | 你运维 Master CVM | 手动 | 节点费（含 Master CVM） | ❌ 已停止新建 |
 
-## 控制台创建流全景
+## 控制台创建流全景 {#控制台创建流全景}
 
 > 控制台「新建集群」是进入 TKE 的第一个决策流。下表把控制台决策步映射到 tccli Action/字段与承载文档，标明每步调用哪个 Action、哪篇文档展开。控制台按决策步组织，tccli 按 Action 组织——本表是两者间的地图。
 >
 > **先选集群形态**（控制台第一屏）：TKE 标准集群（`CreateCluster`，默认）/ Serverless·EKS 集群（[存量运维](specialized/eks-cluster.md)，**新建入口已关闭**；新建免 CVM 用标准集群 + [虚拟节点](nodes/virtual-nodes.md)，两步）/ 注册集群（与 [注册节点](nodes/registered-nodes/overview.md) 不同；控制台标即将下线）。控制台「容器实例」CPU/GPU 不在本向导内，见 [容器实例](specialized/eks-cluster.md#创建容器实例-部署-pod)。
 
-### 托管集群（4 步）
+### 托管集群（4 步） {#托管集群4-步}
 
 | 控制台步 | 决策项 | tccli 字段 / Action | 承载文档 |
 |:--------|:------|:-------------------|:--------|
@@ -95,7 +97,7 @@ graph TD
 | 超级节点 | `Super` | Serverless 理念，运维轻量化；单 Pod 独占轻量虚拟机，强隔离无干扰；秒级扩缩容 | 弹性业务、隔离性要求高、轻量运维 |
 | 注册节点 | `External` | IDC 资源接入云端管理，本地资源利旧；云下云上混合调度；支持日志/监控/事件/安全等云原生能力 | 云上云下资源统一管理（边缘场景优先 [注册节点公网版](https://cloud.tencent.com/document/product/457/57916)；勿与「注册集群」混淆） |
 
-## 不适用场景
+## 不适用场景 {#不适用场景}
 
 - 只有一两个容器、不需要 K8s 编排 → [CVM](https://cloud.tencent.com/product/cvm) + Docker Compose
 - **新建**免 CVM、要 K8s 编排 → **不要** `CreateEKSCluster`：① [标准集群](clusters/create.md)（`CreateCluster`）② [虚拟节点](nodes/virtual-nodes.md)；仅调 `CreateCluster` 不等于免 CVM 算力。无集群只要容器 → [容器实例](specialized/eks-cluster.md#创建容器实例-部署-pod)。存量 EKS 见 [EKS](specialized/eks-cluster.md)（新建入口已关闭）
@@ -103,7 +105,7 @@ graph TD
 - 把「注册集群」与「注册节点」混用 → 注册节点走 [注册节点](nodes/registered-nodes/overview.md)；注册集群控制台标即将下线，勿套用到注册节点配额
 - 需要多云 K8s 控制面 → 考虑 KubeVela / Crossplane（非本产品范围）
 
-## API 版本选择
+## API 版本选择 {#api-版本选择}
 
 TKE 有两个 API 版本，TCCLI 默认走 `2018-05-25`，但**官方当前版本是 `2022-05-01`**（TCCLI 的 `(recommended)` 标记只是对版本列表首元素的机械标记，不代表官方推荐）。
 

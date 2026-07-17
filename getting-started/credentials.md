@@ -148,7 +148,7 @@ tccli tke DescribeRegions
 
 > ⚠️ **不要用 `tccli auth verify`**——该子命令**不存在**（`tccli auth` 仅有 login/logout/help，执行 verify 返回 exit 252 Invalid choice）。凭证验证用 `tccli tke DescribeRegions` 这类轻量只读调用。
 
-## 服务角色（TKE / IPAMD / AS / 可观测）
+## 服务角色（TKE / IPAMD / AS / 可观测） {#服务角色tke--ipamd--as--可观测}
 
 > CAM **用户密钥**（SecretId/SecretKey）让 **你** 调 API；**服务角色**让 **云产品** 代你访问其他产品（TKE→CVM/CLB/CBS，IPAMD→ENI，节点池→AS，Prometheus→监控链路）。密钥配好后仍可能因缺服务角色失败——错误码与用户侧 `CamNoAuth` 不同。  
 > 官方角色/策略语义以 [服务授权相关角色权限说明](https://cloud.tencent.com/document/product/457/43416) 为准；下列 CLI 为 agent 可执行探测与补齐路径。
@@ -196,7 +196,7 @@ tccli cam ListAttachedRolePolicies --Page 1 --Rp 50 --RoleName TKE_QCSRole \
 | 节点池 | 上列 + `AS_QCSRole` |
 | Prometheus | `TKE_QCSLinkedRoleInPrometheusService` 或官方当前 Linked 角色名 |
 
-### 补 TKE_QCSRole（主服务角色）
+### 补 TKE_QCSRole（主服务角色） {#补-tke_qcsrole主服务角色}
 
 > **推荐主路径**：首次登录 [容器服务控制台](https://console.cloud.tencent.com/tke2) 弹窗 **同意授权**（官方 43416）。  
 > **CLI 等价**（子账号须有 `cam:CreateRole` / `cam:AttachRolePolicy`；无 CAM 写权限则只能控制台主账号授权）：
@@ -229,7 +229,7 @@ tccli cam AttachRolePolicy \
 # expected: RequestId
 ```
 
-### 补 IPAMDofTKE_QCSRole（VPC-CNI 前置）
+### 补 IPAMDofTKE_QCSRole（VPC-CNI 前置） {#补-ipamdoftke_qcsrolevpc-cni-前置}
 
 > 首次使用 **VPC-CNI** 时官方要求授权 IPAMD，见 43416「IPAMDofTKE_QCSRole」。quickstart 默认 VPC-CNI，**建集群前应探测**。
 
@@ -249,7 +249,7 @@ tccli cam AttachRolePolicy \
 # tccli cam AttachRolePolicy --AttachRoleName IPAMDofTKE_QCSRole --PolicyName QcloudAccessForIPAMDRoleInQcloudAllocateEIP
 ```
 
-### 补 AS_QCSRole（节点池前置）
+### 补 AS_QCSRole（节点池前置） {#补-as_qcsrole节点池前置}
 
 > 完整步骤见 [创建节点池 — AS 服务角色](../tke/nodes/nodepool-create.md#as-服务角色节点池创建前)。最短：
 
@@ -349,9 +349,10 @@ tccli configure remove --profile <PROFILE_NAME>
 tccli tke DescribeRegions --filter "TotalCount" --output text
 # expected: 非零数字 → 凭证对 TKE 域可达
 
-# profile 核查：确认当前用的是哪个 profile（避免误用主账号密钥）
-tccli configure list | grep -E "^region|^output"
-# expected: region/output 行明文显示（凭证段不 grep，避免密钥入终端历史）
+# profile 核查：对目标 profile 发起只读调用，避免打印本地凭证
+# 将 <PROFILE_NAME> 替换为要验证的 profile；默认 profile 可省略 --profile
+tccli tke DescribeRegions --profile <PROFILE_NAME> --filter "TotalCount" --output text
+# expected: 数字且响应无 Error
 ```
 
 > TKE 域可调用 + 默认 profile 仅子账号密钥 = 凭证配置闭环完成，可进入任意 TKE 操作。

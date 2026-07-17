@@ -63,7 +63,7 @@ tccli tke DescribeAddon --region ap-guangzhou --ClusterId "<CLUSTER_ID>" --Addon
 # expected: 列表字段为 Addons[]（非 AddonSet）；空数组（未安装）或 Phase=Succeeded（已装）。不传 AddonName 返回集群全部插件
 ```
 
-### CFS 服务授权
+### CFS 服务授权 {#cfs-服务授权}
 
 > 首次安装 **CFS** 扩展组件时，官方要求为 `TKE_QCSRole` 关联策略 `QcloudAccessForTKERoleInCreatingCFSStorageclass`（43416）。未授权时组件/文件系统相关操作失败。
 
@@ -123,7 +123,7 @@ tccli tke GetTkeAppChartList --region ap-guangzhou --Arch amd64
 
 ## 操作步骤
 
-### 步骤 1：决策 — 插件版本选择
+### 步骤 1：决策 — 插件版本选择 {#步骤-1决策-插件版本选择}
 
 #### 为什么选最新兼容版本
 
@@ -176,7 +176,7 @@ tccli tke InstallAddon --region ap-guangzhou \
 # expected: exit 0
 ```
 
-### 步骤 3：更新 — 升级版本
+### 步骤 3：更新 — 升级版本 {#步骤-3更新-升级版本}
 
 ```bash
 tccli tke UpdateAddon --region ap-guangzhou \
@@ -232,7 +232,7 @@ tccli tke DescribeAddon --region ap-guangzhou --ClusterId "<CLUSTER_ID>" --Addon
 | `AddonVersion` | `UpdateAddon` | 条件 | 与 `RawValues` 至少传一个；仅改配置时可省略版本 |
 | `RawValues` | `UpdateAddon` | 条件 | 与 `AddonVersion` 至少传一个；仅升级版本时可省略配置 |
 
-## 故障恢复
+## 故障恢复 {#故障恢复}
 
 ### 命令返回错误 (exit ≠ 0)
 

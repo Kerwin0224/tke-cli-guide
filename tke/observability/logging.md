@@ -91,7 +91,7 @@ tccli tke CreateCLSLogConfig --region ap-guangzhou \
 # expected: exit 0；可选 --LogsetId 指定 CLS 日志集
 ```
 
-### 开启控制面日志
+### 开启控制面日志 {#开启控制面日志}
 
 ```bash
 # ClusterType 仅 tke；Components.Name 当前支持 cluster-autoscaler / kapenter
@@ -189,11 +189,11 @@ tccli tke DeleteLogConfigs --region ap-guangzhou \
 | 控制面日志 CLS 无记录 | `tccli cls SearchLog` | TopicId 错或索引未开 | 核对 TopicId，CLS 开启主题索引 |
 | 部分节点无业务日志 | `kubectl get ds -n kube-system -o wide` | Agent 未调度到某节点（污点/资源） | 检查节点污点与资源 |
 
-## 集群巡检与日志配置
+## 集群巡检与日志配置 {#集群巡检与日志配置}
 
 > 集群健康巡检结果查询、控制面日志查询、日志配置管理。
 
-### 集群巡检
+### 集群巡检 {#集群巡检}
 
 ```bash
 # 巡检结果概览 (按集群, GroupBy 分组)

@@ -63,9 +63,9 @@ tccli tcr DescribeInternalEndpoints --region ap-guangzhou --RegistryId "<REGISTR
 # expected: ≥ 1
 ```
 
-未接入 → [访问控制](https://cloud.tencent.com/document/product/1141)
+未接入 → [TCR 访问控制官方文档](https://cloud.tencent.com/document/product/1141)
 
-## 步骤 1：创建 TCR 访问凭证
+## 步骤 1：创建 TCR 访问凭证 {#步骤-1创建-tcr-访问凭证}
 
 ```bash
 # 取临时 Token（返回 Username + Token + ExpTime）

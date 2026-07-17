@@ -31,7 +31,7 @@ VPC-CNI 是 TKE 的三种 Pod 网络模型之一（另两种：Global Router / C
 > 配额：VPC 子网可用 IP 数决定 VPC-CNI Pod 上限；容器网段 CIDR 创建时自定义暂不支持变更。[配额限制](https://cloud.tencent.com/document/product/457/9087)
 > ⚠️ **高危操作**：开启 VPC-CNI 后不可回退至 GlobalRouter（关闭前须先迁移已有 VPC-CNI Pod）；子网 IP 耗尽致新 Pod 无法调度。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
 
-### IPAMD 服务角色
+### IPAMD 服务角色 {#ipamd-服务角色}
 
 > **服务角色** `IPAMDofTKE_QCSRole` 与集群内 **eniipamd 组件** 是两层：前者是 CAM 授权 TKE IPAMD 访问 CVM/VPC/ENI；后者是集群里跑的 DaemonSet/Deploy。缺角色时控制台/API 侧无法正常完成 VPC-CNI 授权路径，与 `DescribeIPAMD` 的 `EnableIPAMD=false`（组件未开）不同。官方： [43416 — IPAMDofTKE_QCSRole](https://cloud.tencent.com/document/product/457/43416)。
 
@@ -233,7 +233,7 @@ tccli tke DisableVpcCniNetworkType --region ap-guangzhou --ClusterId "<CLUSTER_I
 
 > 关闭前确认无 VPC-CNI Pod 运行，否则这些 Pod 会失联。建议先迁移到 Global Router 节点。
 
-## 故障恢复
+## 故障恢复 {#故障恢复}
 
 ### 命令返回错误 (exit ≠ 0)
 

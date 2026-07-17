@@ -46,6 +46,7 @@ fused: false
 | L5 | L5 | **TKE 托管集群规格（ClusterLevel）** 的最低档（`L5`～`L5000`）。规格决定管理费与 K8s 资源配额（Pod/ConfigMap/CRD 等上限），见 [TKE 配额](../tke/reference/quotas.md)。与 CLB 产品无关。 |
 | kubectl | kubectl | Kubernetes 命令行工具。操作集群资源（Pod/Service/Deployment）用，与 TCCLI（操作腾讯云资源）不同。安装见 [Kubernetes 官方文档](https://kubernetes.io/docs/tasks/tools/)。 |
 
+
 ## tccli
 
 | 术语 | 释义 |

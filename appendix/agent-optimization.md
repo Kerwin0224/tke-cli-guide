@@ -28,7 +28,7 @@ graph LR
 
 ## 5 个模式
 
-### 1. 压缩管道 — 省 token
+### 1. 压缩管道 — 省 token {#1-压缩管道-省-token}
 
 **何时用**：查询资源列表，无需完整 JSON。列表查询场景优先使用本组合。
 
@@ -66,7 +66,7 @@ tccli tcr DescribeInstances --region ap-guangzhou \
 # → tcr-xxxx   <name>   列序 = id, name（key 字母序），非 name, id
 ```
 
-### 2. 模板驱动 — 确定入参
+### 2. 模板驱动 — 确定入参 {#2-模板驱动-确定入参}
 
 **何时用**：创建/修改资源，参数复杂或反复执行。
 
@@ -88,7 +88,7 @@ tccli cvm RunInstances --cli-input-json file://template.json
 
 > ⚠️ 输出骨架（`--generate-cli-skeleton output`）未实现。获取输出结构的方法：先用最小查询（如 `--Limit 1`）调一次，从响应学习返回结构，再写 `--filter`。
 
-### 3. 异步等待 — 长任务原语
+### 3. 异步等待 — 长任务原语 {#3-异步等待-长任务原语}
 
 **何时用**：创建、启动、扩容等异步操作，替代手写轮询循环。
 
@@ -107,7 +107,7 @@ tccli cvm RunInstances --cli-input-json file://create.json \
 
 > ⚠️ waiter 参数必须用 **JSON 格式**（双引号），不能用 Python dict（单引号）。正确：`'{"expr":"...","to":"RUNNING"}'`。
 
-### 4. 多环境切换 — 身份隔离
+### 4. 多环境切换 — 身份隔离 {#4-多环境切换-身份隔离}
 
 **何时用**：管理多账号、多地域、跨账号 STS 角色。
 
@@ -123,7 +123,7 @@ tccli cvm DescribeInstances --profile master \
   --role-session-name agent-session
 ```
 
-### 5. 审计追踪 — 标记 agent 身份
+### 5. 审计追踪 — 标记 agent 身份 {#5-审计追踪-标记-agent-身份}
 
 **何时用**：多 agent 协作，区分调用来源（进 CloudAudit 日志）。
 

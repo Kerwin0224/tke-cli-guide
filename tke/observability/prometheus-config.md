@@ -54,7 +54,7 @@ tccli tke DescribeClusters --region <REGION> --filter "Clusters[*].ClusterId" --
 # expected: exit 0, 含目标 ClusterId
 ```
 
-## 关键字段
+## 关键字段 {#关键字段}
 
 > 注意多组同名入参契约不同：Create 的采集器是对象数组（含 Name/Config），Delete 的同名入参是字符串数组（仅 Name）。
 
@@ -270,7 +270,7 @@ tccli tke DeletePrometheusTemp --region <REGION> --TemplateId <TEMPLATE_ID>
 
 > 注意 `DeletePrometheusConfig` 的 `ServiceMonitors` 是**字符串数组**（Name 列表），与 `CreatePrometheusConfig` 的对象数组不同——混用会参数错误。
 
-## 故障恢复
+## 故障恢复 {#故障恢复}
 
 ### 命令返回错误（exit ≠ 0）
 

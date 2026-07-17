@@ -126,7 +126,7 @@ tccli vpc AssignIpv6SubnetCidrBlock --region <REGION> \
 
 > ⚠️ **顺序约束**：`AssignIpv6SubnetCidrBlock` 须在「2. 创建子网」之后执行（须先有子网 ID）。故双栈集群的完整准备顺序是：创建 VPC → 分配 VPC IPv6 CIDR（`AssignIpv6CidrBlock`）→ 创建子网 → 分配子网 IPv6 CIDR → 创建集群(双栈)。`Ipv6CidrBlock` 由腾讯云分配（非自取），子网 IPv6 CIDR 须落在 VPC 的 `/56` 内。
 
-### 2. 创建子网
+### 2. 创建子网 {#2-创建子网}
 
 ```bash
 tccli vpc CreateSubnet --region <REGION> \
@@ -192,7 +192,7 @@ tccli vpc CreateSecurityGroupPolicies --region <REGION> \
 
 节点安全组放通要点见 [创建节点池 — 安全组](../tke/nodes/nodepool-create.md#安全组节点加入前)；完整默认表见 [容器服务安全组设置](https://cloud.tencent.com/document/product/457/9084)。
 
-## 验证
+## 验证 {#验证}
 
 从四个维度确认 VPC + 子网就绪：
 
