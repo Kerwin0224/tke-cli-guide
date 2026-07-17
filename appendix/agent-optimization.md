@@ -70,14 +70,18 @@ tccli tcr DescribeInstances --region ap-guangzhou \
 
 **何时用**：创建/修改资源，参数复杂或反复执行。
 
+#### 1. 生成入参模板
+
 ```bash
-# 1. 生成入参模板
 # expected: stdout/文件为 JSON 骨架，顶层含 Placement/ImageId 等键
 tccli cvm RunInstances --generate-cli-skeleton > template.json
+```
 
-# 2. 编辑 template.json，填入实际值
+#### 2. 编辑 template.json，填入实际值
 
-# 3. 模板调用
+#### 3. 模板调用
+
+```bash
 # expected: 成功时返回 InstanceIdSet；失败时 Error.Code 非空
 tccli cvm RunInstances --cli-input-json file://template.json
 ```

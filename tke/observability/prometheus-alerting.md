@@ -129,20 +129,27 @@ Modify 为覆盖式：`AlertRule.Id` 指定改哪条，`Rules[]` 整体替换。
 >
 > `Create` 返回 `Id`、`Describe` 返回 `AlertRules[]`+`Total`。
 
+#### 1. 创建告警规则（独立 Action，AlertRule 单数入参含 Rules[]）
+
 ```bash
-# 1. 创建告警规则（独立 Action，AlertRule 单数入参含 Rules[]）
 tccli tke CreatePrometheusAlertRule --region <REGION> \
   --InstanceId <PROM_INSTANCE_ID> \
   --AlertRule '{"Name":"<RULE_NAME>","Rules":[{"Name":"<RULE_NAME>","Rule":"up == 0","For":"5m"}]}'
 # expected: CAM 拦截 AuthFailure.UnauthorizedOperation；授权后返回 Id
+```
 
-# 2. 查询告警规则（InstanceId + Filters/Offset/Limit）
+#### 2. 查询告警规则（InstanceId + Filters/Offset/Limit）
+
+```bash
 tccli tke DescribePrometheusAlertRule --region <REGION> \
   --InstanceId <PROM_INSTANCE_ID> \
   --Filters '[{"Name":"Name","Values":["<RULE_NAME>"]}]' --Offset 0 --Limit 20
 # expected: CAM 拦截 UnauthorizedOperation（云API网关层）；授权后返回 AlertRules[]+Total
+```
 
-# 3. 修改告警规则（AlertRule.Id 寻址，覆盖式）
+#### 3. 修改告警规则（AlertRule.Id 寻址，覆盖式）
+
+```bash
 tccli tke ModifyPrometheusAlertRule --region <REGION> \
   --InstanceId <PROM_INSTANCE_ID> \
   --AlertRule '{"Name":"<RULE_NAME>","Id":"<ALERT_ID>","Rules":[{"Name":"<RULE_NAME>","Rule":"up == 0","For":"10m"}]}'
@@ -236,17 +243,24 @@ tccli tke DeletePrometheusAlertRule --region <REGION> \
 
 以下查询只确认规则配置、通知开关与接收组；完整闭环还必须用可控条件触发规则，并在告警历史和实际接收端分别确认触发与送达。
 
+#### 1. 规则存在
+
 ```bash
-# 1. 规则存在
 tccli tke DescribePrometheusAlertRule --region <REGION> --InstanceId <PROM_INSTANCE_ID> \
   --filter "{total:Total,rules:AlertRules[].{name:Name,id:Id}}"
 # expected: total>=1，且含目标规则名和业务 ID
+```
 
-# 2. 通知已启用且接收组非空
+#### 2. 通知已启用且接收组非空
+
+```bash
 tccli tke DescribePrometheusGlobalNotification --region <REGION> --InstanceId <PROM_INSTANCE_ID>
 # expected: Notification.Enabled=true，ReceiverGroups 非空，通知渠道与预期一致
+```
 
-# 3. 用可控条件触发后查询历史
+#### 3. 用可控条件触发后查询历史
+
+```bash
 tccli tke DescribePrometheusAlertHistory --region <REGION> \
   --InstanceId <PROM_INSTANCE_ID> --RuleName <RULE_NAME> \
   --StartTime <START_TIME> --EndTime <END_TIME>

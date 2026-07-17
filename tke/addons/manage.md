@@ -76,8 +76,10 @@ tccli cam ListAttachedRolePolicies --Page 1 --Rp 50 --RoleName TKE_QCSRole \
 tccli cam AttachRolePolicy \
   --AttachRoleName TKE_QCSRole \
   --PolicyName QcloudAccessForTKERoleInCreatingCFSStorageclass
-# expected: RequestId；Role not exist → 先补 [TKE_QCSRole](../../getting-started/credentials.md#补-tke_qcsrole主服务角色)
+# expected: RequestId；Role not exist → 先补 TKE_QCSRole
 ```
+
+Role not exist → 先补 [TKE_QCSRole](../../getting-started/credentials.md#补-tke_qcsrole主服务角色)
 
 > 总表：[配置凭证 — 服务角色](../../getting-started/credentials.md#服务角色tke--ipamd--as--可观测)。包年包月云盘另需 `QcloudCVMFinanceAccess`（同页「功能策略补挂」）。
 
@@ -206,13 +208,17 @@ tccli tke DescribeAddon --region ap-guangzhou --ClusterId "<CLUSTER_ID>" --Addon
 >
 > ⚠️ **高危操作**：误删核心组件（如 DNS 插件、网络插件 CBS-CSI/IPAMD）会导致集群 DNS 解析失败、存储挂载异常或 Pod 网络不通，可能引发生产故障。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
 
+#### 1. 卸载
+
 ```bash
-# 1. 卸载
 tccli tke DeleteAddon --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" --AddonName "<ADDON_NAME>"
 # expected: exit 0
+```
 
-# 2. 验证已卸载
+#### 2. 验证已卸载
+
+```bash
 tccli tke DescribeAddon --region ap-guangzhou --ClusterId "<CLUSTER_ID>" --AddonName "<ADDON_NAME>"
 # expected: Addons 为空数组
 ```

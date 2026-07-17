@@ -182,13 +182,19 @@ tccli tke DescribePrometheusInstancesOverview --region ap-guangzhou \
 >
 > ⚠️ **高危操作**：删除 Prometheus 实例不可逆，所有历史监控数据将永久丢失且无法恢复。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
 
+#### 1. 卸载 Agent
+
 ```bash
-# 1. 卸载 Agent
 tccli tke DeletePrometheusClusterAgent --version 2018-05-25 --region ap-guangzhou \
   --InstanceId "<INSTANCE_ID>" --Agents '[{"ClusterId":"<CLUSTER_ID>"}]'
 # expected: exit 0
+```
 
-# 2. 删除实例（实例删除属于 monitor 服务，Actions 为 DestroyPrometheusInstance；tke 的 DeletePrometheus* 仅覆盖 Agent/Config/Rule/Template）
+#### 2. 删除实例
+
+实例删除属于 monitor 服务，Actions 为 `DestroyPrometheusInstance`；tke 的 `DeletePrometheus*` 仅覆盖 Agent/Config/Rule/Template。
+
+```bash
 tccli monitor DestroyPrometheusInstance --version 2018-07-24 --region ap-guangzhou \
   --InstanceId "<INSTANCE_ID>"
 # expected: exit 0

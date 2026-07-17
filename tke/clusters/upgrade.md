@@ -59,8 +59,11 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_I
 
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
 <!-- kubectl 管理 K8s 原生资源（TCCLI 无此能力） -->
+
+#### 1. 查可升级版本
+
 ```bash
-# 1. 查可升级版本（Versions 为空表示已是最新）
+# Versions 为空表示已是最新
 tccli tke DescribeAvailableClusterVersion --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
 # expected: 顶层返回 Versions + Clusters 字段；Versions 含目标版本，为空 [] 则无需升级
 ```
@@ -71,16 +74,29 @@ tccli tke DescribeAvailableClusterVersion --region ap-guangzhou --ClusterId "<CL
 |:-----|:-------|:----:|:-----|
 | `ClusterId` | DescribeAvailableClusterVersion | 条件 | 当查询单个集群可升级版本时必填；地域级查询可省略 |
 
+#### 2. 节点兼容性前置检查
+
+`UpgradeType` 枚举: `reset` 重装升级 / `hot` 原地滚动小版本 / `major` 原地滚动大版本。
+
 ```bash
-# 2. 节点兼容性前置检查（UpgradeType 枚举: reset 重装升级 / hot 原地滚动小版本 / major 原地滚动大版本）
 tccli tke CheckInstancesUpgradeAble --region ap-guangzhou --ClusterId "<CLUSTER_ID>" --UpgradeType reset
 # expected: 返回 ClusterVersion/LatestVersion/UpgradeAbleInstances[]/Total/UnavailableVersionReason；UpgradeAbleInstances[] 为空或 Total=0（无可升级节点=已最新）
+```
 
-# 3. 确认无进行中的升级任务（DescribeUpgradeTasks 不接受 --ClusterId，按 Offset/Limit 翻页）
+#### 3. 确认无进行中的升级任务
+
+`DescribeUpgradeTasks` 不接受 `--ClusterId`，按 Offset/Limit 翻页。
+
+```bash
 tccli tke DescribeUpgradeTasks --region ap-guangzhou --Offset 0 --Limit 20
 # expected: UpgradeTasks[] 为空，或用返回的 ID 逐个 DescribeUpgradeTaskDetail --ID "<TASK_ID>" 查 UpgradePlans[].Status（非 Running）
+```
 
-# 4. 备份 kubeconfig（升级不可回滚，失败需重建；--filter + --output text 提取纯 kubeconfig，无 --output text 会带引号导致 kubectl 报 JSON parse error）
+#### 4. 备份 kubeconfig
+
+升级不可回滚，失败需重建；`--filter` + `--output text` 提取纯 kubeconfig，无 `--output text` 会带引号导致 kubectl 报 JSON parse error。
+
+```bash
 tccli tke DescribeClusterKubeconfig --region ap-guangzhou --ClusterId "<CLUSTER_ID>" --filter "Kubeconfig" --output text > backup-kubeconfig.yaml
 # expected: kubeconfig 文件生成（可直接 kubectl --kubeconfig backup-kubeconfig.yaml）
 ```
@@ -323,18 +339,31 @@ tccli tke UpgradeClusterInstances --region ap-guangzhou \
 
 > 节点升级/Master 升级都是异步任务，三个 Action 覆盖「查进度—查详情—停计划」控制面。参数名大小写以各 Action 入参为准（注意 `ClusterID`/`PlanID` 大写 vs `ClusterId` 小写）。
 
+#### 1. 查节点升级进度
+
+`ClusterId` 小写 + Offset/Limit 分页。
+
 ```bash
-# 1. 查节点升级进度（ClusterId 小写 + Offset/Limit 分页）
 tccli tke GetUpgradeInstanceProgress --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" --Offset 0 --Limit 20
 # expected: 集群无升级任务报 ResourceNotFound；有任务时返回 Total/Done/LifeState/Instances[]/ClusterStatus
+```
 
-# 2. 查升级任务详情（ID 为任务 ID，来自 DescribeUpgradeTasks[].ID）
+#### 2. 查升级任务详情
+
+`ID` 为任务 ID，来自 `DescribeUpgradeTasks[].ID`。
+
+```bash
 tccli tke DescribeUpgradeTaskDetail --region ap-guangzhou \
   --ID "<TASK_ID>" --Offset 0 --Limit 20
 # expected: exit 0，返回 UpgradePlans[]+TotalCount（UpgradePlans[].Status = Pending/Processing/Running/Succeed/Failed/Cancelled）
+```
 
-# 3. 暂停升级计划（ClusterID/PlanID 均大写；暂停非回滚，恢复需重新触发）
+#### 3. 暂停升级计划
+
+`ClusterID`/`PlanID` 均大写；暂停非回滚，恢复需重新触发。
+
+```bash
 tccli tke CancelUpgradePlan --region ap-guangzhou \
   --ClusterID "<CLUSTER_ID>" --PlanID <PLAN_ID>
 # expected: CAM 拦截 UnauthorizedOperation.CamNoAuth；授权后 exit 0

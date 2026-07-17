@@ -186,8 +186,10 @@ False	cls-example2	test	vpc-example	0	containerd
 
 ```bash
 tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]'
-# expected: ClusterState="Running", ClusterInstanceState="AllNormal"（取值：`-` 空集群无节点 / `AllNormal` 健康 / 异常时为问题描述，见 [故障排查](../troubleshooting.md)）
+# expected: ClusterState="Running", ClusterInstanceState="AllNormal"（取值：`-` 空集群无节点 / `AllNormal` 健康 / 异常时为问题描述）
 ```
+
+异常问题描述含义见 [故障排查](../troubleshooting.md)
 
 ```json
 {

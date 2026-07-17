@@ -259,17 +259,26 @@ tccli tke ModifyLogConfig --ClusterId "<CLUSTER_ID>" --region <REGION> \
 ## 收尾确认
 
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
+
+汇总核对三项：Agent 运行 + 业务日志可查 + 托管组件日志可查。
+
+#### 1. CLS Agent DaemonSet Running（业务日志采集器就绪）
+
 ```bash
-# 汇总核对三项：Agent 运行 + 业务日志可查 + 托管组件日志可查
-# 1. CLS Agent DaemonSet Running（业务日志采集器就绪）
 kubectl get ds -n kube-system | grep logagent
 # expected: DESIRED=CURRENT=READY 节点数
+```
 
-# 2. 业务日志端到端可查（开关开启后，再确认 CLS 中确有 Pod 日志）
+#### 2. 业务日志端到端可查（开关开启后，再确认 CLS 中确有 Pod 日志）
+
+```bash
 tccli cls SearchLog --region <REGION> --TopicId "<TOPIC_ID>" --Content '"nginx"'
 # expected: 命中含应用输出的日志记录
+```
 
-# 3. 托管组件日志可查（EnableControlPlaneLogs 当前组件为 cluster-autoscaler/kapenter，非 apiserver）
+#### 3. 托管组件日志可查（EnableControlPlaneLogs 当前组件为 cluster-autoscaler/kapenter，非 apiserver）
+
+```bash
 tccli tke DescribeControlPlaneLogs --ClusterId "<CLUSTER_ID>" --ClusterType tke --region <REGION>
 # expected: Details[] 含目标组件；再按 TopicId 用 cls SearchLog 检索对应组件日志
 ```

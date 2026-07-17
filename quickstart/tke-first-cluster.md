@@ -260,19 +260,26 @@ tccli tke DescribeClusterKubeconfig --region <REGION> --ClusterId <CLUSTER_ID> \
 | 5 | 将 kubeconfig 的 `server` 改为 `https://` + `ClusterExternalEndpoint` | 不依赖可能 NXDOMAIN 的 `cls-*.ccs.tencent-cloud.com` |
 | 6 | `kubectl get --raw=/healthz` 与 `get nodes` | **`ok`**；节点列表或空列表但命令成功 |
 
+占位符：REGION / CLUSTER_ID / SECURITY_GROUP_ID / 已有 worker
+
 ```bash
-# 占位符：REGION / CLUSTER_ID / SECURITY_GROUP_ID / 已有 worker
 REGION=ap-guangzhou
 CLUSTER_ID="<CLUSTER_ID>"
 SECURITY_GROUP_ID="<SECURITY_GROUP_ID>"
 KUBECONFIG_PATH="${KUBECONFIG_PATH:-kubeconfig-qs.yaml}"
+```
 
-# 0) 出口 IP（写入 ACL）
+#### 0. 出口 IP（写入 ACL）
+
+```bash
 EGRESS_IP="$(curl -s --max-time 10 https://api.ipify.org)"
 echo "EGRESS_IP=$EGRESS_IP"
 test -n "$EGRESS_IP"
+```
 
-# 1) 开公网端点（须已有 worker）
+#### 1. 开公网端点（须已有 worker）
+
+```bash
 tccli tke CreateClusterEndpoint --region "$REGION" \
   --ClusterId "$CLUSTER_ID" --IsExtranet true \
   --SecurityGroup "$SECURITY_GROUP_ID" \
@@ -283,18 +290,27 @@ tccli tke DescribeClusterEndpointStatus --region "$REGION" \
   --ClusterId "$CLUSTER_ID" --IsExtranet true \
   --waiter '{"expr":"Status","to":"Created","timeout":300,"interval":10}'
 # expected: Status=Created
+```
 
-# 2) ACL：仅在 Created 后；若 FailedOperation.LbCommon → 等 15–60s 重试本命令
+#### 2. ACL：仅在 Created 后；若 FailedOperation.LbCommon → 等 15–60s 重试本命令
+
+```bash
 tccli tke ModifyClusterEndpointSP --region "$REGION" \
   --ClusterId "$CLUSTER_ID" --SecurityPolicies "[\"${EGRESS_IP}/32\"]"
 # expected: exit 0
+```
 
-# 3) 核对地址 + ACL（ACL 仍 [] 则不要 kubectl）
+#### 3. 核对地址 + ACL（ACL 仍 [] 则不要 kubectl）
+
+```bash
 tccli tke DescribeClusterEndpoints --region "$REGION" --ClusterId "$CLUSTER_ID" \
   --filter "{ext:ClusterExternalEndpoint,acl:ClusterExternalACL}" --output json
 # expected: ext 非空；acl 含 ${EGRESS_IP}/32
+```
 
-# 4) kubeconfig + 改写 server 为 ClusterExternalEndpoint
+#### 4. kubeconfig + 改写 server 为 ClusterExternalEndpoint
+
+```bash
 tccli tke DescribeClusterKubeconfig --region "$REGION" --ClusterId "$CLUSTER_ID" \
   --filter "Kubeconfig" --output text > "$KUBECONFIG_PATH"
 
@@ -315,8 +331,11 @@ if n != 1:
 open(path, "w", encoding="utf-8").write(new)
 print("server ->", server)
 PY
+```
 
-# 5) 强制确认：/healthz=ok（ACL 空或未改写 server 时本机仍不可达）
+#### 5. 强制确认：/healthz=ok（ACL 空或未改写 server 时本机仍不可达）
+
+```bash
 kubectl --kubeconfig "$KUBECONFIG_PATH" get --raw=/healthz --request-timeout=20s
 # expected: ok
 kubectl --kubeconfig "$KUBECONFIG_PATH" get nodes --request-timeout=20s

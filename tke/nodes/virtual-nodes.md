@@ -191,15 +191,22 @@ tccli tke DescribeClusterVirtualNodePools --region ap-guangzhou --ClusterId "<CL
 
 ## 清理
 
-```bash
-# 1. 排水 (迁移 Pod)
-tccli tke DrainClusterVirtualNode --ClusterId "<ID>" --NodeName "<NODE>"
+#### 1. 排水（迁移 Pod）
 
-# 2. 删除虚拟节点
+```bash
+tccli tke DrainClusterVirtualNode --ClusterId "<ID>" --NodeName "<NODE>"
+```
+
+#### 2. 删除虚拟节点
+
+```bash
 tccli tke DeleteClusterVirtualNode --ClusterId "<ID>" --NodeName "<NODE>"
 # expected: exit 0
+```
 
-# 3. 删除虚拟节点池
+#### 3. 删除虚拟节点池
+
+```bash
 tccli tke DeleteClusterVirtualNodePool --ClusterId "<ID>" --NodePoolId "<POOL>"
 # expected: exit 0
 ```

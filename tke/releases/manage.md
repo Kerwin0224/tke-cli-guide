@@ -184,13 +184,17 @@ tccli tke DescribeClusterReleases --region ap-guangzhou --ClusterId "<CLUSTER_ID
 >
 > ⚠️ **高危操作**：回滚到不兼容的历史版本可能导致应用版本混乱；误执行 `UninstallClusterRelease` 会永久删除所有关联 K8s 资源，数据不可恢复。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
 
+#### 1. 卸载
+
 ```bash
-# 1. 卸载
 tccli tke UninstallClusterRelease --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" --Name "<RELEASE_NAME>" --Namespace "<NAMESPACE>"
 # expected: exit 0
+```
 
-# 2. 验证已卸载
+#### 2. 验证已卸载
+
+```bash
 tccli tke DescribeClusterReleases --region ap-guangzhou --ClusterId "<CLUSTER_ID>" \
   --filter "ReleaseSet[?Name=='<RELEASE_NAME>']"
 # expected: 空数组
@@ -295,20 +299,35 @@ tccli tke ModifyClusterRollOutSequenceTags --region ap-guangzhou \
 ## 收尾确认
 
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
+
+汇总核对三项：Release Status=deployed + 历史版本数 + 关联资源 Ready。
+
+#### 1. Release 已部署
+
+汇总 Status/版本/Revision。
+
 ```bash
-# 汇总核对三项：Release Status=deployed + 历史版本数 + 关联资源 Ready
-# 1. Release 已部署（汇总 Status/版本/Revision）
 tccli tke DescribeClusterReleases --region ap-guangzhou --ClusterId "<CLUSTER_ID>" \
   --filter "ReleaseSet[?Name=='<RELEASE_NAME>'].{name:Name,status:Status,rev:Revision}"
 # expected: status=deployed
+```
 
-# 2. 历史版本数（回滚/升级后核对修订号递增）
+#### 2. 历史版本数
+
+回滚/升级后核对修订号递增。
+
+```bash
 tccli tke DescribeClusterReleaseHistory --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" --Name "<RELEASE_NAME>" --Namespace "<NAMESPACE>" \
   --filter "Total"
 # expected: Total ≥1（创建=1，升级/回滚后递增）
+```
 
-# 3. 关联资源 Ready（端到端：Release 管理的 K8s 资源实际就绪）
+#### 3. 关联资源 Ready
+
+端到端：Release 管理的 K8s 资源实际就绪。
+
+```bash
 kubectl get all -n <NAMESPACE> -l app.kubernetes.io/instance=<RELEASE_NAME> \
   --no-headers | awk '{print $1, $2}' | head -10
 # expected: 资源列表非空且 STATUS 无 Failed → 应用发布闭环完成
