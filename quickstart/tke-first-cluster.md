@@ -10,9 +10,9 @@ fused: true
 > ⚠️ **计费警告**: 创建托管集群（MANAGED_CLUSTER）即开始计收**集群管理费**（L5 为最低等级）。
 > 完成本 Quickstart 后须执行 [Step 3: 删除集群](#step-3-删除集群清理) 以避免持续计费。
 >
-> **目标读者**: DevOps / SRE — 用 TCCLI 管理 TKE 集群。
+> **适用角色**: DevOps / SRE — 用 TCCLI 管理 TKE 集群。
 >
-> **阅读路径**: 本文 → [TKE 概览](../tke/index.md) → [创建集群详解](../tke/clusters/create.md)
+> **相关文档**: 本文 → [TKE 概览](../tke/index.md) → [创建集群详解](../tke/clusters/create.md)
 >
 > **时间估计**：集群创建通常需要数分钟；实际时长受地域与后端资源影响。
 
@@ -22,7 +22,7 @@ fused: true
 
 - 需用 TCCLI 验证创建并管理一个 TKE 集群（创建→查询→删除闭环）— 本篇是最短路径
 - 终端执行 `tccli tke DescribeClusters` 返回空或需验证 TCCLI 集群管理能力 — 从 [Step 0 环境检查](#step-0-环境检查) 开始
-- 要使用 TCCLI 的 `--waiter` 异步等待 + `--filter` JMESPath 过滤实操集群生命周期 — 本 Quickstart 含完整示例
+- 要使用 TCCLI 的 `--waiter` 异步等待 + `--filter` JMESPath 过滤演练集群生命周期 — 本 Quickstart 含完整示例
 
 ## 准备工作
 

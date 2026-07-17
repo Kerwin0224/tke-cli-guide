@@ -12,7 +12,7 @@ fused: false
 >
 > 配额：单个 Prometheus 实例关联 Agent 集群数无额外配额限制。[配额说明](https://cloud.tencent.com/document/product/457/9087)
 
-> ⚠️ 本文档所有 Action 属 **TKE 2018-05-25（默认版本）**。
+> ⚠️ 本页所有 Action 属 **TKE 2018-05-25（默认版本）**。
 
 ## 触发条件
 
@@ -40,7 +40,7 @@ Agent 与 Prometheus 实例的关系：实例是存储与查询后端，Agent �
 
 ### 是否启用基础采集
 
-- `NotInstallBasicScrape: false`（默认）：安装 TKE 预置的基础采集规则（kubelet/node 等），开箱可用。
+- `NotInstallBasicScrape: false`（默认）：安装 TKE 预置的基础采集规则（kubelet/node 等），安装后即可使用基础指标。
 - `NotInstallBasicScrape: true`：不装基础规则，仅采自定义目标，需自配 scrape config。
 
 不确定时保持默认（`false`），先有基础指标再按需裁剪。
@@ -178,7 +178,7 @@ tccli tke DescribePrometheusClusterAgents --region <REGION> --InstanceId <PROM_I
 |:-----|:-----|:-----|:-----|
 | `AuthFailure.UnauthorizedOperation` (tke:CreatePrometheusClusterAgent) | 查账号 CAM 策略 | 写 Prometheus Agent 需 `tke:CreatePrometheusClusterAgent` 权限 | 申请该 Action 权限。此为环境限制 |
 | `UnauthorizedOperation` 您未授权访问该接口 (DescribePrometheus*) | 同上 | 读 Prometheus 域同样需 CAM 授权，与写操作错误码不同（读=云API拦截层，写=CAM策略层） | 申请 `tke:DescribePrometheus*` 读权限 |
-| `Unknown options` | `tccli tke <Action> --generate-cli-skeleton` | 参数名拼错（`ClusterId` 小写 d vs `InstanceId`） | 用骨架输出的真实参数名 |
+| `Unknown options` | `tccli tke <Action> --generate-cli-skeleton` | 参数名拼错（`ClusterId` 小写 d vs `InstanceId`） | 用 `--generate-cli-skeleton` 输出的真实参数名 |
 
 > ⚠️ **错误码分层**：Prometheus 域写操作（Create/Modify/Delete）返回 `AuthFailure.UnauthorizedOperation`（CAM 策略层，含 `tke:ActionName`），读操作（Describe）返回 `UnauthorizedOperation: 您未授权访问该接口。请求由云API拦截`（云 API 网关层）。两者根因同为缺 CAM 授权，但报错层级不同，排查时注意区分。
 

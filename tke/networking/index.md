@@ -33,7 +33,7 @@ TKE 集群网络分两层：**访问端点**（kubectl/API Server 如何连接�
 ## 网络模型对比
 
 > **按场景选择**：公有云集群推荐 **VPC-CNI**；分布式云第三方节点或注册节点推荐 **CiliumOverlay**。**Global Router（GR）**适合规模相对固定、对 IP 分配和网络性能没有特殊需求的简单业务。  
-> API 的 `NetworkType` 未传时默认 **GR**，这是契约默认值，**不等于产品推荐**；选定场景后将对应值写入 `ClusterAdvancedSettings.NetworkType`。
+> API 的 `NetworkType` 未传时默认 **GR**，这是入参默认值，**不等于产品推荐**；选定场景后将对应值写入 `ClusterAdvancedSettings.NetworkType`。
 
 | 模型 | 适用范围 | Pod IP 来源 | 固定 IP | 安全组直通 | 后期扩网段 | 开启方式 |
 |:-----|:---------|:-----------|:------:|:----------|:----------:|:---------|
@@ -47,7 +47,7 @@ TKE 集群网络分两层：**访问端点**（kubectl/API Server 如何连接�
 
 | 项 | 约束 |
 |:---|:-----|
-| **IPVS** | 仅**新建集群**时可开；开启后**不可关闭**；勿在集群内手动混用 IPVS 与 iptables |
+| **IPVS** | 仅**新建集群**时可开；开启后**不可关闭**；不要在集群内手动混用 IPVS 与 iptables |
 | **iptables ↔ ipvs** | 一经选择不支持更改 |
 | **Dataplane v2** | 开启后不再安装 kube-proxy，默认用 Cilium 转发；与 `KubeProxyMode` 语义互斥 |
 

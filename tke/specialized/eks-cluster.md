@@ -72,9 +72,9 @@ fused: true
 
 > **控制台维度**：控制台「容器实例 → CPU 实例 / GPU 实例」是两页，但对应 tccli 同一 `CreateEKSContainerInstances`，变量只在是否传 `GpuType`/`GpuCount`（见下字段分叉决策表）。
 
-> **CPU / GPU 字段分叉决策表（同一 `CreateEKSContainerInstances`，靠规格字段分叉）**：控制台「CPU 实例」与「GPU 实例」是两页，但 tccli 是**同一个 Action**，变量只在是否传 `GpuType`/`GpuCount`。下表为唯一决策依据（字段真值取自 `api.json` `CreateEKSContainerInstancesRequest`；`Cpu`/`Memory`/`VpcId`/`SubnetId`/`SecurityGroupIds`/`EksCiName`/`Containers` 为顶层必填，不随 CPU/GPU 变化）。
+> **CPU / GPU 字段分叉决策表（同一 `CreateEKSContainerInstances`，靠规格字段分叉）**：控制台「CPU 实例」与「GPU 实例」是两页，但 `tccli` 是**同一个 Action**，变量只在是否传 `GpuType`/`GpuCount`。下表为执行决策依据（字段以 `tccli tke CreateEKSContainerInstances help --detail` 与 API 契约为准；`Cpu`/`Memory`/`VpcId`/`SubnetId`/`SecurityGroupIds`/`EksCiName`/`Containers` 为顶层必填，不随 CPU/GPU 变化）。
 
-| 决策点 | CPU 实例（控制台 `/tke2/eksci`） | GPU 实例（控制台 `/tke2/eksci-gpu`） | 字段真值（api.json） |
+| 决策点 | CPU 实例（控制台 `/tke2/eksci`） | GPU 实例（控制台 `/tke2/eksci-gpu`） | 字段契约 |
 |:---|:---|:---|:---|
 | 是否传 `GpuType` | **不传** | **传**（`1/4*V100`/`1/2*V100`/`V100`/`1/4*T4`/`1/2*T4`/`T4`） | `GpuType` 顶层 optional；缺省空字符串 |
 | 是否传 `GpuCount` | **不传**（出参 `GpuCount=0`） | **传**（GPU 卡数，须与 `GpuType` 规格表匹配） | `GpuCount` 顶层 optional int；缺省 0 |
@@ -360,7 +360,7 @@ tccli tke DescribeEKSClusterCredential --region ap-guangzhou --ClusterId "<CLUST
 
 ## API 参考
 
-本篇覆盖 EKS / 容器实例相关 **15** 个 Action:
+本页覆盖 EKS / 容器实例相关 **15** 个 Action:
 
 | 分类 | API | 说明 |
 |------|-----|------|
@@ -414,7 +414,7 @@ tccli tke DescribeEKSClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>
 - [专用工作负载概览](index.md) — EKS 集群 / 容器实例 / 边缘选型
 - [标准集群概览](../clusters/index.md) — 对比标准集群
 
-## 精确 Action 字段契约
+## Action 字段契约
 
 | 字段 | 所属 Action | 必填 | 说明 |
 |:---|:---|:---:|:---|

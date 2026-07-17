@@ -4,7 +4,7 @@ doc_type: Overview
 # TKE: TCCLI 文档
 
 > 腾讯云容器服务 (TKE) 的 TCCLI 命令行操作指南。
-> 覆盖安装、凭证与常用操作，每条命令可复制执行。
+> 覆盖安装、凭证与常用操作，每条命令可直接执行。
 
 ## 是什么
 
@@ -13,12 +13,12 @@ doc_type: Overview
 ## 触发条件
 
 - 你要用**命令行**（而非控制台/Terraform）管理腾讯云 TKE 集群 — 本指南是入口
-- 你已在终端装好 TCCLI 并配好凭证，想找一个具体操作的**可复制命令** — 直接看下方快速导航
+- 你已在终端装好 TCCLI 并配好凭证，想找某操作的**可执行命令** — 直接看下方快速导航
 - 你是 agent，需要一条 `tccli tke <Action>` 命令的权威写法与可执行验证 — 每篇操作文档都给命令+`# expected:`+故障恢复
 
 ## 准备工作
 
-第一次使用？先完成以下两步，否则任何 `tccli` 命令都会因无凭证失败：
+第一次使用？先完成以下准备，否则任何 `tccli` 命令都会因无凭证失败：
 
 | 步骤 | 去看 |
 |---------|------|
@@ -55,7 +55,7 @@ doc_type: Overview
 
 > 本指南覆盖上表之外的 TKE TCCLI 操作。若你使用的 Action 既不在本指南、也不在上表，请通过 [GitHub 反馈](https://github.com/) 提交。
 >
-> **调用边界**：① 部分账号 CAM 可能拒绝 `tke:CreateCluster` 等写操作——以 `help --detail` 核入参，以实际返回的 `Error.Code` 为准；响应字段以实际响应为准，不预写未验证字段。② 个别 Action 命令行展开参数可能解析失败，改用 `--cli-input-json file://` 传参。
+> **调用边界**：① 部分账号 CAM 可能拒绝 `tke:CreateCluster` 等写操作——以 `help --detail` 核入参，以实际返回的 `Error.Code` 与响应字段为准。② 个别 Action 命令行展开参数可能解析失败，改用 `--cli-input-json file://` 传参。
 
 ## 快速检查
 

@@ -10,7 +10,7 @@ fused: false
 >
 > 官方文档：[访问密钥](https://cloud.tencent.com/document/product/598/40488) · [TCCLI 配置](https://cloud.tencent.com/document/product/440/62968)
 
-> ⚠️ **控制台是固有边界**：CAM 根凭证（SecretId/SecretKey）的**首次获取**须经腾讯云控制台/浏览器——腾讯云不允许用 TCCLI 自举创建 API 密钥（`tccli auth login` 也触发浏览器登录）。本指南定位是"TCCLI 操作手册"，凭证首次获取这一步**必须**经控制台一次性操作，无法纯 CLI 闭环。这是腾讯云的固有边界，非文档缺陷。配好凭证后，后续所有 TKE 操作均可纯 CLI 完成。
+> ⚠️ **控制台是固有边界**：CAM 根凭证（SecretId/SecretKey）的**首次获取**须经腾讯云控制台/浏览器——腾讯云不允许用 TCCLI 自举创建 API 密钥（`tccli auth login` 也触发浏览器登录）。凭证首次获取须经控制台一次性操作，无法纯 CLI 闭环；这是腾讯云平台边界。配好凭证后，后续所有 TKE 操作均可纯 CLI 完成。
 
 > **前置**：你需有一个腾讯云账号。若没有，先在 [腾讯云首页](https://cloud.tencent.com/) 注册（注册需浏览器+手机验证，属一次性操作）。
 
@@ -46,7 +46,7 @@ TCCLI 调用腾讯云 API 需要凭证。两类凭证作用域不同，本文只
 | 方式 | 机制 | 适用 |
 |:-----|:-----|:-----|
 | `tccli configure` | 交互式手填 SecretId/SecretKey/region/output | 已有 API 密钥、CI/CD（可 `tccli configure set` 非交互） |
-| `tccli auth login` | CAM 登录获取临时凭证（浏览器交互） | 交互式登录、不想长期存密钥 |
+| `tccli auth login` | CAM 登录获取临时凭证（浏览器交互） | 交互式登录、不希望长期保存密钥 |
 
 > 两种方式二选一。`tccli auth login` 适合本地交互；`tccli configure` 适合自动化。本文以 `tccli configure` 为主（可复现、可脚本化）。
 
@@ -121,7 +121,7 @@ tccli auth login
 # expected: exit 0，触发 CAM 登录流程（浏览器交互，仅接受 --profile 参数）
 ```
 
-> `tccli auth login` 触发 CAM 登录获取临时凭证，用系统默认浏览器打开授权页（无 `--browser` 参数可选）。具体交互行为（浏览器/扫码）因环境而异——首次使用建议直接运行观察提示。临时凭证会过期，过期后重新 `tccli auth login`。适合本地交互、不想长期存密钥。
+> `tccli auth login` 触发 CAM 登录获取临时凭证，用系统默认浏览器打开授权页（无 `--browser` 参数可选）。具体交互行为（浏览器/扫码）因环境而异——首次使用时直接运行该命令，并按终端提示完成授权。临时凭证会过期，过期后重新 `tccli auth login`。适合本地交互、不希望长期保存密钥。
 
 ## 验证
 

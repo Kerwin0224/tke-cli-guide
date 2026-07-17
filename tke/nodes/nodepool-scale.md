@@ -10,7 +10,7 @@ fused: true
 >
 > 官方文档：[节点概述](https://cloud.tencent.com/document/product/457/32201) · [集群扩缩容](https://cloud.tencent.com/document/product/457/32190) · [超级节点资源规格](https://cloud.tencent.com/document/product/457/39808)
 >
-> 配额：扩缩不超节点池 Min/Max 区间限制、单集群节点 5000、ASG 冷却时间对账。[配额说明](https://cloud.tencent.com/document/product/457/9087)
+> 配额：扩缩不超节点池 Min/Max 区间限制、单集群节点 5000；缩容须满足 ASG 冷却时间。[配额说明](https://cloud.tencent.com/document/product/457/9087)
 >
 > ⚠️ **高危操作**：缩容选错策略致关键 Pod 被误驱逐、扩容遇 ResourceInsufficient、ASG 冷却期不一致致缩容不生效。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
 
@@ -103,7 +103,7 @@ tccli tke ScaleNodePool --version 2022-05-01 --region ap-guangzhou \
 
 ### 步骤 3：缩容（安全）
 
-> `ModifyNodePoolDesiredCapacityAboutAsg` 与 `ScaleNodePool` 的请求只有目标容量，没有目标实例 ID。直接降低容量时控制器按节点池策略选点，无法保证删除某个预先 drain 的节点。执行前应确认池内任一潜在候选被移除都安全；需要定点移除时，不走本节容量缩减，改用支持 `InstanceIds` 的节点移出/删除流程（见 [节点实例操作](instance-ops.md)）。
+> `ModifyNodePoolDesiredCapacityAboutAsg` 与 `ScaleNodePool` 的请求只有目标容量，没有目标实例 ID。直接降低容量时控制器按节点池策略选点，无法保证删除某个预先 drain 的节点。执行前应确认池内任一潜在候选被移除都安全；需要定点移除时，不走本文的容量缩减，改用支持 `InstanceIds` 的节点移出/删除流程（见 [节点实例操作](instance-ops.md)）。
 
 ```bash
 # 1. 容量缩减前检查池内节点与工作负载；不要把 drain 单个节点当作定点删除保证
@@ -126,7 +126,7 @@ tccli tke ScaleNodePool --version 2022-05-01 --region ap-guangzhou \
 
 ### 步骤 4：验证
 
-异步操作。**按节点池创建版本选查询 Action**（同名≠同契约）：
+异步操作。**按节点池创建版本选查询 Action**（同名≠同入参）：
 
 | 路径 | 查询 Action | 列表键 | 就绪 LifeState | 期望数 | 实际数 |
 |:-----|:------------|:-------|:---------------|:-------|:-------|

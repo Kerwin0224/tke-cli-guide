@@ -224,7 +224,7 @@ tccli tke ListClusterInspectionResultsItems --ClusterId "<CLUSTER_ID>" --region 
 
 ### 控制面日志与日志配置
 
-以下字段按所属 Action 精确对账；没有 Action 的通用说明不改变各接口契约。
+下表按 Action 列出各字段的必填要求；未归属到具体 Action 的说明不改变接口契约。
 
 | 字段 | 所属 Action | 必填 | 说明 |
 |:---|:---|:---:|:---|
@@ -259,14 +259,13 @@ tccli tke ModifyLogConfig --ClusterId "<CLUSTER_ID>" --region <REGION> \
 ## 收尾确认
 
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
-<!-- tccli管日志采集配置，kubectl查Agent部署状态，非tccli边界 -->
 ```bash
 # 汇总核对三项：Agent 运行 + 业务日志可查 + 托管组件日志可查
 # 1. CLS Agent DaemonSet Running（业务日志采集器就绪）
 kubectl get ds -n kube-system | grep logagent
 # expected: DESIRED=CURRENT=READY 节点数
 
-# 2. 业务日志端到端可查（上文已查开关，此处查 CLS 真有 Pod 日志）
+# 2. 业务日志端到端可查（开关开启后，再确认 CLS 中确有 Pod 日志）
 tccli cls SearchLog --region <REGION> --TopicId "<TOPIC_ID>" --Content '"nginx"'
 # expected: 命中含应用输出的日志记录
 
@@ -275,7 +274,7 @@ tccli tke DescribeControlPlaneLogs --ClusterId "<CLUSTER_ID>" --ClusterType tke 
 # expected: Details[] 含目标组件；再按 TopicId 用 cls SearchLog 检索对应组件日志
 ```
 
-> Agent Running + 业务日志可查 + 托管组件日志可查 = 配置完成。上文验证段查开关状态与维度，此处汇总 Agent 部署 + 业务日志投递 + 托管组件日志配置三项，确认采集链路完整可用。
+> Agent Running + 业务日志可查 + 托管组件日志可查 = 配置完成。除开关状态外，还须汇总 Agent 部署 + 业务日志投递 + 托管组件日志配置三项，确认采集链路完整可用。
 
 ---
 

@@ -4,7 +4,7 @@ subtype: 8B
 ---
 # TKE 状态机
 
-> 集群、节点池、节点三类资源的完整状态机。状态值来自 `DescribeClusterStatus` / `DescribeClusterNodePools` / `DescribeClusterInstances` 的响应字段，以官方文档为准。半常量与配额边界见 [购买集群配额限制](https://cloud.tencent.com/document/product/457/9087)。
+> 集群、节点池、节点三类资源的完整状态机。状态值来自 `DescribeClusterStatus` / `DescribeClusterNodePools` / `DescribeClusterInstances` 的响应字段，以官方文档为准。默认配额与配额边界见 [购买集群配额限制](https://cloud.tencent.com/document/product/457/9087)。
 
 ## 查询命令
 
@@ -24,7 +24,7 @@ tccli tke DescribeClusterInstances --region <REGION> --ClusterId "<CLUSTER_ID>"
 
 ## 集群状态 (ClusterState)
 
-> **字段分源**：`DescribeClusterStatus` 返回的 `ClusterState` 与 `DescribeClusters` 返回的 `ClusterStatus` **不是同一字段**。本表以 `DescribeClusterStatus` → `ClusterStatusSet[].ClusterState` 的契约枚举为准（与 `help --detail` / api.json `ClusterStatus.ClusterState` 一致）。`DescribeClusters` 的 `ClusterStatus` 文档串另含 `Abnormal` / `Idling` / `Recovering` / `Scaling` / `WaittingForConnect` / `Trading` 等取值——轮询状态机请用 `DescribeClusterStatus`，列表页状态看 `DescribeClusters`。
+> **字段勿混用**：`DescribeClusterStatus` 返回的 `ClusterState` 与 `DescribeClusters` 返回的 `ClusterStatus` **不是同一字段**。本表以 `DescribeClusterStatus` → `ClusterStatusSet[].ClusterState` 的状态枚举为准（与 `tccli tke DescribeClusterStatus help --detail` 一致）。`DescribeClusters` 的 `ClusterStatus` 另含 `Abnormal` / `Idling` / `Recovering` / `Scaling` / `WaittingForConnect` / `Trading` 等取值——轮询状态机请用 `DescribeClusterStatus`，列表页状态看 `DescribeClusters`。
 
 | 状态 | 含义 | 触发条件 | 用户可执行操作 | 终态 |
 |:-----|:-----|:---------|:--------------|:----:|

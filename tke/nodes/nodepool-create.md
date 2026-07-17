@@ -103,7 +103,7 @@ tccli cam DescribeRoleList --Page 1 --Rp 100 \
 | 入站 | 容器网络 CIDR → ALL；集群网络 CIDR → ALL | Pod 间 / 节点间通信 |
 | 入站 | TCP/UDP `30000-32768`（按需收紧源） | NodePort / LB 经 NodePort 转发 |
 | 入站 | ICMP（按需） | Ping 诊断 |
-| 出站 | 放通（或至少放通节点网段 + 容器网段） | 自定义出站时勿漏网段 |
+| 出站 | 放通（或至少放通节点网段 + 容器网段） | 自定义出站时不要漏网段 |
 | 可选 | TCP 22 | 仅当需要 SSH 登录节点 |
 
 完整默认规则表见 [容器服务安全组设置](https://cloud.tencent.com/document/product/457/9084)。改错安全组可能导致节点 NotReady / Master 不可用（见 [故障排查 — 高危操作](../troubleshooting.md#高危操作后果速查)）。
@@ -152,11 +152,11 @@ tccli vpc DescribeSecurityGroups --region ap-guangzhou \
 
 #### 为什么选 2022-05-01 (CreateNodePool) 而非 2018-05-25 (CreateClusterNodePool)
 
-- **新版 `CreateNodePool`（2022-05-01）**: 用 `Native` 强类型对象表达节点池语义（`SubnetIds`/`InstanceTypes`/`Scaling` 结构化字段），是官方文档「原生节点池」的字面对应
+- **新版 `CreateNodePool`（2022-05-01）**: 用 `Native` 强类型对象表达节点池语义（`SubnetIds`/`InstanceTypes`/`Scaling` 结构化字段），对应官方文档中的「原生节点池」
 - **旧版 `CreateClusterNodePool`（2018-05-25）**: 透传 AS 弹性伸缩组 JSON 字符串（`AutoScalingGroupPara`/`LaunchConfigurePara`），是 AS 的薄封装，需调用方自己拼 AS 原始 JSON
 - **默认推荐**: 新版 `CreateNodePool` —— 强类型参数更清晰、更安全，且 2022-05-01 是官方当前版本，长期维护方向
 - **何时回退旧版**: 需要 AS 级精细控制（直接调 AS 弹性伸缩组参数）时，回退 `CreateClusterNodePool --version 2018-05-25`
-- **同名≠同契约**: 两版节点池查询 Action 命名不同（新版 `DescribeNodePools` vs 旧版 `DescribeClusterNodePools`），跨版本切换前必核契约
+- **同名≠同入参**: 两版节点池查询 Action 命名不同（新版 `DescribeNodePools` vs 旧版 `DescribeClusterNodePools`），跨版本切换前须用 `--generate-cli-skeleton` 核对入参
 
 ### 步骤 2：创建节点池
 
@@ -246,7 +246,7 @@ tccli tke DescribeNodePools \
 
 > Filter `Name` 支持 `NodePoolsName`（按名）和 `NodePoolsId`（按 ID）。用 `tccli tke DescribeNodePools --version 2022-05-01 help --detail` 查合法 Name。
 
-> ⚠️ 新版查询 Action 名为 `DescribeNodePools`（去 `Cluster` 前缀），旧版为 `DescribeClusterNodePools`/`DescribeClusterNodePoolDetail`。两版命名不同，本指南统一用新版 + `--version 2022-05-01`。响应顶层为 `NodePools`；Native 副本在 `Native.Replicas` / `Native.ReadyReplicas`（无旧版 `NodeCountSummary`）。
+> ⚠️ 新版查询 Action 名为 `DescribeNodePools`（去 `Cluster` 前缀），旧版为 `DescribeClusterNodePools`/`DescribeClusterNodePoolDetail`。两版命名不同，本文统一用新版 + `--version 2022-05-01`。响应顶层为 `NodePools`；Native 副本在 `Native.Replicas` / `Native.ReadyReplicas`（无旧版 `NodeCountSummary`）。
 
 | 维度 | 命令 | 预期 |
 |-----------|---------|----------|
@@ -268,7 +268,7 @@ tccli tke DescribeNodePoolsElasticityStrength \
 # expected: 返回各节点池弹性健康度（字段随版本演进，以实际响应为准）
 ```
 
-> **能力边界**：本接口**需 `ClusterId`**，但当前 tccli 构建**未给该 Action 注册 CLI 入参**，执行上报 `Unknown options: --ClusterId, <id>`（SDK `MissingParameter` 要求 `ClusterId`，CLI 参数解析层却拒绝接收，属 tccli 注册缺口，非调用方错误）。**结论**：该接口**不可经 tccli 成功调用**，命令句仅供「识别该能力存在 + 未来 tccli 修复后可直跑」；弹性健康度/容量余量请改用 `DescribeNodePools --version 2022-05-01` → `Native.Replicas` / `Native.ReadyReplicas` / `Native.Scaling`（Min/Max）判断，**勿依赖本接口做容量决策**。若必须取弹性评分，走控制台或等 tccli 版本更新。
+> **能力边界**：`DescribeNodePoolsElasticityStrength` 需要 `ClusterId`，但当前 `tccli` **未注册该 Action 的 CLI 入参**；执行会返回 `Unknown options: --ClusterId, <id>`（SDK 要求 `ClusterId`，CLI 参数层却拒绝接收）。因此当前**不可经 `tccli` 成功调用**。弹性健康度/容量余量请改用 `DescribeNodePools --version 2022-05-01` → `Native.Replicas` / `Native.ReadyReplicas` / `Native.Scaling`（Min/Max）；**不要依赖该 Action 做容量决策**。若必须取弹性评分，走控制台，或待 `tccli` 支持该入参后再调用。
 
 ## 旧版路径：CreateClusterNodePool (2018-05-25)
 
@@ -298,9 +298,9 @@ tccli tke CreateClusterNodePool \
 | `NodePoolOs` | 节点操作系统 | 自定义镜像传镜像 ID；公共镜像传对应的 `osName` |
 | `EnableAutoscale` | 是否启用弹性扩缩容 | `false`=固定节点数，`true`=按 AS 规则弹性 |
 
-> **Launch 配置字段陷阱**：`LaunchConfigurePara` 是 **AS 启动配置** 契约，不是完整 `cvm RunInstances`。传入 `HostName`、`InstanceName` 等 CVM 键 → `FailedOperation.AsCommon` / `UnknownParameter`。用 `tccli as CreateLaunchConfiguration --generate-cli-skeleton` 或按实际 API 报错字段名收敛，勿凭 CVM 习惯填。
+> **Launch 配置字段边界**：`LaunchConfigurePara` 是 **AS 启动配置** 入参，不是完整 `cvm RunInstances`。传入 `HostName`、`InstanceName` 等 CVM 键 → `FailedOperation.AsCommon` / `UnknownParameter`。用 `tccli as CreateLaunchConfiguration --generate-cli-skeleton` 或按实际 API 报错字段名收敛，不要按 CVM 习惯填。
 
-> 旧版与新版契约不同：旧版 `CreateClusterNodePool` 透传 AS 字符串（`AutoScalingGroupPara`/`LaunchConfigurePara`），新版 `CreateNodePool` 用结构化 `Native` 对象（`SubnetIds`/`InstanceTypes`）。两版查询 Action 命名也不同（旧 `DescribeClusterNodePools` vs 新 `DescribeNodePools`），跨版本切换前用 `--generate-cli-skeleton` 逐字段核契约。
+> 旧版与新版入参不同：旧版 `CreateClusterNodePool` 透传 AS 字符串（`AutoScalingGroupPara`/`LaunchConfigurePara`），新版 `CreateNodePool` 用结构化 `Native` 对象（`SubnetIds`/`InstanceTypes`）。两版查询 Action 命名也不同（旧 `DescribeClusterNodePools` vs 新 `DescribeNodePools`），跨版本切换前用 `--generate-cli-skeleton` 逐字段核对入参。
 
 ## 清理
 
@@ -325,12 +325,12 @@ tccli tke DescribeNodePools --version 2022-05-01 --ClusterId "<CLUSTER_ID>"
 | 现象 | 诊断 | 根因 | 修复 |
 |---------|----------|------------|-----|
 | `UnauthorizedOperation.AutoScalingRoleUnauthorized`（消息含 `AS_QCSRole`） | `tccli cam DescribeRoleList --Page 1 --Rp 100 --filter "List[?RoleName=='AS_QCSRole'].RoleName" --output text` | 未创建/未授权弹性伸缩服务角色 | 见 [AS 服务角色](#as-服务角色节点池创建前)：`CreateRole` + `AttachRolePolicy QcloudAccessForASRole`；**不要**只改节点池 JSON |
-| `FailedOperation.AsCommon` + `UnknownParameter`（`HostName`/`InstanceName` 等） | 对照 `LaunchConfigurePara` 键名 | 把 CVM `RunInstances` 字段塞进 AS 启动配置 | 去掉非法键；只保留 AS Launch 契约字段 |
+| `FailedOperation.AsCommon` + `UnknownParameter`（`HostName`/`InstanceName` 等） | 对照 `LaunchConfigurePara` 键名 | 把 CVM `RunInstances` 字段塞进 AS 启动配置 | 去掉非法键；只保留 AS Launch 入参字段 |
 | `InvalidParameterValue.InstanceTypes` | `tccli cvm DescribeZoneInstanceConfigInfos` | 指定机型在该可用区不存在或售罄 | 查 `Status=SELL` 最小可售机型后替换 |
 | `ResourceNotFound.SubnetId` | `tccli vpc DescribeSubnets --SubnetIds '["<ID>"]'` | 子网 ID 错误或不属于集群 VPC | 使用集群 VPC 内的子网 ID |
 | `LimitExceeded.NodePoolQuota` | `tccli tke DescribeNodePools --version 2022-05-01 --ClusterId "<ID>"` | 节点池数量达上限 | 删除闲置节点池或提工单 |
 | `ResourceNotFound.ClusterId` | `tccli tke DescribeClusters` | 集群 ID 错误 | 确认集群 ID 格式为 `cls-xxxxxxxx` |
-| `UnknownParameter`（新版路径） | `tccli tke CreateNodePool --version 2022-05-01 --generate-cli-skeleton` 核契约 | 误用旧版参数名到新版 Action | 改用新版 `CreateNodePool` 的参数名 |
+| `UnknownParameter`（新版路径） | `tccli tke CreateNodePool --version 2022-05-01 --generate-cli-skeleton` 核对入参 | 误用旧版参数名到新版 Action | 改用新版 `CreateNodePool` 的参数名 |
 | 只要 1 节点且 AS 角色长期不可补 | — | 账号 CAM 禁止建服务角色 | 改走 [CreateClusterInstances](instance-ops.md#新建-cvm-作节点createclusterinstances) 直加 Worker |
 
 ### 命令成功但状态不对（exit = 0）
@@ -394,7 +394,7 @@ tccli tke DescribeNodePools --version 2022-05-01 --region ap-guangzhou \
 - [节点运维](instance-ops.md) — 查询/启动/停止/重启节点
 - [配置网络](../networking/index.md) — 管理集群访问端点
 
-## 精确 Action 字段契约
+## 机型与节点保护字段
 
 | 字段 | 所属 Action | 必填 | 说明 |
 |:---|:---|:---:|:---|

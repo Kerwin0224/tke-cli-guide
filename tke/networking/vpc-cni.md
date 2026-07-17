@@ -78,7 +78,7 @@ kubectl -n kube-system get deploy tke-eni-ip-scheduler -o jsonpath='{.spec.templ
 #### 为什么用 VPC-CNI
 
 - **VPC-CNI vs Global Router vs CiliumOverlay**: VPC-CNI 让 Pod 拿 VPC IP，支持固定 IP（StatefulSet 稳定地址）与安全组直通（Pod 级网络策略）；Global Router 的 Pod 用容器网段 IP，不暴露到 VPC；CiliumOverlay 用 Overlay 隧道，不占 VPC IP 但无固定 IP/安全组直通，适合要 Cilium 数据面的场景（见 [配置 CiliumOverlay](cilium-overlay.md)）
-- **默认推荐**: 不需要固定 IP / 安全组直通时用 Global Router（契约默认 `NetworkType=GR`）。需要固定 IP 或安全组直通时开启 VPC-CNI；需要 Cilium 数据面且接受创建时定型时选 CiliumOverlay
+- **默认推荐**: 不需要固定 IP / 安全组直通时用 Global Router（入参默认 `NetworkType=GR`）。需要固定 IP 或安全组直通时开启 VPC-CNI；需要 Cilium 数据面且接受创建时定型时选 CiliumOverlay
 - **可关闭**：VPC-CNI 可关闭，`DisableVpcCniNetworkType`（已有 VPC-CNI Pod 需先迁移）。CiliumOverlay 不可关闭——创建时定型，无独立开关 Action
 - **与 IPVS 的关系**: IPVS / kube-proxy 模式在**创建集群**时选定，开启 IPVS 后不可关闭（见 [网络管理 — 转发模式半常量](index.md#转发模式半常量与-networktype-正交)）；开启 VPC-CNI **不改变**已选定的转发模式
 
@@ -95,7 +95,7 @@ kubectl -n kube-system get deploy tke-eni-ip-scheduler -o jsonpath='{.spec.templ
 
 > `VpcCniType`: `tke-route-eni`（策略路由/共享网卡多 IP，常用）/ `tke-direct-eni`（独立网卡）。**不是** `tke-direct-route-eni`。`EnableStaticIp=true` 开启固定 IP，配合 `ExpiredSeconds` 设回收时间（须 >300 秒）。
 >
-> ⚠️ **必填对齐 Action 入参契约**：`EnableStaticIp` 在 `EnableVpcCniNetworkType` 入参中为必填（非可选）——开启 VPC-CNI 时必须显式传 `true`/`false` 声明是否固定 IP；`ExpiredSeconds` 是条件必填（`EnableStaticIp=true` 时必填且 >300）。完整入参以 `tccli tke EnableVpcCniNetworkType help --detail` 为准。
+> ⚠️ **必填以 Action 入参为准**：`EnableStaticIp` 在 `EnableVpcCniNetworkType` 入参中为必填（非可选）——开启 VPC-CNI 时必须显式传 `true`/`false` 声明是否固定 IP；`ExpiredSeconds` 是条件必填（`EnableStaticIp=true` 时必填且 >300）。完整入参以 `tccli tke EnableVpcCniNetworkType help --detail` 为准。
 
 ## 应用
 
@@ -219,7 +219,7 @@ tccli tke DescribeIPAMD --region ap-guangzhou --ClusterId "<CLUSTER_ID>" \
 | 维度 | 命令 | 预期 |
 |:-----|:-----|:-----|
 | IPAMD | `DescribeIPAMD` → `EnableIPAMD` | `true`（开启后） |
-| 开启进度 | `DescribeEnableVpcCniProgress` → `Status` | `Succeed`（`Running`/`Succeed`/`Failed`；非 VPC-CNI 集群勿调，会 FailedOperation） |
+| 开启进度 | `DescribeEnableVpcCniProgress` → `Status` | `Succeed`（`Running`/`Succeed`/`Failed`；非 VPC-CNI 集群不要调用，会 FailedOperation） |
 | 网络类型 | `DescribeClusters` → `NetworkType` | 含 `VPC-CNI` |
 | Pod 获 IP | `kubectl get pod -o wide` <!-- tccli管VPC-CNI网络配置，kubectl查Pod IP状态验证IP分配，非tccli边界 --> | Pod IP 在 VPC 子网段内 |
 
@@ -277,7 +277,7 @@ tccli tke AddVpcCniSubnets --region ap-guangzhou \
 
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
 ```bash
-# VPC-CNI 开启进度完成（上文已查进度，此处端到端核 Pod 真从子网获 IP）
+# VPC-CNI 开启进度完成后，端到端确认 Pod 从子网获取 IP
 tccli tke DescribeEnableVpcCniProgress --region ap-guangzhou --ClusterId "<CLUSTER_ID>" \
   --filter "{status:Status}"
 # expected: status=Succeed
@@ -290,7 +290,7 @@ kubectl get pod vpc-cni-test -o wide --no-headers | awk '{print $6}'
 kubectl delete pod vpc-cni-test
 ```
 
-> 开启进度 `Status=Succeed` + Pod IP 落在 VPC 子网段 = 端到端闭环。上文验证段查进度与开关状态，此处用真实 Pod 验证 IP 分配行为符合 VPC-CNI 契约（Pod 与 CVM 同级从子网拿 IP），是固定 IP / 安全组直通功能的前置。
+> 开启进度 `Status=Succeed` + Pod IP 落在 VPC 子网段 = 端到端闭环。上文验证段查进度与开关状态，此处用真实 Pod 验证 IP 分配行为符合 VPC-CNI 预期（Pod 与 CVM 同级从子网拿 IP），是固定 IP / 安全组直通功能的前置。
 
 ---
 

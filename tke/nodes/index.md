@@ -30,7 +30,7 @@ Worker 节点是容器集群的基本元素（虚拟机或物理机），含运�
 
 ## 节点类型对比
 
-> TKE 标准集群支持 4 种节点类型。控制台「创建节点池」是**四套向导**（字段差大），禁止用一张参数表套四种类型——先选类型，再进对应文档。
+> TKE 标准集群支持 4 种节点类型。控制台「创建节点池」是**四套向导**（字段差大），不要用一张参数表套四种类型——先选类型，再进对应文档。
 
 | 类型 | API 枚举 | 特点 | 计费 | 适用场景 | 文档 |
 |:-----|:--------:|:-----|:-----|:---------|:-----|
@@ -74,7 +74,7 @@ tccli tke DeleteClusterNodePool --region ap-guangzhou \
 
 - 不需要扩缩容，只要单节点运维 → [节点实例运维](instance-ops.md)
 - **新建**免 CVM 容量（要编排）→ 先有标准集群，再 [虚拟节点](virtual-nodes.md)（非一次 `CreateCluster` 完成）；无集群容器 → [容器实例](../specialized/eks-cluster.md#创建容器实例-部署-pod)；存量 EKS 集群 → [EKS](../specialized/eks-cluster.md)
-- **新建**边缘/IDC 接入 → [注册节点](registered-nodes/overview.md) / [注册节点公网版](https://cloud.tencent.com/document/product/457/57916)；勿再开 [边缘集群](../specialized/edge-cluster.md)
+- **新建**边缘/IDC 接入 → [注册节点](registered-nodes/overview.md) / [注册节点公网版](https://cloud.tencent.com/document/product/457/57916)；不要再开 [边缘集群](../specialized/edge-cluster.md)
 
 ## 快速检查
 
@@ -92,12 +92,12 @@ tccli tke DescribeClusterNodePools --region <REGION> --ClusterId "<CLUSTER_ID>" 
 - [扩缩容节点池](nodepool-scale.md) — 调整 DesiredCapacity、安全缩容
 - [节点实例运维](instance-ops.md) — 查询/启停/驱逐/删除单节点（跨 TKE 双版本）
 - [虚拟节点 (超级节点)](virtual-nodes.md) — 标准集群内免 CVM 容量（先 CreateCluster；与 EKS 容器实例不同）
-- [注册节点概述](registered-nodes/overview.md) — 自建 IDC/注册节点接入（勿与注册集群混淆）
+- [注册节点概述](registered-nodes/overview.md) — 自建 IDC/注册节点接入（不要与注册集群混淆）
 - [节点健康检查](health-check.md) — 健康检测策略、自动隔离与修复
 - [状态机](../reference/states.md) — LifeState / InstanceState 枚举
 - [配额和限制](../reference/quotas.md) — 节点池数（≤20/集群）、节点数上限
 
-## 精确 Action 字段契约
+## 删除节点池字段
 
 | 字段 | 所属 Action | 必填 | 说明 |
 |:---|:---|:---:|:---|

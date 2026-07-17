@@ -9,7 +9,7 @@ doc_type: Concept
 
 ## 概述
 
-TCCLI 提供 5 个正交 flag，agent 可按场景组合。本质是把数据变换从推理层下沉到执行层——用 CLI 本地算力换 agent 的 token 预算，用长任务原语换轮询轮次。
+TCCLI 提供 5 个正交 flag，agent 可按场景组合：在 CLI 侧完成字段裁剪与格式转换以降低响应体积与 token 消耗，用 `--waiter` 等长任务原语替代手写轮询以减少往返轮次。
 
 ```mermaid
 graph LR
@@ -30,7 +30,7 @@ graph LR
 
 ### 1. 压缩管道 — 省 token
 
-**何时用**：查询资源列表，无需完整 JSON。每次查询默认启用。
+**何时用**：查询资源列表，无需完整 JSON。列表查询场景优先使用本组合。
 
 ```bash
 # token 开销最低的查询模式
@@ -153,7 +153,7 @@ tccli cvm RunInstances \
 | `--filter` 字段名 | 须匹配响应键名 | JMESPath 严格匹配，写错返回空 |
 | 输出骨架 | 未实现 | 用最小查询替代学习输出结构 |
 | API 限频 | 默认 10/s | 批量操作需串行或加间隔，避免 `RequestLimitExceeded` |
-| `--cli-unfold-argument` | agent 不用 | 人工点连接展开设计，agent 直接用 JSON |
+| `--cli-unfold-argument` | agent 不用 | 面向交互式终端的参数展开；agent 直接用 JSON |
 
 ## 下一步
 

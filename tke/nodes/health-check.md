@@ -28,7 +28,7 @@ fused: false
 
 节点健康检查策略（HealthCheckPolicy）按一组规则定期检测节点故障（如 kubelet 不健康、文件系统只读、内核 oops），发现故障后可按规则配置自动修复（重启 runtime / 重启 kubelet）。
 
-健康检查是**节点级**故障自愈，区别于集群巡检（集群级配置扫描，归 Observability）。两者层级与任务不同，勿混。
+健康检查是**节点级**故障自愈，区别于集群巡检（集群级配置扫描，归 Observability）。两者层级与任务不同，不要混淆。
 
 > 集群巡检（`DescribeClusterInspectionResultsOverview` / `ListClusterInspectionResults` / `ListClusterInspectionResultsItems`，2018-05-25）是集群级配置诊断，命令见 [集群巡检与日志配置](../observability/logging.md#集群巡检)。本文档的 `HealthCheckPolicy`（2022-05-01）是节点级故障自愈策略，层级与版本均不同——混淆会调错版本报「未知 Action」。
 
@@ -36,7 +36,7 @@ fused: false
 
 ### 启用哪些规则
 
-健康检查模板含 15 条规则，分两类（`DescribeHealthCheckTemplate`，权威来源）：
+健康检查模板含 15 条规则，分两类（以 `DescribeHealthCheckTemplate` 返回为准）：
 
 | 规则名 | 严重度 | 可自动修复 | 说明 |
 |:-------|:------:|:--------:|:-----|
@@ -56,7 +56,7 @@ fused: false
 
 **只有 `KubeletUnhealthy` 和 `RuntimeUnhealthy` 支持自动修复**（`RepairAction` 非 None）。High 严重度规则只能告警（`ShouldEnable=true, ShouldRepair=false`），不能自动修复——因为这类故障（内核 oops、只读文件系统）重启进程无法解决，需人工介入或重建节点。
 
-> **故障→隔离→恢复生命链**：High 规则告警后，人工处理路径是 `kubectl cordon` 隔离节点 → `kubectl drain` 驱逐 Pod → 删除/重建节点。完整隔离与驱逐命令见 [节点实例操作 — 节点隔离与驱逐](instance-ops.md#节点隔离与驱逐kubectl非-tccli)（kubectl，非 tccli）。
+> **故障→隔离→恢复路径**：High 规则告警后，人工处理路径是 `kubectl cordon` 隔离节点 → `kubectl drain` 驱逐 Pod → 删除/重建节点。完整隔离与驱逐命令见 [节点实例操作 — 节点隔离与驱逐](instance-ops.md#节点隔离与驱逐kubectl非-tccli)（kubectl，非 tccli）。
 
 ### 是否开启自动修复
 
@@ -72,7 +72,7 @@ fused: false
 | `HealthCheckPolicy.Rules[].Enabled` | Boolean | 是 | 是否启用该规则检测 |
 | `HealthCheckPolicy.Rules[].AutoRepairEnabled` | Boolean | 是 | 是否自动修复（仅对可修复规则生效） |
 
-> 参数名取自 `CreateHealthCheckPolicy` 入参契约。
+> 参数名取自 `CreateHealthCheckPolicy` 入参。
 
 ## 应用
 
@@ -119,7 +119,7 @@ tccli tke CreateHealthCheckPolicy --version 2022-05-01 --region <REGION> \
 
 ### 步骤 3：绑定策略到 Native 节点池
 
-静态契约中没有独立的“绑定策略” Action；绑定写入位于 `ModifyNodePool.Native.HealthCheckPolicyName`。先取得目标 Native 节点池 ID，再执行：
+公开 API 没有独立的“绑定策略” Action；绑定写入位于 `ModifyNodePool.Native.HealthCheckPolicyName`。先取得目标 Native 节点池 ID，再执行：
 
 ```bash
 tccli tke ModifyNodePool --version 2022-05-01 --region <REGION> \
@@ -180,7 +180,7 @@ tccli tke ModifyHealthCheckPolicy --version 2022-05-01 --region <REGION> \
 # expected: CAM 拦截 AuthFailure.UnauthorizedOperation；授权后 exit 0
 ```
 
-> 静态 API 模型未声明该更新是 replace 还是 merge，因此不作“覆盖式”断言。保守流程是先用 `DescribeHealthCheckPolicies` 读取当前完整 `Rules`，只修改目标字段后回传完整策略，再次 Describe 对比修改前后差异，避免因省略规则产生不确定结果。
+> `tccli tke ModifyHealthCheckPolicy help --detail` 与 API 入参说明未声明该更新是 replace 还是 merge，因此不作“覆盖式”断言。保守流程是先用 `DescribeHealthCheckPolicies` 读取当前完整 `Rules`，只修改目标字段后回传完整策略，再次 Describe 对比修改前后差异，避免因省略规则产生不确定结果。
 
 ## 故障恢复
 
@@ -203,14 +203,14 @@ tccli tke DescribeHealthCheckPolicyBindings --version 2022-05-01 --region <REGIO
   --filter "HealthCheckPolicyBindings[?Name=='<POLICY_NAME>'] | [0].{name:Name,nodePools:NodePools}"
 # expected: name=<POLICY_NAME>，NodePools 含 <NODE_POOL_ID>（策略已绑定到目标 Native 节点池）
 
-# 策略规则配置核对（Rules[].Enabled/AutoRepairEnabled 是可核实字段，非顶层 Enable）
+# 策略规则配置核对（Rules[].Enabled/AutoRepairEnabled 是可核对字段，非顶层 Enable）
 tccli tke DescribeHealthCheckPolicies --version 2022-05-01 --region <REGION> \
   --ClusterId "<CLUSTER_ID>" \
   --filter "HealthCheckPolicies[?Name=='<POLICY_NAME>'] | [0].{name:Name,rules:Rules}"
 # expected: name=<POLICY_NAME>; Rules 含目标规则，Enabled=true 且可修复规则 AutoRepairEnabled 符合预期
 ```
 
-> 策略绑定生效（`DescribeHealthCheckPolicyBindings` 返回目标策略且 `NodePools` 含目标节点池）+ 规则配置正确（`Rules[].Enabled/AutoRepairEnabled`）= 节点健康检查闭环完成。入参契约无顶层 `Enable` 字段（只有 `Rules[].Enabled`/`AutoRepairEnabled`），确认时核对节点池绑定，勿查询不存在的 `NodeNames` 或顶层 Enable。
+> 策略绑定生效（`DescribeHealthCheckPolicyBindings` 返回目标策略且 `NodePools` 含目标节点池）+ 规则配置正确（`Rules[].Enabled/AutoRepairEnabled`）= 节点健康检查闭环完成。入参无顶层 `Enable` 字段（只有 `Rules[].Enabled`/`AutoRepairEnabled`），确认时核对节点池绑定，不要查询不存在的 `NodeNames` 或顶层 Enable。
 
 ---
 

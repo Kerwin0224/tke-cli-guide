@@ -12,7 +12,7 @@ fused: true
 >
 > 配额：告警规则数与通知渠道数以产品实际限制为准，TKE 侧无额外配额限制。[配额说明](https://cloud.tencent.com/document/product/457/9087)
 
-> ⚠️ 本文档所有 Action 属 **TKE 2018-05-25（默认版本）**。
+> ⚠️ 本页所有 Action 属 **TKE 2018-05-25（默认版本）**。
 > AlertPolicy / AlertRule / GlobalNotification 三层操作同处一篇。
 
 ## 触发条件
@@ -230,7 +230,7 @@ tccli tke DeletePrometheusAlertRule --region <REGION> \
 | 告警未触发 | `DescribePrometheusAlertHistory --RuleName <RULE_NAME>` | PromQL 永假、`For` 过长、或指标未采集 | 校验 Rule 表达式，确认 [Agent 采集](prometheus-agent.md) 正常 |
 | 告警触发但通知未送达 | `DescribePrometheusGlobalNotification` | `Enabled=false`、时段外、接收组为空 | 启用通知，检查 TimeRange 与 ReceiverGroups |
 | 规则冲突 | `DescribePrometheusAlertPolicy` | 同名策略/规则已存在 | 先删后建，或 Modify 覆盖 |
-| 通知重复轰炸 | 查 `RepeatInterval` | 间隔过短 | 调大 `RepeatInterval` |
+| 通知重复发送 | 查 `RepeatInterval` | 间隔过短 | 调大 `RepeatInterval` |
 
 ## 收尾确认
 

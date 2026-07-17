@@ -35,10 +35,10 @@ fused: false
 
 #### kubeconfig 与 OIDC
 
-- **kubeconfig**: 直接用证书认证，简单。适合个人或 CI/CD
+- **kubeconfig**: 使用证书认证。适合个人或 CI/CD
 - **OIDC**: 接企业 SSO（如腾讯云账号、第三方 IdP），身份集中管理。适合多团队
 - **默认推荐**: 小团队用 kubeconfig；企业多团队用 OIDC
-- **能切换吗?**: 能。OIDC 与 kubeconfig 可共存
+- **可否切换**: 可。OIDC 与 kubeconfig 可共存
 
 ## 配置项
 
@@ -65,7 +65,7 @@ tccli tke UpdateClusterKubeconfig --region <REGION> --ClusterId "<CLUSTER_ID>"
 
 > 完整入参以 `tccli tke RotateClusterToken help --detail` 与实际 CLI 行为为准（2018-05-25）。
 
-**当前 TCCLI 契约缺口（已用命令核实）**：
+**当前 TCCLI 能力边界**：
 
 | 渠道 | 结果 |
 |:-----|:-----|
@@ -73,8 +73,8 @@ tccli tke UpdateClusterKubeconfig --region <REGION> --ClusterId "<CLUSTER_ID>"
 | `help --detail` → AVAILABLE PARAMETERS | **无** |
 | 官方 Example | `tccli tke RotateClusterToken --cli-unfold-argument`（**无** `--ClusterId`） |
 | 不传业务参调用 | 服务端 `MissingParameter`：请求缺少必传参数 `ClusterId` |
-| 传 `--ClusterId cls-xxx` | TCCLI **本地** `Unknown options: --ClusterId`（参数未进 CLI 模型） |
-| `--cli-input-json file://` 写入 `{"ClusterId":"..."}` | 仍 `MissingParameter`（JSON 中非骨架字段被丢弃/不生效） |
+| 传 `--ClusterId cls-xxx` | TCCLI **本地** `Unknown options: --ClusterId`（该 Action 未暴露此入参） |
+| `--cli-input-json file://` 写入 `{"ClusterId":"..."}` | 仍 `MissingParameter`（JSON 中未在 CLI 入参模型暴露的字段被丢弃/不生效） |
 
 结论：**服务端要求 `ClusterId`，当前 TCCLI 未暴露该入参**，按文档写 `--ClusterId` 的命令**不可执行**。凭证轮换请用已暴露 `ClusterId` 的路径：
 
@@ -83,11 +83,12 @@ tccli tke UpdateClusterKubeconfig --region <REGION> --ClusterId "<CLUSTER_ID>"
 tccli tke UpdateClusterKubeconfig --region <REGION> --ClusterId "<CLUSTER_ID>"
 # expected: exit 0；再 DescribeClusterKubeconfig 取新凭证
 
-# 下列命令在当前 TCCLI 下不要照抄 --ClusterId（会 Unknown options）
-# tccli tke RotateClusterToken --region <REGION>   # 无 ClusterId → MissingParameter
+# RotateClusterToken：当前 TCCLI 该 Action 不接受 --ClusterId（传入 → Unknown options）；
+# 不传 ClusterId 则 MissingParameter。待 TCCLI 暴露 ClusterId 入参后再用本 Action。
+# tccli tke RotateClusterToken --region <REGION>
 ```
 
-> `UpdateClusterKubeconfig` 与 `RotateClusterToken` 是不同凭证面；后者需 TCCLI/API 模型补齐 `ClusterId` 后才能 CLI 闭环。权限上写操作仍受 CAM 约束（如资源标签 `billing`），未授权时常见 `AuthFailure.UnauthorizedOperation`。
+> `UpdateClusterKubeconfig` 与 `RotateClusterToken` 是不同凭证面；后者需当前 TCCLI 对该 Action 暴露 `ClusterId` 入参后才能在 CLI 闭环。权限上写操作仍受 CAM 约束（如资源标签 `billing`），未授权时常见 `AuthFailure.UnauthorizedOperation`。
 
 
 ### OIDC 配置
@@ -134,7 +135,6 @@ tccli tke DescribeClusterKubeconfig --region ap-guangzhou --ClusterId "<CLUSTER_
 
 # 2. 若 Domain/server 为 cls-*.ccs.tencent-cloud.com 且 dig 失败：用 ClusterExternalEndpoint 改写 server（见 endpoints.md 步骤 5）
 # 3. 验证连通（本机须公网端点 Created + SecurityPolicies 含出口 IP；仅内网 VIP 时本机超时属网络路径，非证书问题）
-<!-- kubectl验证tccli获取的kubeconfig可连通集群，非tccli边界 -->
 kubectl --kubeconfig ~/.kube/tke-config get nodes --request-timeout=15s
 # expected: 节点列表；超时/Unable to connect/no such host → 查端点、ACL、是否改写为 ClusterExternalEndpoint，见 [管理端点](../networking/endpoints.md)
 ```
@@ -148,16 +148,15 @@ tccli tke DescribeClusterAuthenticationOptions --region <REGION> --ClusterId "<C
 # expected: 返回 ServiceAccounts/OIDCConfig 配置
 
 # kubectl 连通性（前置：公网端点 Created + SecurityPolicies 含本机出口 IP，或本机在 VPC 内）
-<!-- kubectl验证tccli配的kubeconfig认证有效性，非tccli边界 -->
 kubectl --kubeconfig kubeconfig.yaml get nodes --request-timeout=15s
 # expected: 节点列表；context deadline exceeded → 端点未开/仅内网/ACL 未放行
 ```
 
 | 维度 | 命令 | 预期 |
 |:-----|:-----|:-----|
-| kubeconfig 有效 | `kubectl --kubeconfig <file> get nodes` <!-- kubectl消费tccli产生的kubeconfig验证连通，非tccli边界 --> | 节点列表返回 |
+| kubeconfig 有效 | `kubectl --kubeconfig <file> get nodes` | 节点列表返回 |
 | OIDC 配置 | `DescribeClusterAuthenticationOptions` | OIDCConfig 非空 |
-| 证书未过期 | `kubectl --kubeconfig <file> version` <!-- kubectl验证kubeconfig证书有效期，非tccli边界 --> | 无认证错误 |
+| 证书未过期 | `kubectl --kubeconfig <file> version` | 无认证错误 |
 
 ## 回滚
 
@@ -188,7 +187,7 @@ kubectl --kubeconfig kubeconfig.yaml get nodes
 
 | 现象 | 诊断 | 根因 | 修复 |
 |:--------|:----------|:------------|:-----|
-| kubectl 报 `certificate expired` | `kubectl version` <!-- kubectl诊断kubeconfig证书状态，非tccli边界 --> | kubeconfig 证书过期 | `UpdateClusterKubeconfig` 轮转 |
+| kubectl 报 `certificate expired` | `kubectl version` | kubeconfig 证书过期 | `UpdateClusterKubeconfig` 轮转 |
 | kubectl 报 `Unable to connect` | 端点状态 | 集群端点未开启或不通 | 见 [管理访问端点](../networking/endpoints.md) |
 | OIDC 登录失败 | `DescribeClusterAuthenticationOptions` | issuer 不可达或 JWKSURI 错 | 确认 IdP 服务可达 |
 
@@ -232,8 +231,7 @@ tccli tke DeleteUserPermissions --TargetUin "<SUB_UIN>" --region <REGION> \
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
 ```bash
 # 汇总核对三项：kubeconfig 可用 + OIDC 配置生效 + RBAC 权限授予
-# 1. kubeconfig 端到端可用（上文已查 OIDC 配置，此处查 kubeconfig 真能连集群）
-<!-- kubectl端到端验证tccli认证配置可连通集群，非tccli边界 -->
+# 1. kubeconfig 端到端可用（OIDC 配置核对后，再确认 kubeconfig 可连通集群）
 kubectl --kubeconfig kubeconfig.yaml get nodes
 # expected: 节点列表返回
 
@@ -248,7 +246,7 @@ tccli tke DescribeUserPermissions --TargetUin "<SUB_UIN>" --region <REGION> \
 # expected: 含目标集群与角色 → 认证配置闭环完成
 ```
 
-> kubeconfig 可连通 + OIDC 配置生效 + RBAC 权限授予 = 跨步骤闭环。上文验证段查各配置项字段存在，此处汇总三类认证方式（kubeconfig/OIDC/RBAC）端到端可用，是进下一阶段（部署应用/开启审计）的前置。
+> kubeconfig 可连通 + OIDC 配置生效 + RBAC 权限授予 = 跨步骤闭环。除各配置项字段存在外，还须汇总三类认证方式（kubeconfig/OIDC/RBAC）端到端可用，是进下一阶段（部署应用/开启审计）的前置。
 
 ---
 

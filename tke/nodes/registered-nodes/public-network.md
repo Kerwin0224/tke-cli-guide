@@ -54,7 +54,7 @@ fused: true
 5. 获取脚本：`DescribeExternalNodeScript`（响应 `Command`/`Link`/`Token`）。
 6. 在目标机器执行 `Command`，节点上线。
 
-完整命令、字段表、占位符与验证见[创建注册节点（专线版）](dedicated-line.md)。本篇不重复命令，仅说明公网相关的差异与约束。
+完整命令、字段说明、占位符与验证见[创建注册节点（专线版）](dedicated-line.md)。本文不重复命令，仅说明公网相关的差异与约束。
 
 ## 验证
 

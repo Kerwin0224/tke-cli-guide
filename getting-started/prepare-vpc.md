@@ -5,7 +5,7 @@ fused: false
 ---
 # 准备 VPC 与子网
 
-> TKE 集群必须部署在 VPC 内。若你已有 VPC+子网，可跳过本文，用 `tccli vpc DescribeSubnets` 验证。本文给"从零创建一个最小可用 VPC+子网"的闭环。
+> TKE 集群必须部署在 VPC 内。若你已有 VPC+子网，可跳过本文，用 `tccli vpc DescribeSubnets` 验证。本文提供从零创建最小可用 VPC+子网的闭环。
 > VPC 是腾讯云网络服务，完整能力见 [VPC 产品文档](https://cloud.tencent.com/document/product/215)。
 
 ## 概述
@@ -35,8 +35,8 @@ TKE 集群节点从子网分配内网 IP，Pod/Service 用 VPC CIDR 通信。创
 tccli --version
 # expected: 输出当前已安装的 TCCLI 版本号
 
-tccli cvm DescribeRegions --filter "TotalCount" --output text
-# expected: 数字（如 18；随账号/产品开通变化）→ 凭证有效（凭证配置见 [配置凭证](credentials.md)）
+tccli tke DescribeRegions --filter "TotalCount" --output text
+# expected: 数字（如 19；随账号/产品开通变化）→ 凭证有效 + TKE 域可达（凭证配置见 [配置凭证](credentials.md)）
 ```
 
 ### 资源检查
@@ -112,10 +112,10 @@ tccli vpc AssignIpv6SubnetCidrBlock --region <REGION> \
 | 占位符 | 含义 | 约束 | 如何获取 |
 |:------|:-----|:-----|:--------|
 | `<VPC_ID>` | VPC ID | 须已创建 | 上一步 `CreateVpc` 返回 `Vpc.VpcId` |
-| `<SUBNET_ID>` | 子网 ID | 须在 VPC 内 | `### 2. 创建子网` 返回的 `SubnetId` |
+| `<SUBNET_ID>` | 子网 ID | 须在 VPC 内 | 「2. 创建子网」返回的 `SubnetId` |
 | `Ipv6SubnetCidrBlock` | 子网 IPv6 CIDR | 须在 VPC 的 IPv6 CIDR `/56` 范围内，子网用 `/64` | 自取（如 `2402:xxxx::/64`） |
 
-> ⚠️ **顺序约束**：`AssignIpv6SubnetCidrBlock` 须在 `### 2. 创建子网` 之后执行（须先有子网 ID）。故双栈集群的完整准备顺序是：创建 VPC → 分配 VPC IPv6 CIDR（`AssignIpv6CidrBlock`）→ 创建子网 → 分配子网 IPv6 CIDR → 创建集群(双栈)。`Ipv6CidrBlock` 由腾讯云分配（非自取），子网 IPv6 CIDR 须落在 VPC 的 `/56` 内。
+> ⚠️ **顺序约束**：`AssignIpv6SubnetCidrBlock` 须在「2. 创建子网」之后执行（须先有子网 ID）。故双栈集群的完整准备顺序是：创建 VPC → 分配 VPC IPv6 CIDR（`AssignIpv6CidrBlock`）→ 创建子网 → 分配子网 IPv6 CIDR → 创建集群(双栈)。`Ipv6CidrBlock` 由腾讯云分配（非自取），子网 IPv6 CIDR 须落在 VPC 的 `/56` 内。
 
 ### 2. 创建子网
 
@@ -238,7 +238,7 @@ tccli vpc DeleteVpc --region <REGION> --VpcId "<VPC_ID>"
 ## 收尾确认
 
 ```bash
-# 汇总核对：VPC + 子网 + 可用区三要素齐备（上文分查各维度，此处合一确认）
+# 端到端确认：一次查询核对子网 ID、VPC ID、可用区、CIDR 与可用 IP 是否齐备
 tccli vpc DescribeSubnets --region <REGION> \
   --Filters '[{"Name":"vpc-id","Values":["<VPC_ID>"]}]' \
   --filter "SubnetSet[0].{subnet:SubnetId,vpc:VpcId,zone:Zone,cidr:CidrBlock,avail:AvailableIpAddressCount}" --output text

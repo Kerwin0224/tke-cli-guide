@@ -65,8 +65,8 @@ graph TD
 
 | 控制台步 | 决策项 | tccli 字段 / Action | 承载文档 |
 |:--------|:------|:-------------------|:--------|
-| **① 集群信息** | 集群名称/Master&Etcd维护/集群规格/自动升配/ETCD资源拆分/地域/K8s版本/运行时/镜像OS/标签/安全增强/hostname/自定义参数/CDC/项目/描述/删除保护/高可用/数据加密 | `CreateCluster` 入参（`ClusterBasicSettings`/`ClusterCIDRSettings`/`ClusterAdvancedSettings`/`CdcId`）；**数据加密除外**=`EnableEncryptionProtection`（独立 Action，创建后开） | [创建集群](clusters/create.md) 关键字段表；数据加密 → [集群防护 — etcd 加密](security/protection.md) |
-| **② 网络配置** | 集群IP类型/VPC/容器网络插件/网络模式(共享/独立网卡)/固定PodIP/容器子网/Service IP段 + 高级(Dataplane v2/Kube-proxy模式/IP回收/ClusterIP增强)。**插件推荐序（按场景选，非 api 默认）**：①需固定 Pod IP/安全组直通 → VPC-CNI；②要省 VPC IP、可后期扩网段 → GR；③要 Cilium 数据面且不占 VPC IP → CiliumOverlay | `CreateCluster` 入参（`NetworkType`/`IsDualStack`/`VpcCniType`/`ClusterCIDRSettings`/`DataPlaneV2`/`KubeProxyMode`/`IPVS`） | [创建集群 — 跨字段约束](clusters/create.md#跨字段约束) + [网络管理](networking/index.md) |
+| **① 集群信息** | 集群名称/Master&Etcd维护/集群规格/自动升配/ETCD资源拆分/地域/K8s版本/运行时/镜像OS/标签/安全增强/hostname/自定义参数/CDC/项目/描述/删除保护/高可用/数据加密 | `CreateCluster` 入参（`ClusterBasicSettings`/`ClusterCIDRSettings`/`ClusterAdvancedSettings`/`CdcId`）；**数据加密除外**=`EnableEncryptionProtection`（独立 Action，创建后开） | [创建集群](clusters/create.md) 关键字段；数据加密 → [集群防护 — etcd 加密](security/protection.md) |
+| **② 网络配置** | 集群IP类型/VPC/容器网络插件/网络模式(共享/独立网卡)/固定PodIP/容器子网/Service IP段 + 高级(Dataplane v2/Kube-proxy模式/IP回收/ClusterIP增强)。**插件推荐序（按场景选，非 API 默认值）**：①需固定 Pod IP/安全组直通 → VPC-CNI；②要省 VPC IP、可后期扩网段 → GR；③要 Cilium 数据面且不占 VPC IP → CiliumOverlay | `CreateCluster` 入参（`NetworkType`/`IsDualStack`/`VpcCniType`/`ClusterCIDRSettings`/`DataPlaneV2`/`KubeProxyMode`/`IPVS`） | [创建集群 — 跨字段约束](clusters/create.md#跨字段约束) + [网络管理](networking/index.md) |
 | **③ 组件配置** | **默认会装**：CBS + monitoragent + ip-masq-agent。另可选：存储(COS/CFSTurbo/CFS)、增强组件（控制台 **30+**，按监控/镜像/DNS/调度/网络/GPU/安全等分类）、云原生服务（Prometheus 等，创建时可勾选） | `InstallAddon`/`UpdateAddon`（独立 Action 族，**创建后装**；Prometheus 另属可观测 Action 族） | [插件管理](addons/index.md) + [可观测](observability/index.md) |
 | **④ 信息确认** | 参数复核 | —（无 tccli 对应，控制台确认步） | — |
 
@@ -78,7 +78,7 @@ graph TD
 |:--------|:------|:-------------------|:--------|
 | **③ Master 配置**（仅独立） | 节点来源(新增/已有)/计费模式/Master&Etcd节点配置(可用区/网络/机型/系统盘/数据盘/公网带宽/实例名/数量≤7/登录方式/SSH密钥) + 高级(CAM角色/容器目录/安全加固/云监控/cordon/Labels/Taints/自定义脚本) | `CreateCluster` 的 `RunInstancesForNode`（**`NodeRole=MASTER_ETCD`**，透传 CVM RunInstances 全参数） | [创建集群](clusters/create.md) 路径 B + [独立集群 Master 运维](clusters/master-ops.md) |
 
-> ⚠️ **控制台步 ≠ 单个 Action**：步①的"数据加密"和步③"组件配置"是**独立 Action**（`EnableEncryptionProtection`/`InstallAddon`），创建集群后单独调用——控制台把多 Action 收进一个 UI 流，tccli 须分步执行。步①可选入参（ETCD拆分/自定义参数/CDC/高可用/自动升配/安全增强/集群描述等，`required=False`）不传也调通，agent 不传则静默漏建，须按需补。
+> ⚠️ **控制台步 ≠ 单个 Action**：步①的"数据加密"和步③"组件配置"是**独立 Action**（`EnableEncryptionProtection`/`InstallAddon`），创建集群后单独调用——控制台把多 Action 收进一个 UI 流，tccli 须分步执行。步①可选入参（ETCD拆分/自定义参数/CDC/高可用/自动升配/安全增强/集群描述等，`required=False`）不传也可调用成功，但会静默漏建对应能力，须按需补传。
 >
 > **创建后改不了（须在创建时定）**：地域、网络插件（`NetworkType`；仅 VPC-CNI 可事后开启）、Service CIDR 等——变更须重建集群或走受限变更路径，见各专题。
 >
@@ -115,12 +115,12 @@ TKE 有两个 API 版本，TCCLI 默认走 `2018-05-25`，但**官方当前版�
 | 集群创建/删除/升级、网络、Prometheus、边缘、EKS、Release | **2018-05-25** | 新版无此 Action，只能用旧版 |
 | `DescribeClusters`（两版同名） | **2022-05-01**（推荐显式 `--version`） | 入参两版一致，无倾向时选官方当前版；**省略则走 TCCLI 默认 `2018-05-25`** |
 
-**三条铁律**:
-1. **同名≠同契约**: `DescribeClusterInstances` 入参两版不兼容（旧 `InstanceIds`/`InstanceRole` vs 新 `SortBy`/`NeedTags`），切换前用 `--generate-cli-skeleton` 核契约
+**三条硬规则**:
+1. **同名≠同契约**: `DescribeClusterInstances` 入参两版不兼容（旧 `InstanceIds`/`InstanceRole` vs 新 `SortBy`/`NeedTags`），切换前用 `--generate-cli-skeleton` 核对入参契约
 2. **显式 `--version`（仅同名 Action 必需）**: TKE 的两个 API 版本各自有**独占 Action**（如 `CreateCluster`/`DeleteCluster` 仅 2018-05-25、`CreateNodePool`/`ModifyNodePool` 仅 2022-05-01）——这类命令省略 `--version` 会走 TCCLI 默认版（2018-05-25），即它们唯一的版本，**省略不会出错**。真正需要显式 `--version` 的是**两版同名**的 Action：`DescribeClusters`/`DescribeClusterInstances`/`DescribeClusterNodePools`(旧名) 等——省略会静默走默认版，可能与意图错位。**判据**：命令只在一个版本存在 → 可省略 `--version`；两版同名 → 必须带 `--version`（或用 `--generate-cli-skeleton` 确认归属版本）。
 3. **解析响应容错缺失**: 新版响应多 `Errors` 字段，旧版无，按字段名取值
 
-> 本指南内 [创建节点池](nodes/nodepool-create.md) 与 [节点运维](nodes/instance-ops.md) 已按版本标注命令。TCCLI 默认版为 `2018-05-25`（即 `tccli tke help` 首行），quickstart 的 `CreateCluster`/`DeleteCluster` 属该版独占 Action，故 quickstart 不写 `--version` 与本条不冲突。
+> [创建节点池](nodes/nodepool-create.md) 与 [节点运维](nodes/instance-ops.md) 已按版本标注命令。TCCLI 默认版为 `2018-05-25`（即 `tccli tke help` 首行）；`CreateCluster`/`DeleteCluster` 属该版独占 Action，省略 `--version` 即走该版，与本条不冲突。
 
 ## 快速检查
 

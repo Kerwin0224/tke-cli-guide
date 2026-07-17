@@ -150,7 +150,7 @@ tccli tke DescribeEncryptionStatus --ClusterId "<CLUSTER_ID>" --region <REGION> 
 # expected: Closing 表示关闭中；Closed 表示已关闭
 ```
 
-> `Status` 状态机：开启时 `Closed`（已关闭）→ `Opening`（开启中）→ `Opened`（已开启）；关闭时 `Opened` → `Closing`（关闭中）→ `Closed`（已关闭）。`DisableEncryptionProtection` 发起关闭流程，成功返回 `RequestId` 不代表完成，必须轮询到 `Closed`。静态契约未说明存量 Secret 是否逐条解密，本文不作扩写。
+> `Status` 状态机：开启时 `Closed`（已关闭）→ `Opening`（开启中）→ `Opened`（已开启）；关闭时 `Opened` → `Closing`（关闭中）→ `Closed`（已关闭）。`DisableEncryptionProtection` 发起关闭流程，成功返回 `RequestId` 不代表完成，必须轮询到 `Closed`。接口未声明存量 Secret 是否逐条解密，关闭加密后是否回写明文以实际行为为准。
 
 ```bash
 # 开启加密保护（KMSConfiguration 字段是 KeyId + KmsRegion，不是 KmsKeyId）
@@ -271,17 +271,17 @@ tccli cls DescribeLogsets --region <REGION> --LogsetId "<LOGSET_ID>"
 
 # 3. 端到端：用唯一命名资源制造 kube-apiserver 审计事件，再到 CLS 检索
 # kubectl 操作目标集群的 Kubernetes API；TCCLI 仅负责审计开关与 CLS 配置
-AUDIT_NAME="d105-audit-check"
-kubectl create configmap "$AUDIT_NAME" --from-literal=probe=d105
-# expected: configmap/d105-audit-check created
+AUDIT_NAME="audit-probe-check"
+kubectl create configmap "$AUDIT_NAME" --from-literal=probe=audit
+# expected: configmap/audit-probe-check created
 
-tccli cls SearchLog --region <REGION> --TopicId "<TOPIC_ID>" --Content '"d105-audit-check"'
+tccli cls SearchLog --region <REGION> --TopicId "<TOPIC_ID>" --Content '"audit-probe-check"'
 # expected: 命中 create/configmaps 事件，并可按操作时间、verb、resource、name 交叉确认
 kubectl delete configmap "$AUDIT_NAME"
-# expected: configmap/d105-audit-check deleted
+# expected: configmap/audit-probe-check deleted
 ```
 
-> 审计开关 true + CLS 日志集/主题存在 + 操作可检索 = 配置完成。上文验证段查开关状态与日志投递维度，此处汇总 TKE 侧开关 + CLS 侧资源存在 + 真实操作可检索三项，确认投递链路完整可用。
+> 审计开关 true + CLS 日志集/主题存在 + 操作可检索 = 配置完成。除开关状态与投递维度外，还须汇总 TKE 侧开关 + CLS 侧资源存在 + 真实操作可检索三项，确认投递链路完整可用。
 
 ---
 
