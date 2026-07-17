@@ -18,11 +18,11 @@ fused: true
 
 ## 触发条件
 
-- DescribeClusterStatus 返回 ClusterState=Running 且需添加工作节点（Pod 待调度到节点）— 从 [步骤 1 决策](#步骤-1决策-—-选节点池类型与-api-版本) 开始
+- DescribeClusterStatus 返回 ClusterState=Running 且需添加工作节点（Pod 待调度到节点）— 从 [步骤 1 决策](#步骤-1决策--选节点池类型与-api-版本) 开始
 - 你要用 2022-05-01 新版 Native 强类型节点池（本文主路径）— 本文档主路径走 Native
 - 你要选节点池类型（Native/Regular/Super/External）但不知差异 — 看 [选项对比](#选项) 决策表
 
-## 选项
+## 选项 {#选项}
 
 | 类型 | 最佳场景 | 节点来源 | 扩缩容 |
 |------|---------|---------|--------|
@@ -31,7 +31,7 @@ fused: true
 | Super (超级) | Serverless 弹性 | 虚拟节点 | 无限制 |
 | External (第三方) | 混合云/自建机房 | 非腾讯云机器 | 手动管理 |
 
-## 准备工作
+## 准备工作 {#准备工作}
 
 ```bash
 # 确认集群 Running
@@ -58,7 +58,7 @@ tccli cvm DescribeZoneInstanceConfigInfos --region ap-guangzhou \
 # expected: 多行机型；取 cpu/mem 最小且可售的 InstanceType 填入节点池
 ```
 
-### AS 服务角色（节点池创建前）
+### AS 服务角色（节点池创建前） {#as-服务角色节点池创建前}
 
 > 节点池（含旧版 `CreateClusterNodePool` 透传 AS、以及依赖弹性伸缩建 CVM 的路径）需要账号已授权服务角色 **`AS_QCSRole`**。未授权时 API 返回 `UnauthorizedOperation.AutoScalingRoleUnauthorized`（消息含「未授权服务角色 AS_QCSRole」）——**不是**节点池 JSON 写错，也**不是**改 `LaunchConfigurePara` 能修好。
 
@@ -108,7 +108,7 @@ tccli cam DescribeRoleList --Page 1 --Rp 100 \
 | 与 TKE 服务授权关系 | `TKE_QCSRole` 管 TKE 调 CVM/CLB/CBS；**AS 角色是另一条前置**。两者都可能缺，见 [配置凭证 — 服务角色](../../getting-started/credentials.md#服务角色tke--ipamd--as--tcr--可观测) |
 | 绕过 AS | 只要 1 台普通节点、不建节点池 → [节点实例运维 — CreateClusterInstances](instance-ops.md#新建-cvm-作节点createclusterinstances) |
 
-### 安全组（节点加入前）
+### 安全组（节点加入前） {#安全组节点加入前}
 
 > 同一集群节点建议绑定**同一**安全组，且该组不挂其他无关 CVM。安全组只开放最小权限；须放通容器网段与节点网段互访，否则跨节点 Service/DNS 失败。
 
@@ -154,7 +154,7 @@ tccli vpc DescribeSecurityGroups --region ap-guangzhou \
 
 ## 操作步骤
 
-### 步骤 1：决策 — 选节点池类型与 API 版本
+### 步骤 1：决策 — 选节点池类型与 API 版本 {#步骤-1决策--选节点池类型与-api-版本}
 
 #### 为什么选 Native
 
@@ -284,7 +284,7 @@ tccli tke DescribeNodePoolsElasticityStrength \
 
 > **能力边界**：`DescribeNodePoolsElasticityStrength` 需要 `ClusterId`，但当前 `tccli` **未注册该 Action 的 CLI 入参**；执行会返回 `Unknown options: --ClusterId, <id>`（SDK 要求 `ClusterId`，CLI 参数层却拒绝接收）。因此当前**不可经 `tccli` 成功调用**。弹性健康度/容量余量请改用 `DescribeNodePools --version 2022-05-01` → `Native.Replicas` / `Native.ReadyReplicas` / `Native.Scaling`（Min/Max）；**不要依赖该 Action 做容量决策**。若必须取弹性评分，走控制台，或待 `tccli` 支持该入参后再调用。
 
-## 旧版路径：CreateClusterNodePool (2018-05-25)
+## 旧版路径：CreateClusterNodePool (2018-05-25) {#旧版路径createclusternodepool-2018-05-25}
 
 > 需要 AS 弹性伸缩组级精细控制时回退旧版。旧版透传 AS 原始 JSON 字符串，调用方自己拼 AS 参数；新版 `CreateNodePool` (2022-05-01) 用 `Native` 强类型对象，生产环境用新版。参数名以 `tccli tke CreateClusterNodePool --version 2018-05-25 help --detail` 为准。
 
@@ -316,7 +316,7 @@ tccli tke CreateClusterNodePool \
 
 > 旧版与新版入参不同：旧版 `CreateClusterNodePool` 透传 AS 字符串（`AutoScalingGroupPara`/`LaunchConfigurePara`），新版 `CreateNodePool` 用结构化 `Native` 对象（`SubnetIds`/`InstanceTypes`）。两版查询 Action 命名也不同（旧 `DescribeClusterNodePools` vs 新 `DescribeNodePools`），跨版本切换前用 `--generate-cli-skeleton` 逐字段核对入参。
 
-## 清理
+## 清理 {#清理}
 
 > ⚠️ 删除节点池会销毁池内**所有节点** (CVM)，Pod 会被驱逐（除非有 PDB 保护）。节点池成员管理（移出单个节点/机型变更）见 [节点运维](instance-ops.md)。
 
@@ -355,7 +355,7 @@ tccli tke DescribeNodePools --version 2022-05-01 --ClusterId "<CLUSTER_ID>"
 | 节点创建后立即 Terminating | `DescribeClusterInstances` → InstanceState | 机型资源不足 | 换机型重建 |
 | 节点加入但 NotReady | `DescribeClusterInstances` → InstanceState | 节点初始化脚本失败或安全组不通 | 检查安全组 443 出方向 |
 
-## 节点池成员与机型管理
+## 节点池成员与机型管理 {#节点池成员与机型管理}
 
 > 节点加入节点池、节点保护、节点池机型变更。
 

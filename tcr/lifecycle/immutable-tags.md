@@ -59,7 +59,7 @@ fused: false
 
 ## 应用
 
-### 开启不可变规则 — Minimal
+### 开启不可变规则 — Minimal {#开启不可变规则-minimal}
 
 ```bash
 # 命名空间下所有仓库的 latest Tag 不可覆盖

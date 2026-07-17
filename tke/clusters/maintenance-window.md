@@ -196,7 +196,7 @@ tccli tke DescribeClusterMaintenanceWindowAndExclusions --region <REGION> --Limi
 
 > 删除窗口不影响集群本身，仅恢复"无托管运维时段约束"状态，下次自动升级可能随时发生。修改时段而非删除可用 Modify 覆盖。
 
-## 故障恢复
+## 故障恢复 {#故障恢复}
 
 ### 命令返回错误（exit ≠ 0）
 

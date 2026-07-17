@@ -22,7 +22,7 @@ fused: true
 - 集群创建失败卡 `Creating` > 30 分钟，需删除重建 — 先删再建（见 [创建集群](create.md)）
 - 测试集群用毕即删，避免空集群持续计管理费 — 用本文清理
 
-## 副作用
+## 副作用 {#副作用}
 
 删除集群时会影响以下资源:
 
@@ -37,7 +37,7 @@ fused: true
 
 > **计费提示**: 集群管理费在删除后立即停止。但保留的 CBS/EIP/CLB 会**持续扣费**。
 
-## 决策依据
+## 决策依据 {#决策依据}
 
 ### InstanceDeleteMode: terminate vs retain
 
@@ -77,7 +77,7 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet
 
 > ⚠️ **高危操作**：集群删除**不可逆**！`InstanceDeleteMode` 决定是否连带删除 CVM/CBS/CLB；`retain` 模式下 CVM 保留但持续计费。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
 
-### 步骤 1：关闭删除保护
+### 步骤 1：关闭删除保护 {#步骤-1关闭删除保护}
 
 如果创建时开启了删除保护，需要先关闭:
 
@@ -131,7 +131,7 @@ tccli tke DescribeClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]'
 # expected: { "TotalCount": 0, "Clusters": [] }
 ```
 
-### 步骤 4：清理残留资源
+### 步骤 4：清理残留资源 {#步骤-4清理残留资源}
 
 即使用了 Enhanced 模式，也建议检查残留:
 

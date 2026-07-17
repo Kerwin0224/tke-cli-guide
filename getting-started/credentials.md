@@ -149,7 +149,7 @@ tccli tke DescribeRegions
 
 > ⚠️ **不要用 `tccli auth verify`**——该子命令**不存在**（`tccli auth` 仅有 login/logout/help，执行 verify 返回 exit 252 Invalid choice）。凭证验证用 `tccli tke DescribeRegions` 这类轻量只读调用。
 
-## 服务角色（TKE / IPAMD / AS / TCR / 可观测）
+## 服务角色（TKE / IPAMD / AS / TCR / 可观测） {#服务角色tke--ipamd--as--tcr--可观测}
 
 > CAM **用户密钥**（SecretId/SecretKey）让 **你** 调 API；**服务角色**让 **云产品** 代你访问其他产品（TKE→CVM/CLB/CBS，IPAMD→ENI，节点池→AS，签名→KMS）。密钥配好后仍可能因缺服务角色失败——错误码与用户侧 `CamNoAuth` 不同。  
 > 官方角色/策略语义以 [服务授权相关角色权限说明](https://cloud.tencent.com/document/product/457/43416) 为准；下列 CLI 为 agent 可执行探测与补齐路径。
@@ -199,7 +199,7 @@ tccli cam ListAttachedRolePolicies --Page 1 --Rp 50 --RoleName TKE_QCSRole \
 | 镜像签名 | `TCR_QCSRole` 且已挂 KMS 策略 |
 | Prometheus | `TKE_QCSLinkedRoleInPrometheusService` 或官方当前 Linked 角色名 |
 
-### 补 TKE_QCSRole（主服务角色）
+### 补 TKE_QCSRole（主服务角色） {#补-tke_qcsrole主服务角色}
 
 > **推荐主路径**：首次登录 [容器服务控制台](https://console.cloud.tencent.com/tke2) 弹窗 **同意授权**（官方 43416）。  
 > **CLI 等价**（子账号须有 `cam:CreateRole` / `cam:AttachRolePolicy`；无 CAM 写权限则只能控制台主账号授权）：
@@ -232,7 +232,7 @@ tccli cam AttachRolePolicy \
 # expected: RequestId
 ```
 
-### 补 IPAMDofTKE_QCSRole（VPC-CNI 前置）
+### 补 IPAMDofTKE_QCSRole（VPC-CNI 前置） {#补-ipamdoftke_qcsrolevpc-cni-前置}
 
 > 首次使用 **VPC-CNI** 时官方要求授权 IPAMD，见 43416「IPAMDofTKE_QCSRole」。quickstart 默认 VPC-CNI，**建集群前应探测**。
 
@@ -252,7 +252,7 @@ tccli cam AttachRolePolicy \
 # tccli cam AttachRolePolicy --AttachRoleName IPAMDofTKE_QCSRole --PolicyName QcloudAccessForIPAMDRoleInQcloudAllocateEIP
 ```
 
-### 补 AS_QCSRole（节点池前置）
+### 补 AS_QCSRole（节点池前置） {#补-as_qcsrole节点池前置}
 
 > 完整步骤见 [创建节点池 — AS 服务角色](../tke/nodes/nodepool-create.md#as-服务角色节点池创建前)。最短：
 

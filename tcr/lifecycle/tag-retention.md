@@ -77,7 +77,7 @@ tccli tcr DescribeTagRetentionRules --region <REGION> --RegistryId "<REGISTRY_ID
 
 ## 操作步骤
 
-### 步骤 1：决策 — 保留策略
+### 步骤 1：决策 — 保留策略 {#步骤-1决策-保留策略}
 
 #### 为什么选 latestPushedK vs nDaysSinceLastPush
 
@@ -217,7 +217,7 @@ tccli tcr DescribeTagRetentionRules --region <REGION> --RegistryId "<REGISTRY_ID
 
 > ⚠️ 建议先在测试命名空间验证规则，确认删除效果后再应用到生产命名空间。误删不可恢复。
 
-## Webhook 触发器
+## Webhook 触发器 {#webhook-触发器}
 
 > Webhook 触发器在镜像推送/拉取等事件发生时回调指定 URL。属生命周期自动化（事件驱动），与版本保留（定时清理）互补。
 
@@ -259,7 +259,7 @@ tccli tcr DescribeWebhookTriggerLog --RegistryId "<REGISTRY_ID>" --Namespace "<N
 # expected: 返回 TotalCount+Logs[]; Namespace 不存在报 ResourceNotFound.TcrResourceNotFound: namespace not found
 ```
 
-## GC 垃圾回收任务
+## GC 垃圾回收任务 {#gc-垃圾回收任务}
 
 > GC（垃圾回收）清理镜像层占用的存储。删除镜像后，GC 释放底层存储。属生命周期存储管理。GC 完整闭环：创建 → 查状态 → 终止。
 

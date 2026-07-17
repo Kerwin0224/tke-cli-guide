@@ -57,7 +57,7 @@ tccli cam DescribeRoleList --Page 1 --Rp 100 \
 
 ---
 
-## Step 0: 环境检查
+## Step 0: 环境检查 {#step-0-环境检查}
 
 查询当前地域可用的 K8s 版本，确认最新版本号。
 
@@ -292,7 +292,7 @@ tccli tke DescribeClusterEndpointStatus --region "$REGION" \
 # expected: Status=Created
 ```
 
-#### 2. ACL：仅在 Created 后；若 FailedOperation.LbCommon → 等 15–60s 重试本命令
+#### 2. ACL：仅在 Created 后；若 FailedOperation.LbCommon → 等 15–60s 重试本命令 {#2-acl仅在-created-后；若-failedoperationlbcommon-→-等-1560s-重试本命令}
 
 ```bash
 tccli tke ModifyClusterEndpointSP --region "$REGION" \
@@ -390,7 +390,7 @@ tccli tke DescribeClusters --region <REGION> --ClusterIds '["<CLUSTER_ID>"]' \
 
 ---
 
-## Step 3: 删除集群（清理）
+## Step 3: 删除集群（清理） {#step-3-删除集群清理}
 
 > ⚠️ **不可逆**: 集群删除后元数据**无法恢复**，工作负载全部丢失。
 > `--InstanceDeleteMode terminate` 会销毁关联的 CVM 节点。
@@ -499,7 +499,7 @@ DeleteCluster 不会自动删除所有关联资源。CBS/EIP/CLB 只能按创建
 
 ## 下一步
 
-### 上线前检查
+### 上线前检查 {#上线前检查}
 
 Quickstart 闭环后、生产部署前，对照下列项（完整表见 [容器应用部署 Check List](https://cloud.tencent.com/document/product/457/41497)）：
 

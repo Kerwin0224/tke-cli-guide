@@ -56,7 +56,7 @@ doc_type: Overview
 
 > `monitoragent`、`ip-masq-agent` 属于系统组件，不应进入 `DeleteAddon` 删除流程。具体增强组件名称从集群详情的组件管理页获取；已知名称的参数可用 `DescribeAddonValues` 查询。
 
-## 快速检查
+## 快速检查 {#快速检查}
 
 ```bash
 # 查看当前集群已安装的全部 addon

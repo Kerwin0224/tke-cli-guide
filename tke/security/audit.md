@@ -53,7 +53,7 @@ fused: false
 
 ## 应用
 
-### 前置：创建 CLS 日志集与主题
+### 前置：创建 CLS 日志集与主题 {#前置创建-cls-日志集与主题}
 
 #### 1. 创建 CLS 日志集
 
@@ -243,7 +243,7 @@ tccli tke ModifyOpenPolicyList --ClusterId "<CLUSTER_ID>" --region <REGION> \
 
 > 完整 Kind 列表以 `tccli tke DescribeOpenPolicyList --ClusterId "<ID>" --Category "baseline|priority|optional"` 返回为准。启用时 `ModifyOpenPolicyList --OpenPolicyInfoList '[{"Name":"<规则 Name>","EnforcementAction":"deny","EnabledStatus":"open"}]'`（`Name` 用返回的规则名，如 `block-cluster-deletion-rule`，非 Kind）。
 
-## 故障恢复
+## 故障恢复 {#故障恢复}
 
 ### 命令返回错误 (exit ≠ 0)
 

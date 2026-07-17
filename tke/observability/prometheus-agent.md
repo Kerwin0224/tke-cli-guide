@@ -170,7 +170,7 @@ tccli tke DescribePrometheusClusterAgents --region <REGION> --InstanceId <PROM_I
 >
 > ⚠️ **高危操作**：误删 Agent 将导致该集群监控数据中断，告警规则可能因此漏报生产故障。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
 
-## 故障恢复
+## 故障恢复 {#故障恢复}
 
 ### 命令返回错误（exit ≠ 0）
 

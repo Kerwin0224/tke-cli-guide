@@ -116,7 +116,7 @@ tccli cam DescribeRoleList --Page 1 --Rp 100 \
 
 空 → [配置凭证 — 补 IPAMD](../../getting-started/credentials.md#补-ipamdoftke_qcsrolevpc-cni-前置) 或 [VPC-CNI — IPAMD 服务角色](../networking/vpc-cni.md#ipamd-服务角色)
 
-### 创建前必读（创建后改不了）
+### 创建前必读（创建后改不了） {#创建前必读创建后改不了}
 
 | 决策项 | 约束 | 错了怎么办 |
 |:-------|:-----|:-----------|
@@ -214,7 +214,7 @@ tccli cam DescribeRoleList --Page 1 --Rp 100 \
 
 
 
-## 跨字段约束
+## 跨字段约束 {#跨字段约束}
 
 > ⚠️ 控制台创建流程按字段组合校验，传互斥组合会被服务端拦或创建中途失败。
 
@@ -235,7 +235,7 @@ tccli cam DescribeRoleList --Page 1 --Rp 100 \
 
 
 
-### kube-proxy 转发模式 × IPVS × KubeProxyMode 互斥
+### kube-proxy 转发模式 × IPVS × KubeProxyMode 互斥 {#kube-proxy-转发模式-×-ipvs-×-kubeproxymode-互斥}
 
 `IPVS` 与 `KubeProxyMode` 三模式互斥（以 `KubeProxyMode` 字段说明为准）：
 
@@ -270,7 +270,7 @@ tccli cam DescribeRoleList --Page 1 --Rp 100 \
 
 传 `DataPlaneV2=true` + 非白名单 `ClusterOs` → 控制台报"当前操作系统暂不支持开启 Dataplane v2"；走 API 可能到创建中途才失败。反查某 ID：`tccli cvm DescribeImages --region <REGION> --Filters '[{"Name":"image-id","Values":["<ID>"]}]'`。
 
-### 集群 IP 类型决策树
+### 集群 IP 类型决策树 {#集群-ip-类型决策树}
 
 > **控制台维度**：控制台「集群 IP 类型」一步 = tccli 多字段组合 `IsDualStack` + `NetworkType` + `VpcCniType`（双栈仅 `NetworkType=VPC-CNI` 适用；`VpcCniType` 决定共享/独立网卡）。下面决策树把控制台这一个决策步映射到 tccli 字段组合。
 
@@ -302,7 +302,7 @@ tccli cam DescribeRoleList --Page 1 --Rp 100 \
 
 
 
-### 步骤 1：决策 — 选集群类型
+### 步骤 1：决策 — 选集群类型 {#步骤-1决策-选集群类型}
 
 
 
@@ -315,7 +315,7 @@ tccli cam DescribeRoleList --Page 1 --Rp 100 \
 
 
 
-#### 创建模式决策 — 4 条路径
+#### 创建模式决策 — 4 条路径 {#创建模式决策-4-条路径}
 
 `CreateCluster` 的顶层入参有 4 个嵌套组合，对应 4 条创建路径。选哪条取决于"建集群时是否同时建节点 / 用已有 CVM / 装组件"。
 
@@ -545,7 +545,7 @@ tccli tke DescribeClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]'
 
 
 
-## 收尾确认
+## 收尾确认 {#收尾确认}
 
 ```bash
 # 创建结果核对：集群 Running + 删除保护已开 + 空集群(0 节点)

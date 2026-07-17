@@ -85,7 +85,7 @@ tccli tcr DescribeNamespaces --region <REGION> --RegistryId "<REGISTRY_ID>" \
 
 ## 操作步骤
 
-### 步骤 1：决策 — 命名空间可见性
+### 步骤 1：决策 — 命名空间可见性 {#步骤-1决策-命名空间可见性}
 
 #### 为什么选 Public vs Private
 

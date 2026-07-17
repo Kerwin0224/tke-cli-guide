@@ -61,7 +61,7 @@ Docker version 29.6.0
 
 ---
 
-## Step 0: 环境检查
+## Step 0: 环境检查 {#step-0-环境检查}
 
 查询 TCR 可用地域，确认 `ap-guangzhou` 对所有用户开放（`Status: alluser`）。
 顶层字段是 `Regions`（非 `RegionInstanceSet`）。
@@ -460,7 +460,7 @@ tccli tcr DescribeImages --region ap-guangzhou \
 
 ---
 
-## Step 4: 删除实例（清理）
+## Step 4: 删除实例（清理） {#step-4-删除实例清理}
 
 > ⚠️ **不可逆操作**: 实例删除后，所有命名空间、仓库、镜像 tag、
 > 访问凭证**永久丢失**，无法恢复。关联 COS 桶加 `--DeleteBucket true` 同时清理，
@@ -546,7 +546,7 @@ tccli tcr DescribeInstances --region ap-guangzhou \
 | `CheckInstanceName` 返回 `IsValidated: false` | `RegistryName` 已被占用 | 换名后重新 `CheckInstanceName` 预检 |
 | `RegionNotSupport` | 地域不支持 TCR 企业版 | 换 `Status: alluser` 的地域 |
 
-### exit 0 误判
+### exit 0 误判 {#exit-0-误判}
 
 | 症状 | 诊断 | 说明 |
 |:-----|:-----|:-----|

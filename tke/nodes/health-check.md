@@ -144,7 +144,7 @@ tccli tke DescribeHealthCheckPolicies --version 2022-05-01 --region <REGION> --C
 
 > 上方是空结果示例（策略未创建时）。创建成功后 `TotalCount` 应 ≥ 1，`HealthCheckPolicies` 含策略对象。
 
-## 验证
+## 验证 {#验证}
 
 | 维度 | 命令 | 期望 |
 |:-----|:-----|:-----|
@@ -182,7 +182,7 @@ tccli tke ModifyHealthCheckPolicy --version 2022-05-01 --region <REGION> \
 
 > `tccli tke ModifyHealthCheckPolicy help --detail` 与 API 入参说明未声明该更新是 replace 还是 merge，因此不作“覆盖式”断言。保守流程是先用 `DescribeHealthCheckPolicies` 读取当前完整 `Rules`，只修改目标字段后回传完整策略，再次 Describe 对比修改前后差异，避免因省略规则产生不确定结果。
 
-## 故障恢复
+## 故障恢复 {#故障恢复}
 
 | 现象 | 根因 | 修复 |
 |:-----|:-----|:-----|
@@ -193,7 +193,7 @@ tccli tke ModifyHealthCheckPolicy --version 2022-05-01 --region <REGION> \
 > CAM 拒绝样本（ap-guangzhou，标签不匹配）：
 > `code:AuthFailure.UnauthorizedOperation message:操作未授权，请检查CAM策略 ... you are not authorized to perform operation (tke:CreateHealthCheckPolicy)`
 
-## 收尾确认
+## 收尾确认 {#收尾确认}
 
 ```bash
 # 端到端核对：策略绑定生效（仅查策略存在不够，还须核对绑定是否命中节点）

@@ -66,7 +66,7 @@ tccli tke DescribeClusters --region <REGION> --Limit 5 \
 # expected: 集群列表，status 含 Running
 ```
 
-## 集群生命周期故事线
+## 集群生命周期故事线 {#集群生命周期故事线}
 
 集群从创建到销毁的完整流程，按顺序阅读。**集群 Running 只是第 1 步**——可运行 Pod 的完整集群须走到第 3 步（加节点）+ 第 6 步（开端点连通 kubectl）。
 

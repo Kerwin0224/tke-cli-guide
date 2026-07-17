@@ -42,7 +42,7 @@ fused: true
 | Master | 托管（云端） | 托管或独立 |
 | 适用场景 | IoT、边缘 AI、CDN | 标准 Web 服务 |
 
-## 关键操作
+## 关键操作 {#关键操作}
 
 ### 识别旧创建脚本（禁止调用新建）
 
@@ -156,7 +156,7 @@ tccli tke DescribeTKEEdgeClusters --region <EDGE_REGION> --ClusterIds '["<CLUSTE
 
 > 边缘集群 state=Running = 存量集群可用, 可进入 [关键操作](#关键操作) 运维。
 
-## 故障恢复
+## 故障恢复 {#故障恢复}
 
 | 症状 | 先查 | 处理 |
 |:-----|:-----|:-----|

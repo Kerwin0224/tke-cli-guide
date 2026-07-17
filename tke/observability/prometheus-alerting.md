@@ -219,7 +219,7 @@ tccli tke DeletePrometheusAlertRule --region <REGION> \
 
 > 注意 `DeletePrometheusAlertPolicy` 支持 `Names[]` 或 `AlertIds[]`，而 `DeletePrometheusAlertRule` 仅支持 `AlertIds[]`——删除规则必须先有 AlertId（从 Describe 取）。
 
-## 故障恢复
+## 故障恢复 {#故障恢复}
 
 ### 命令返回错误（exit ≠ 0）
 

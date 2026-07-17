@@ -8,6 +8,7 @@
 * [配置 TCCLI 凭证](getting-started/credentials.md)
 * [准备 VPC 与子网](getting-started/prepare-vpc.md)
 * [术语表](getting-started/glossary.md)
+* [Agent 操作手册](appendix/agent-optimization.md)
 
 ## 快速入门
 * [TKE: 5 分钟创建第一个集群](quickstart/tke-first-cluster.md)
@@ -94,6 +95,3 @@
 * [错误码速查](tcr/reference/error-codes.md)
 * [共享字段参考](tcr/reference/shared-fields.md)
 * [故障排查](tcr/troubleshooting.md)
-
-## 附录
-* [Agent 优化模式](appendix/agent-optimization.md)

@@ -79,7 +79,7 @@ tccli tcr DescribeInternalEndpoints --region <REGION> --RegistryId "<REGISTRY_ID
 | RegionId | int | 否 | 地域 ID | — |
 | RegionName | string | 否 | 地域名 | — |
 
-### CreateSecurityPolicy（公网白名单）
+### CreateSecurityPolicy（公网白名单） {#createsecuritypolicy公网白名单}
 
 > 完整入参以 `tccli tcr CreateSecurityPolicy help --detail` 为准。
 
@@ -105,7 +105,7 @@ tccli tcr DescribeInternalEndpoints --region <REGION> --RegistryId "<REGISTRY_ID
 
 ## 操作步骤
 
-### 步骤 1：决策 — 访问方式选择
+### 步骤 1：决策 — 访问方式选择 {#步骤-1决策-访问方式选择}
 
 #### 四种方式怎么选
 
@@ -134,7 +134,7 @@ tccli tcr CreateSecurityPolicy --region <REGION> \
 # expected: exit 0
 ```
 
-### 步骤 4：服务账号（长期凭证）
+### 步骤 4：服务账号（长期凭证） {#步骤-4服务账号长期凭证}
 
 ```bash
 tccli tcr CreateServiceAccount --region <REGION> \
@@ -217,7 +217,7 @@ tccli tcr DeleteSecurityPolicy --region <REGION> \
 
 > 内网端点的自定义 DNS 解析（`InternalEndpointDns`）与批量安全策略管理（`MultipleSecurityPolicy`）。属访问控制的进阶操作。
 
-### 内网 DNS 解析
+### 内网 DNS 解析 {#内网-dns-解析}
 
 ```bash
 # 查询内网 DNS 解析状态 (注意: 入参是 VpcSet[] 嵌套数组, 非 RegistryId)

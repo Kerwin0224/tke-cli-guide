@@ -41,7 +41,7 @@ tccli tcr DescribeInstances --region ap-guangzhou --Registryids '["<REGISTRY_ID>
 
 ## 配置项
 
-### 步骤 1：决策 — 内网优先，公网按需
+### 步骤 1：决策 — 内网优先，公网按需 {#步骤-1决策-内网优先公网按需}
 
 #### 为什么先内网
 
@@ -53,7 +53,7 @@ tccli tcr DescribeInstances --region ap-guangzhou --Registryids '["<REGISTRY_ID>
   - 两者可并存，互不冲突
 - **可修改**：公网/内网可随时 `Manage*Endpoint --Operation Create|Delete`（**仅** `Create`/`Delete`；传 `Open`/`Close` 等返回 `InvalidParameter`：`not support operation, must Create or Delete`）
 
-### 步骤 2：开启内网访问（推荐优先）
+### 步骤 2：开启内网访问（推荐优先） {#步骤-2开启内网访问推荐优先}
 
 ```bash
 tccli tcr ManageInternalEndpoint \
@@ -131,7 +131,7 @@ tccli tcr CreateInstanceToken \
 >
 > **字段名分叉**：`CreateInstanceToken`（`longterm`）返回顶层 `TokenId`；`DescribeInstanceToken` 列表项字段是 **`Id`**（不是 `TokenId`），值与 Create 的 `TokenId` 相同。`DeleteInstanceToken` / `ModifyInstanceToken` 入参仍用 **`--TokenId`**，传入列表里的 `Id`。`temp` 创建时常返回 `TokenId: ""`，且通常**不会**出现在 `DescribeInstanceToken` 列表中（约 1 小时自动过期）。
 
-#### Token 生命周期闭环
+#### Token 生命周期闭环 {#token-生命周期闭环}
 
 ```
 创建(CreateInstanceToken) → 使用(docker login) → [temp 自动过期 / longterm 禁用或删除]
@@ -173,7 +173,7 @@ printf '%s' "$TCR_TOKEN" | docker login <REGISTRY_DOMAIN> --username "$TCR_USERN
 - **默认推荐**: 开发期用 IP 白名单；生产环境优先 VPC 内网，公网仅放行 CI 出口
 - **可修改**： 随时可以修改/删除白名单规则（见 [访问控制](../access/manage.md)）
 
-## 验证 — 综合检查
+## 验证 — 综合检查 {#验证-综合检查}
 
 ```bash
 # 内网（若已配）

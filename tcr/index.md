@@ -38,6 +38,8 @@ graph TD
 - 你已读完 [快速入门](../quickstart/tcr-first-registry.md)，需查阅某个具体操作（访问控制/生命周期/镜像安全）— 看下方导航或 [实例管理](instances/index.md)
 - 你在 docker login/push/pull 遇到权限或网络问题 — 直接看 [访问控制](access/manage.md) 或 [故障排查](troubleshooting.md)
 
+> Agent：调用 `tccli tcr` 前先掌握 [Agent 操作手册](../appendix/agent-optimization.md) 的 flag 组合（压缩管道 / 模板入参 / waiter）。
+
 ## 核心概念
 
 | 概念 | 含义 | 为什么重要 |

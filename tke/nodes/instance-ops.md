@@ -39,7 +39,7 @@ tccli tke DescribeClusterInstances --version 2018-05-25 \
 - 隔离 / 驱逐普通节点需 kubectl 已配置且可达该集群（见 [集群认证](../security/auth.md)）
 - 接入已有 CVM 前：实例与集群同 VPC，且 `DescribeExistedInstances` 返回 `Usable=true`
 
-## 查询节点
+## 查询节点 {#查询节点}
 
 ```bash
 # 2018-05-25 旧版: 用 InstanceIds/InstanceRole 过滤
@@ -94,7 +94,7 @@ tccli tke RebootMachines --version 2022-05-01 \
 
 > 旧版 (2018-05-25) 回退方案: TKE 无节点启停 Action，走 CVM 服务 `tccli cvm StopInstances --InstanceIds '["<INSTANCE_ID>"]'`。
 
-## 删除节点
+## 删除节点 {#删除节点}
 
 ```bash
 # 2022-05-01 新版: DeleteClusterMachines (Machine 抽象)
@@ -113,7 +113,7 @@ tccli tke DeleteClusterMachines --version 2022-05-01 \
 
 > 旧版 (2018-05-25) 用 `DeleteClusterInstances --version 2018-05-25 --InstanceIds '["<INSTANCE_ID>"]'`（Instance 抽象）。两版抽象不同: 新版 Machine vs 旧版 Instance。
 
-## 节点隔离与驱逐（kubectl，非 tccli）
+## 节点隔离与驱逐（kubectl，非 tccli） {#节点隔离与驱逐kubectl非-tccli}
 
 > tke API 无 cordon/drain 普通节点 Action（仅 `DrainClusterVirtualNode` 超级节点 / `DrainExternalNode` 注册节点）。普通节点隔离用 **kubectl**（K8s 原生，非 tccli）。本段给出"故障→隔离→恢复"操作路径——[健康检查](health-check.md) 检测到不可修复故障时，用此段隔离节点。
 
@@ -190,7 +190,7 @@ tccli tke SetMachineLogin --version 2022-05-01 \
 
 > ⚠️ `SetMachineLogin` 用单数 `MachineName`，`ModifyClusterMachine` 用复数 `MachineNames`——同域字段名不一致。
 
-## 查询 GPU 驱动版本 (2022-05-01)
+## 查询 GPU 驱动版本 (2022-05-01) {#查询-gpu-驱动版本-2022-05-01}
 
 > `DescribeGPUInfo` 不绑集群，按机型+OS 查询可用 GPU 驱动/CUDA/cuDNN 版本，创建 GPU 节点前用。
 
@@ -237,7 +237,7 @@ tccli tke AddExistedInstances --version 2018-05-25 \
 # expected: exit 0
 ```
 
-### 接入已有实例字段约束
+### 接入已有实例字段约束 {#接入已有实例字段约束}
 
 ## 跨字段约束
 
@@ -251,7 +251,7 @@ tccli tke AddExistedInstances --version 2018-05-25 \
 | `HostName` | `AddExistedInstances` | 条件 | 仅在重装接入且集群使用 HostName 模式时必传 |
 | `InstanceAdvancedSettingsOverrides[]` | `AddExistedInstances` | 否 | 按顺序与 `InstanceIds[]` 对应；长度不得大于 `InstanceIds[]`。数组较短时，未覆盖的实例使用公共 `InstanceAdvancedSettings` |
 
-### 新建 CVM 作节点（CreateClusterInstances）
+### 新建 CVM 作节点（CreateClusterInstances） {#新建-cvm-作节点createclusterinstances}
 
 > `CreateClusterInstances` 是新建 CVM 作节点（`RunInstancePara` 透传 CVM `RunInstances` JSON），与 `AddExistedInstances`（接入已有实例）区别。**不依赖 AS 节点池**，适合「仅需 1 台普通 Worker 做最小验证」；缺 `AS_QCSRole` 时可用该路径绕过节点池。ECM/Edge 见 [边缘集群](../specialized/edge-cluster.md)。
 

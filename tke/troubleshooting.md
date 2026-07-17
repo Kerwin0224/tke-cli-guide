@@ -229,7 +229,7 @@ tccli tke DeleteCluster --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
 # expected: exit 0 (不再返回删除保护错误)
 ```
 
-## 高危操作后果速查
+## 高危操作后果速查 {#高危操作后果速查}
 
 > 下列操作易导致业务故障；部分**不可恢复**。排障前先对照：是否刚改过安全组、内核参数、LB 控制台、CBS 挂载。完整高危操作清单见官方 [常见高危操作](https://cloud.tencent.com/document/product/457/39539)。
 

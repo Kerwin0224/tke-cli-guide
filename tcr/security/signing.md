@@ -58,7 +58,7 @@ tccli kms ListKeys --region <REGION> --filter "Keys[].KeyId" --output text
 # expected: 含目标 KMS 密钥 ID
 ```
 
-### 服务角色（TCR/KMS）
+### 服务角色（TCR/KMS） {#服务角色tcrkms}
 
 > 官方要求：授权容器镜像服务使用 KMS 时，在 `TCR_QCSRole` 上关联 **QcloudKMSFullAccess**（控制台角色详情页操作）。下列为 CLI 探测与补挂。
 
@@ -102,7 +102,7 @@ tccli cam AttachRolePolicy \
 
 ## 操作步骤
 
-### 步骤 1：决策 — 签名策略
+### 步骤 1：决策 — 签名策略 {#步骤-1决策-签名策略}
 
 #### 为什么用 KMS 托管密钥
 

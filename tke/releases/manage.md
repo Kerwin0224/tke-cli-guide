@@ -136,7 +136,7 @@ tccli tke CreateClusterRelease --region ap-guangzhou \
 # expected: exit 0
 ```
 
-### 步骤 3：升级 — 升级版本
+### 步骤 3：升级 — 升级版本 {#步骤-3升级-升级版本}
 
 ```bash
 tccli tke UpgradeClusterRelease --region ap-guangzhou \
@@ -145,7 +145,7 @@ tccli tke UpgradeClusterRelease --region ap-guangzhou \
 # expected: exit 0
 ```
 
-### 步骤 4：回滚 — 回滚
+### 步骤 4：回滚 — 回滚 {#步骤-4回滚-回滚}
 
 ```bash
 # 查历史版本
@@ -200,7 +200,7 @@ tccli tke DescribeClusterReleases --region ap-guangzhou --ClusterId "<CLUSTER_ID
 # expected: 空数组
 ```
 
-## 故障恢复
+## 故障恢复 {#故障恢复}
 
 ### 命令返回错误 (exit ≠ 0)
 
@@ -242,7 +242,7 @@ tccli tke CancelClusterRelease --ClusterId "<CLUSTER_ID>" --region <REGION> --ID
 # expected: exit 0
 ```
 
-### 灰度发布序列（RollOutSequence）
+### 灰度发布序列（RollOutSequence） {#灰度发布序列rolloutsequence}
 
 > 灰度发布按节点标签分批次滚动，控制升级节奏。
 

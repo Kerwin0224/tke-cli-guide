@@ -65,7 +65,7 @@ tccli tcr DescribeNamespaces --region <REGION> \
 --Permissions.0.Resource prod/ --Permissions.0.Actions '["tcr:PushRepository","tcr:PullRepository"]'
 ```
 
-## CVEWhitelistItem 漏洞白名单
+## CVEWhitelistItem 漏洞白名单 {#cvewhitelistitem-漏洞白名单}
 
 用于 `CreateNamespace`/`ModifyNamespace`，配置命名空间漏洞扫描的白名单 CVE。
 

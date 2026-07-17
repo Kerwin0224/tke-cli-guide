@@ -187,7 +187,7 @@ kubectl --kubeconfig kubeconfig.yaml get nodes
 # expected: YAML 首个顶层键为 apiVersion，且返回节点列表
 ```
 
-## 故障恢复
+## 故障恢复 {#故障恢复}
 
 ### 命令返回错误 (exit ≠ 0)
 
@@ -205,7 +205,7 @@ kubectl --kubeconfig kubeconfig.yaml get nodes
 | kubectl 报 `Unable to connect` | 端点状态 | 集群端点未开启或不通 | 见 [管理访问端点](../networking/endpoints.md) |
 | OIDC 登录失败 | `DescribeClusterAuthenticationOptions` | issuer 不可达或 JWKSURI 错 | 确认 IdP 服务可达 |
 
-## 子账号权限管理
+## 子账号权限管理 {#子账号权限管理}
 
 > 查询/删除子账号（CAM 子用户）的集群 RBAC 权限。`GrantUserPermissions` 授予权限（见上文），本段是查询与撤销。
 

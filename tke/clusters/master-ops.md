@@ -86,7 +86,7 @@ tccli tke DescribeClusters --region <REGION> --ClusterIds '["<CLUSTER_ID>"]' --v
 
 ## 关键字段
 
-### ScaleOutClusterMaster — 扩容
+### ScaleOutClusterMaster — 扩容 {#scaleoutclustermaster-扩容}
 
 | 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
 |:------|------|:--------:|------------|---------------|
@@ -102,7 +102,7 @@ tccli tke DescribeClusters --region <REGION> --ClusterIds '["<CLUSTER_ID>"]' --v
 >
 > **两条扩容路径**：`RunInstancesForNode` 新建 CVM 加入 Master（本文主示例）；`ExistedInstancesForNode` 把**已有 CVM 重装**为 Master 节点（不新建实例，复用存量 CVM，适合预先备好机器的场景）。两者二选一，同传报错。
 
-### ScaleInClusterMaster — 缩容
+### ScaleInClusterMaster — 缩容 {#scaleinclustermaster-缩容}
 
 | 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
 |:------|------|:--------:|------------|---------------|
@@ -118,7 +118,7 @@ tccli tke DescribeClusters --region <REGION> --ClusterIds '["<CLUSTER_ID>"]' --v
 
 > ⚠️ **高危操作**：Master 扩缩影响集群稳定性；缩容后健康 etcd 成员少于 `floor(N/2)+1` 会导致控制面不可用；偶数成员通常不增加容错数，但并非天然不可用。缩容前确认节点角色、健康状态与负载。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
 
-### 步骤 1：决策 — 扩还是缩，缩哪个
+### 步骤 1：决策 — 扩还是缩，缩哪个 {#步骤-1决策-扩还是缩缩哪个}
 
 #### 扩容时机
 
@@ -224,13 +224,13 @@ tccli tke DescribeClusterStatus --region <REGION> --filter "ClusterStatusSet[?Cl
 
 > `MasterScaling` 状态见 [状态机](../reference/states.md)。超 30 分钟未回 `Running` 属异常，见 [故障恢复](#故障恢复)。
 
-## 清理
+## 清理 {#清理}
 
 > **缩容即清理**：`ScaleInClusterMaster --InstanceDeleteMode terminate` 直接销毁 Master CVM，无独立清理步骤。`retain` 模式保留的 CVM 需到 CVM 侧手动销毁（`tccli cvm TerminateInstances`，仅按量计费）。
 >
 > **计费提示**：Master CVM 按 CVM 计费规则收费，扩容即新增 CVM 费用，缩容 `terminate` 后立即停止计费。独立集群无集群管理费（与托管集群的差异，见 [创建集群](create.md)）。
 
-## 故障恢复
+## 故障恢复 {#故障恢复}
 
 ### 命令返回错误 (exit ≠ 0)
 

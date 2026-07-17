@@ -52,7 +52,7 @@ basic 实例不能作主也不能作从。需先 [创建实例](../instances/cre
 | `Filters[].Value` | 过滤值 | `app-*` |
 | `Deletion` | 是否同步删除 | `false`（主删从不删） |
 
-### 跨账号同步
+### 跨账号同步 {#跨账号同步}
 
 若主从实例属不同账号，需用 `PeerReplicationOption`（`PeerRegistryUin`/`PeerRegistryToken`/`EnablePeerReplication`）建立对等关系。同账号无需此参数。
 

@@ -131,7 +131,7 @@ tccli tcr DeleteImageAccelerateService --region <REGION> --RegistryId <REGISTRY_
 - **创建加速服务**要求指定 VPC、子网、CFS 存储类型、权限组和可用区。
 - 当前接口说明未给出计费、子网 IP 占用、删除后的 CFS 生命周期或缓存数据保留规则；执行前需从控制台或腾讯云支持确认。
 
-## 故障恢复
+## 故障恢复 {#故障恢复}
 
 | 现象 | 根因 | 修复 |
 |:-----|:-----|:-----|

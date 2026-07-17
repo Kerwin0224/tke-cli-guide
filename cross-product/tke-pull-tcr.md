@@ -65,7 +65,7 @@ tccli tcr DescribeInternalEndpoints --region ap-guangzhou --RegistryId "<REGISTR
 
 未接入 → [访问控制](../tcr/access/manage.md)
 
-## 步骤 1：创建 TCR 访问凭证
+## 步骤 1：创建 TCR 访问凭证 {#步骤-1创建-tcr-访问凭证}
 
 ```bash
 # 取临时 Token（返回 Username + Token + ExpTime）
