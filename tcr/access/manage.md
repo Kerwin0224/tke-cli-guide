@@ -20,7 +20,7 @@ fused: true
 
 推荐决策顺序：**先内网（VPC）→ 再按需开公网白名单 → 再选凭证类型**。
 
-> ⚠️ **创建后默认拒绝全部公网及内网访问**。未配置 VPC 内网或公网白名单前，`docker login`/`push`/`pull` 会失败——须先完成本文访问策略，再推镜像。公网入口开启后尽快配白名单并优先改走内网（公网产生 COS 公网流量费；内网不计该费）。`unauthorized: authentication required`：核对 `docker login` 凭证是否正确、临时 Token 是否过期。
+> ⚠️ **创建后默认拒绝全部公网及内网访问**。未配置 VPC 内网或公网白名单前，`docker login`/`push`/`pull` 会失败——须先完成本页访问策略，再推镜像。公网入口开启后尽快配白名单并优先改走内网（公网产生 COS 公网流量费；内网不计该费）。`unauthorized: authentication required`：核对 `docker login` 凭证是否正确、临时 Token 是否过期。
 
 > **VPC 接入配额（按实例规格）**：basic=5 / standard=10 / premium=20（详见 [产品服务层级与容量限制](https://cloud.tencent.com/document/product/1141/104731)）。`CreateSecurityPolicy` 白名单数量受规格限制（basic=5）。
 
@@ -117,7 +117,7 @@ tccli tcr DescribeInternalEndpoints --region <REGION> --RegistryId "<REGISTRY_ID
 
 ### 步骤 2：VPC 内网接入
 
-> VPC 内网接入（`ManageInternalEndpoint` 开启实例内网访问 VPC 链接）属实例级访问开关，完整命令见 [实例访问管理 — 开启内网访问](../instances/manage-access.md#步骤-2开启内网访问推荐优先)。本篇聚焦访问策略层（白名单/服务账号/DNS），端点开关归实例访问篇，避免双篇重复。VPC 内网开通后，本篇 [内网 DNS 解析](#内网-dns-解析) 配置私有域名。
+> VPC 内网接入（`ManageInternalEndpoint` 开启实例内网访问 VPC 链接）属实例级访问开关，完整命令见 [实例访问管理 — 开启内网访问](../instances/manage-access.md#步骤-2开启内网访问推荐优先)。本页覆盖访问策略层（白名单/服务账号/DNS）；端点开关见实例访问管理。VPC 内网开通后，在本页 [内网 DNS 解析](#内网-dns-解析) 配置私有域名。
 
 > VPC 内网开通是异步操作，DNS 生效需等待。用 `DescribeInternalEndpoints` 轮询直到出现接入记录。
 
@@ -181,7 +181,7 @@ tccli tcr DescribeServiceAccounts --region <REGION> --RegistryId "<REGISTRY_ID>"
 > **副作用警告**：关闭 VPC 内网会断开该 VPC 内所有拉取访问。删除白名单会阻断对应 IP 的访问。
 
 ```bash
-# 关闭 VPC 内网（端点开关归实例访问篇）
+# 关闭 VPC 内网（端点开关见实例访问管理）
 tccli tcr ManageInternalEndpoint --region <REGION> \
   --RegistryId "<REGISTRY_ID>" --Operation Delete --VpcId "<VPC_ID>" --SubnetId "<SUBNET_ID>"  # Delete 亦必填 SubnetId；见 instances/manage-access.md
 # expected: exit 0

@@ -10,7 +10,7 @@ fused: false
 > 官方文档: [容器镜像服务个人版](https://cloud.tencent.com/document/product/1141/57780) · [个人版迁移至企业版完全指南](https://cloud.tencent.com/document/product/1141/52292)
 
 > 个人版 API 形态与企业版不同——所有 Action 带 `Personal` 后缀。`RepoName` 格式是 `<namespace>/<repo>`（含斜杠）。
-> 镜像层 push/pull 仍走 docker CLI（非 tccli；TCCLI 不提供 docker daemon 能力）；本篇只覆盖个人版高级 API。
+> 镜像层 push/pull 仍走 docker CLI（非 tccli；TCCLI 不提供 docker daemon 能力）；本页只覆盖个人版高级 API。
 
 ## 触发条件
 
@@ -70,7 +70,7 @@ fused: false
 | `Type`/`Val` | ManageImageLifecycleGlobalPersonal | 是 | `global_keep_last_days`/`global_keep_last_nums` + 保留值 |
 | `TriggerName` | 触发器类 | 是 | 触发器名 |
 | `InvokeMethod` | CreateApplicationTriggerPersonal | 是 | **仅** `all` / `taglist` / `regex`（无 `void`） |
-| `InvokeMethod` | ModifyApplicationTriggerPersonal | 否 | 不修改触发方式时可省略；传入时枚举同上 |
+| `InvokeMethod` | ModifyApplicationTriggerPersonal | 否 | 不修改触发方式时可省略；传入时枚举为 `all` / `taglist` / `regex` |
 | `ClusterId`/`WorkloadType`/`WorkloadName`/`ContainerName`/`ClusterRegion` | CreateApplicationTriggerPersonal | 是 | 关联 TKE 集群/工作负载/容器；`ClusterRegion` 为地域**数字 ID** |
 
 ## 操作步骤
@@ -237,7 +237,7 @@ tccli tcr BatchDeleteImagePersonal --RepoName "<NAMESPACE_NAME>/<REPO_NAME>" --T
 
 ## 收尾确认
 
-> 本篇是多功能文档（查询/复制/生命周期/触发器），按实际配置项选对应确认。下面以触发器+生命周期为例汇总。
+> 本页覆盖多项操作（查询/复制/生命周期/触发器），按实际配置项选对应确认。下面以触发器+生命周期为例汇总。
 
 ```bash
 # 汇总核对：触发器已建 + 生命周期策略已设

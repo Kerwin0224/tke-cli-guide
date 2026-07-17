@@ -328,7 +328,7 @@ tccli tcr DescribeImages --region <REGION> --RegistryId "<REGISTRY_ID>" \
 - [推送拉取镜像](../images/push-pull.md) — 手动删除单个版本
 - [故障排查](../troubleshooting.md) — 规则不生效诊断
 
-## 精确 Action 字段契约
+## Action 字段契约
 
 | 字段 | 所属 Action | 必填 | 说明 |
 |:---|:---|:---:|:---|

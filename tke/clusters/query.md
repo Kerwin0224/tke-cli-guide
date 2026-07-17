@@ -38,8 +38,8 @@ fused: true
 tccli --version
 # expected: tccli 版本号
 
-tccli cvm DescribeRegions --region ap-guangzhou
-# expected: RegionInstanceSet 列表返回 → 凭证有效（顶层键 RegionInstanceSet，非 RegionSet）
+tccli tke DescribeRegions
+# expected: RegionInstanceSet 列表返回 → 凭证有效 + TKE 域可达（顶层键 RegionInstanceSet，非 RegionSet；鉴权探针无需先假定 --region）
 ```
 
 ### 资源检查
@@ -381,7 +381,7 @@ tccli tke DescribeClusterStatus --region <REGION> --filter "ClusterStatusSet[?Cl
 # expected: state=Running → 目标集群健康，可进入写操作（删除/升级/配置）前的目标核对
 ```
 
-> 查询通道可用 + 目标集群 `Running` = 只读闭环完成，可进入写操作（[删除](delete.md)/[升级](upgrade.md)/[配置](configure.md)）前用本文核对目标集群 ID 与状态。只读操作无残留资源维度，此处核对查询通道就绪作为下一步前置。
+> 查询通道可用 + 目标集群 `Running` = 只读查询完成，可进入写操作（[删除](delete.md)/[升级](upgrade.md)/[配置](configure.md)）前用本文核对目标集群 ID 与状态。只读操作无残留资源维度，此处确认查询通道就绪后再进入下一步写操作。
 
 ## 下一步
 

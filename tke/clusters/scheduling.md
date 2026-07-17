@@ -74,7 +74,7 @@ tccli tke ModifyClusterSchedulerPolicy --ClusterId "<CLUSTER_ID>" --region <REGI
 # expected: exit 0
 ```
 
-> `--SchedulerPolicyConfig` 是对象数组，每项含 `SchedulerName` + `PluginConfigs`（插件配置）+ `PluginSet`（启用/禁用插件）。**`PluginConfigs[].Args` 必填**——缺 `Args` 报 `InvalidParameter.Param: PARAM_ERROR(pluginConfigs[0].args Unmarshal failed)`。`Args` 是 base64 编码的插件参数 JSON，先用 `DescribeClusterSchedulerPolicy` 取当前 `Args` 值再传入，勿凭空构造。完整结构见 `tccli tke ModifyClusterSchedulerPolicy help --detail`。
+> `--SchedulerPolicyConfig` 是对象数组，每项含 `SchedulerName` + `PluginConfigs`（插件配置）+ `PluginSet`（启用/禁用插件）。**`PluginConfigs[].Args` 必填**——缺 `Args` 报 `InvalidParameter.Param: PARAM_ERROR(pluginConfigs[0].args Unmarshal failed)`。`Args` 是 base64 编码的插件参数 JSON，先用 `DescribeClusterSchedulerPolicy` 取当前 `Args` 值再传入，不要自行编造 base64 内容。完整结构见 `tccli tke ModifyClusterSchedulerPolicy help --detail`。
 
 ### 配置扩展调度器（Extenders）
 
@@ -125,19 +125,19 @@ tccli tke ModifyClusterSchedulerPolicy --ClusterId "<CLUSTER_ID>" --region <REGI
 ## 收尾确认
 
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
-<!-- tccli管调度策略CRUD，kubectl get pods查K8s层Pod调度观测，非tccli边界 -->
+<!-- tccli 管调度策略 CRUD；kubectl get pods 观测 Pod 调度结果 -->
 ```bash
-# SchedulerName + PluginConfigs + Extenders 三项一次性核对（分项查字段存在后，再核对配置项协同生效）
+# SchedulerName + PluginConfigs + Extenders 三项一并核对（先确认字段存在，再确认配置生效）
 tccli tke DescribeClusterSchedulerPolicy --ClusterId "<CLUSTER_ID>" --region <REGION> \
   --filter "{name:SchedulerPolicyConfig[0].SchedulerName,plugins:SchedulerPolicyConfig[0].PluginConfigs[0].Name,extenders:Extenders[0].ExtenderClientConfig.url}"
 # expected: name=目标调度器 + plugins=目标插件 + extenders=扩展器 url（若未配 Extenders 则 null）
 
-# 端到端核对：Pod 是否按新策略调度（仅查配置字段不够，还须确认配置是否影响 Pod 调度）
+# 结果核对：Pod 是否按新策略调度（仅查配置字段不够，还须确认配置是否影响 Pod 调度）
 kubectl get pods -A -o wide --kubeconfig <KUBECONFIG> | head -10
 # expected: Pod 列表返回，NODE 列显示已调度到节点（调度策略生效后新调度的 Pod 按策略分布）
 ```
 
-> SchedulerName + PluginConfigs + Extenders 三项合一 = 调度策略配置闭环完成。**能力边界**：策略修改只影响**新调度**的 Pod，已运行 Pod 不重调度；若新策略与节点资源不匹配（如 `NodeResourcesFit` 请求超节点容量），新 Pod 会卡 `Pending`——用 `kubectl describe pod <POD>` 看 `FailedScheduling` 事件诊断。
+> SchedulerName + PluginConfigs + Extenders 三项均符合预期 = 调度策略配置完成。**能力边界**：策略修改只影响**新调度**的 Pod，已运行 Pod 不重调度；若新策略与节点资源不匹配（如 `NodeResourcesFit` 请求超节点容量），新 Pod 会卡 `Pending`——用 `kubectl describe pod <POD>` 看 `FailedScheduling` 事件诊断。
 
 ## 下一步
 

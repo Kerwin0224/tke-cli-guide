@@ -26,9 +26,9 @@ TCR 的两级结构：实例 → 命名空间 → 仓库 → 镜像版本。
 | 仓库 | 镜像存放单元 | 命名空间内唯一 | 1000 / 3000 / 5000 |
 | 镜像版本 | 具体镜像 tag | 仓库内唯一 | 无限制 |
 
-> 配额以官方 [104731](https://cloud.tencent.com/document/product/1141/104731) 为准，本仓汇总见 [配额与限制](../reference/quotas.md)。命名空间名直接用于镜像地址：`<domain>/<namespace>/<repo>:<tag>`。命名空间创建后**不可改名**，只能删除重建。
+> 配额以官方 [104731](https://cloud.tencent.com/document/product/1141/104731) 为准，配额数字汇总见 [配额与限制](../reference/quotas.md)。命名空间名直接用于镜像地址：`<domain>/<namespace>/<repo>:<tag>`。命名空间创建后**不可改名**，只能删除重建。
 >
-> **为什么本篇可能出现 docker**：仓库 CRUD 纯 tccli；`docker login`/`push` 仅在收尾时作为能力边界提示——TCCLI 无 Registry 协议与镜像层传输 Action。
+> **为什么会出现 docker**：仓库 CRUD 纯 tccli；`docker login`/`push` 仅在收尾时作为能力边界提示——TCCLI 无 Registry 协议与镜像层传输 Action。
 
 ## 准备工作
 
@@ -266,7 +266,7 @@ tccli tcr DescribeRepositories --region ap-guangzhou --RegistryId "<REGISTRY_ID>
 - [创建实例](../instances/create.md) — 实例生命周期
 - [故障排查](../troubleshooting.md) — `denied` / `not found` 诊断
 
-## 精确 Action 字段契约
+## Action 字段契约
 
 | 字段 | 所属 Action | 必填 | 说明 |
 |:---|:---|:---:|:---|

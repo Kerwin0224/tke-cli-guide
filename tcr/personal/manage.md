@@ -237,7 +237,7 @@ docker pull ccr.ccs.tencentyun.com/<NAMESPACE_NAME>/<REPO_NAME>:v1
 - [推送拉取镜像](../images/push-pull.md) — 企业版推送（对比）
 - [故障排查](../troubleshooting.md) — docker login/push 失败诊断
 
-## 精确 Action 字段契约
+## Action 字段契约
 
 | 字段 | 所属 Action | 必填 | 说明 |
 |:---|:---|:---:|:---|

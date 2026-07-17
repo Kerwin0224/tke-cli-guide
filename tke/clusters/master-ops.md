@@ -33,7 +33,7 @@ fused: true
 
 - 独立集群 Master 负载持续偏高或 HA 冗余不足（`DescribeClusters` 的 `ClusterMaterNodeNum` 接近瓶颈）— 用 `ScaleOutClusterMaster` 扩容
 - 独立集群 Master 过剩或有故障节点需下线 — 用 `ScaleInClusterMaster` 缩容（缩容须保 etcd 多数派 ≥3 奇数）
-- 托管集群误调本接口报 `only independent cluster allowed` — 节点规模不可改；若需改控制面参数/组件/加密，走 [配置集群属性与运行时](configure.md) / [集群加密保护](../security/protection.md)，非本篇
+- 托管集群误调本接口报 `only independent cluster allowed` — 节点规模不可改；若需改控制面参数/组件/加密，走 [配置集群属性与运行时](configure.md) / [集群加密保护](../security/protection.md)，非本文
 
 ## 准备工作
 
@@ -202,7 +202,7 @@ tccli tke DescribeClusterStatus --region <REGION> --filter "ClusterStatusSet[?Cl
 > # expected: kubeconfig 文件生成，可 KUBECONFIG=kubeconfig.yaml kubectl get nodes
 > ```
 
-<!-- kubectl get nodes验证Master节点状态；kubectl get pods/healthz查K8s层观测，tccli管配置CRUD，非tccli边界 -->
+<!-- kubectl get nodes 验证 Master 节点状态；kubectl get pods/healthz 查 K8s 层观测 -->
 | 维度 | 命令 | 预期 |
 |:-----|:-----|:-----|
 | 集群状态 | `DescribeClusterStatus` → `ClusterState` | `MasterScaling` → `Running` |
@@ -232,7 +232,7 @@ tccli tke DescribeClusterStatus --region <REGION> --filter "ClusterStatusSet[?Cl
 
 ### 命令成功但状态不对 (exit = 0)
 
-<!-- kubectl get nodes验证Master缩容后节点状态，非tccli边界 -->
+<!-- kubectl get nodes 验证 Master 缩容后节点状态 -->
 | 现象 | 诊断 | 根因 | 修复 |
 |:--------|:----------|:------------|:-----|
 | 长时间停在 `MasterScaling` | `tccli tke DescribeClusterStatus` + `kubectl get nodes` | 新 Master 加入 etcd 集群卡住 / CVM 初始化失败 | 查新节点 CVM 状态，必要时 `ScaleIn` 回滚新增节点 |
@@ -256,7 +256,7 @@ tccli tke DescribeClusterInstances --region <REGION> --version 2018-05-25 --Clus
 # expected: 列出的 Master 节点数与 ClusterMaterNodeNum 一致；结合健康成员数判断是否达到 quorum
 ```
 
-> `ClusterState=Running`（步骤 4 已核）+ 健康 Master/etcd 成员达到 `floor(N/2)+1` 多数派 = 扩缩容闭环完成。生产通常保留 ≥3 个奇数成员；4 个健康成员仍可形成多数派并容忍 1 个故障，只是相较 3 个成员没有提高容错数。`retain` 模式保留的 CVM 须到 CVM 侧手动销毁（下一步做计费清理），见 [§清理](#清理)。
+> `ClusterState=Running`（步骤 4 已核）+ 健康 Master/etcd 成员达到 `floor(N/2)+1` 多数派 = 扩缩容完成。生产通常保留 ≥3 个奇数成员；4 个健康成员仍可形成多数派并容忍 1 个故障，只是相较 3 个成员没有提高容错数。`retain` 模式保留的 CVM 须到 CVM 侧手动销毁（下一步做计费清理），见 [§清理](#清理)。
 
 ## 下一步
 

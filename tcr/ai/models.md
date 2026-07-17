@@ -92,18 +92,6 @@ tccli tcr DescribeAIModelVersionDetail --region <REGION> --RegistryId <REGISTRY_
 
 `Model`（ModelDetail）含：`ModelName` / `NamespaceName` / `Version` / `Digest` / `Size` / `Framework`（框架）/ `Precision`（精度）/ `FileFormat` / `ParamSize`（参数规模）/ `Family` / `IsRecommended` / `PushTime`。
 
-### 步骤 4：删除模型版本
-
-`DeleteAIModel` 通过 `Items[]` 嵌套数组批量删除，每项用 `NamespaceName` + `RepositoryName` + `Reference`（tag 或 digest）定位版本。
-
-```bash
-tccli tcr DeleteAIModel --region <REGION> --RegistryId <REGISTRY_ID> \
-  --Items '[{"NamespaceName":"<NAMESPACE>","RepositoryName":"<MODEL_NAME>","Reference":"<REFERENCE>"}]'
-# expected: exit 0, { "RequestId": "..." }（删除成功仅返回 RequestId）
-```
-
-> 删除不可恢复。删除后 `ListAIModelVersions` 该版本不再返回；若删的是仓库最后一个版本，`ListAIModels` 中该仓库随之消失。删错版本须重新 `docker push`（TCCLI 无 AI 模型推送能力，模型内容通过 docker push 创建）。
-
 ## 验证
 
 ```bash
@@ -116,7 +104,15 @@ tccli tcr ListAIModelVersions --region <REGION> --RegistryId <REGISTRY_ID> \
 
 ## 清理
 
-> `DeleteAIModel` 即清理操作（见 [步骤 4](#步骤-4删除模型版本)）。删除不可逆：删错版本须重新 `docker push` 该 tag；删仓库最后一个版本后该仓库从 `ListAIModels` 消失，需重新 push 重建。删除前已用 `ListAIModelVersions` 确认目标 `Reference`。
+`DeleteAIModel` 通过 `Items[]` 嵌套数组批量删除，每项用 `NamespaceName` + `RepositoryName` + `Reference`（tag 或 digest）定位版本。
+
+```bash
+tccli tcr DeleteAIModel --region <REGION> --RegistryId <REGISTRY_ID> \
+  --Items '[{"NamespaceName":"<NAMESPACE>","RepositoryName":"<MODEL_NAME>","Reference":"<REFERENCE>"}]'
+# expected: exit 0, { "RequestId": "..." }（删除成功仅返回 RequestId）
+```
+
+> 删除不可恢复。删除后 `ListAIModelVersions` 该版本不再返回；若删的是仓库最后一个版本，`ListAIModels` 中该仓库随之消失。删错版本须重新 `docker push`（TCCLI 无 AI 模型推送能力，模型内容通过 docker push 创建）。
 
 ## 故障恢复
 

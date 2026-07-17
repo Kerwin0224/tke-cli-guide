@@ -89,7 +89,7 @@ tccli tke DescribeSupportedRuntime --K8sVersion "<VERSION>" --region <REGION>
 
 - **containerd（推荐）**: K8s 官方默认，资源占用低，1.24+ 版本 docker 已废弃
 - **docker**: 老集群兼容，但 1.24+ 不再支持
-- **版本选择**: 优先 `DefaultVersion`（经过验证），仅在特定需求时选其他版本
+- **版本选择**: 优先 `DefaultVersion`（接口返回的默认推荐版本），仅在特定需求时选其他版本
 - **能回退吗**: 不能直接回退，需重新变更（再次滚动重建）
 
 ### 改 ExtraArgs 前先备份当前值
@@ -220,7 +220,7 @@ tccli tke AddClusterCIDR --ClusterId "<CLUSTER_ID>" --region <REGION> \
 
 ### 步骤 6：获取集群 admin 角色（RBAC 授权前置）
 
-<!-- kubectl管理K8s原生资源(Pod/Service/Deployment)，tccli无K8s资源管理能力，非tccli边界 -->
+<!-- kubectl 管理 K8s 原生资源（TCCLI 无此能力） -->
 ```bash
 tccli tke AcquireClusterAdminRole --ClusterId "<CLUSTER_ID>" --region <REGION>
 # expected: exit 0, RequestId
@@ -237,7 +237,7 @@ tccli tke ModifyClusterRuntimeConfig --ClusterId "<CLUSTER_ID>" --region <REGION
 # expected: exit 0（RuntimeVersion 须在 DescribeSupportedRuntime 的 RuntimeVersions 内；1.30 常见仅 1.6.9，1.32+/1.34+ 另有 1.7.28）
 ```
 
-> `NodePoolRuntimeConfig[]` 可按节点池分别配置运行时。运行时变更滚动重建节点。`RuntimeVersion` 禁止凭印象填——先 `DescribeSupportedRuntime --K8sVersion` 取 `DefaultVersion` 或列表内版本。
+> `NodePoolRuntimeConfig[]` 可按节点池分别配置运行时。运行时变更滚动重建节点。`RuntimeVersion` 须取自 `DescribeSupportedRuntime --K8sVersion` 返回的 `DefaultVersion` 或 `RuntimeVersions[]`，勿传入列表外版本。
 
 ## 跨字段约束
 
@@ -352,7 +352,7 @@ tccli tke UpdateClusterKubeconfig --ClusterId "<CLUSTER_ID>" --region <REGION> \
 ## 收尾确认
 
 ```bash
-# 按所改步骤核对配置值落到预期（分项查字段存在后，再核对配置值协同生效）
+# 按所改步骤核对配置值是否落到预期（先确认字段存在，再确认配置值生效）
 tccli tke DescribeClusters --region <REGION> --ClusterIds '["<CLUSTER_ID>"]' --version 2018-05-25 \
   --filter "Clusters[0].{name:ClusterName,tags:TagSpecification[0].Tags,rt:ContainerRuntime,rtver:RuntimeVersion}"
 # expected: name/标签/运行时按所改步骤落到预期值（如 Tags 含 billing 标签 + 新标签）
@@ -362,7 +362,7 @@ tccli tke DescribeClusterExtraArgs --ClusterId "<CLUSTER_ID>" --region <REGION> 
 # expected: 若步骤 4 改了 ExtraArgs，此处含新参数且原有保留参数未丢失（覆盖式副作用核查）
 ```
 
-> 配置项落到预期值 + 集群 `Running`（步骤 8 已核）= 配置变更闭环完成。**副作用核查**：① `ModifyClusterTags` 是覆盖式——核对 `billing` 标签仍在（丢失会被 CAM 拒后续写操作，见 [§步骤 2](#步骤-2修改集群标签) 警告）；② `ModifyClusterExtraArgs` 是覆盖式——核对原参数未丢失（传空数组会清空，见 [§步骤 4](#步骤-4修改组件额外参数覆盖式) 警告）。
+> 配置项落到预期值 + 集群 `Running`（步骤 8 已核）= 配置变更完成。**副作用核查**：① `ModifyClusterTags` 是覆盖式——核对 `billing` 标签仍在（丢失会被 CAM 拒后续写操作，见 [§步骤 2](#步骤-2修改集群标签) 警告）；② `ModifyClusterExtraArgs` 是覆盖式——核对原参数未丢失（传空数组会清空，见 [§步骤 4](#步骤-4修改组件额外参数覆盖式) 警告）。
 
 ## 下一步
 

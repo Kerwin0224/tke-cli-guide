@@ -131,7 +131,7 @@ tccli tke DescribeBackupStorageLocations --region <REGION>
 
 | 占位符 | 含义 | 约束 | 获取方式 |
 |--------|------|------|---------|
-| `<REGION>` | 调用地域 | 如 `ap-guangzhou` | `tccli cvm DescribeRegions` |
+| `<REGION>` | 调用地域 | 如 `ap-guangzhou` | `tccli tke DescribeRegions` |
 | `<STORAGE_REGION>` | COS 桶地域 | 与桶一致 | COS 控制台或 `coscli ls`（COS 独立工具） |
 | `<BUCKET_NAME>` | COS 桶名 | **`tke-backup` 前缀** | COS 控制台或 `coscli ls`（TCCLI 无 cos 服务） |
 | `<LOCATION_NAME>` | 存储位置名 | 全局唯一 | 自定义 |
@@ -140,7 +140,7 @@ tccli tke DescribeBackupStorageLocations --region <REGION>
 
 TCCLI 负责备份存储位置 CRUD。创建存储位置后，在 TKE 控制台进入“运维中心 > 备份中心”，使用 TKE 备份组件创建备份或恢复。TKE 备份组件位于 `tke-backup` namespace，其中 Deployment 和 Service 名称均为 `tke-backup`。
 
-<!-- kubectl检查TKE备份组件，tccli无K8s工作负载管理能力，非tccli边界 -->
+<!-- kubectl 检查 TKE 备份组件（TCCLI 无 K8s 工作负载管理能力） -->
 ```bash
 kubectl get deployment,service -n tke-backup tke-backup
 # expected: Deployment 与 Service 均存在；Deployment AVAILABLE 为 1 或更大
@@ -170,7 +170,7 @@ tccli tke DeleteBackupStorageLocation --region <REGION> --Name <LOCATION_NAME>
 
 ## 收尾确认
 
-<!-- kubectl检查TKE备份组件，tccli无K8s工作负载管理能力，非tccli边界 -->
+<!-- kubectl 检查 TKE 备份组件（TCCLI 无 K8s 工作负载管理能力） -->
 ```bash
 # 核对 TKE 备份组件对象
 kubectl get deployment,service -n tke-backup tke-backup
@@ -190,9 +190,3 @@ tccli tke DescribeBackupStorageLocations --region <REGION> \
 - 集群创建/删除（备份对象）：[创建集群](create.md)
 - 集群升级（升级前备份）：[升级集群版本](upgrade.md)
 - 集群状态查询：[查询集群](query.md)
-
-## 精确 Action 字段契约
-
-| 字段 | 所属 Action | 必填 | 说明 |
-|:---|:---|:---:|:---|
-| `Bucket` | `CreateBackupStorageLocation` | 是 | 备份存储桶 |

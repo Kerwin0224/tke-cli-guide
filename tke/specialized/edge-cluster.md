@@ -199,7 +199,7 @@ tccli tke DescribeTKEEdgeClusters --region <EDGE_REGION>
 
 ## API 参考
 
-本篇覆盖边缘集群相关 **26** 个 Action（应用转发类 ForwardTKEEdgeApplicationRequestV3 不在正文主流程演示）：
+本页覆盖边缘集群相关 **26** 个 Action（应用转发类 ForwardTKEEdgeApplicationRequestV3 不在正文主流程演示）：
 
 | 分类 | API | 说明 |
 |------|-----|------|
@@ -300,12 +300,12 @@ tccli tke DeleteECMInstances --ClusterID "<CLUSTER_ID>" --region <REGION> --EcmI
 ## 收尾确认
 
 ```bash
-# 集群已 Running（上文已查状态，此处端到端核节点注册 + kubeconfig 可拉取）
+# 集群已 Running（状态核对后，再端到端核节点注册 + kubeconfig 可拉取）
 tccli tke DescribeTKEEdgeClusters --region <EDGE_REGION> --ClusterIds '["<CLUSTER_ID>"]' \
   --filter "Clusters[0].{state:ClusterStatus,name:ClusterName}"
 # expected: state=Running
 
-# 端到端：边缘节点注册成功（上文已查集群状态，此处查节点真在线）
+# 端到端：边缘节点注册成功（集群状态核对后，再确认节点在线）
 # 注意：DescribeEdgeClusterInstances 在 ap-guangzhou 返回 UnsupportedRegion，须在 <EDGE_REGION> 执行
 tccli tke DescribeEdgeClusterInstances --ClusterID "<CLUSTER_ID>" --region <EDGE_REGION> \
   --Offset 0 --Limit 20
@@ -317,7 +317,7 @@ tccli tke DescribeTKEEdgeClusterCredential --region <EDGE_REGION> --ClusterId "<
 # expected: apiVersion: v1 → 边缘集群闭环完成
 ```
 
-> 集群 Running + 边缘节点注册在线 + kubeconfig 可拉取 = 端到端闭环。上文验证段查集群状态，此处确认边缘节点真注册（业务可用性，Edge 地域须实际核实）+ kubeconfig 可连通集群是进下一阶段（部署应用）的前置。
+> 集群 Running + 边缘节点注册在线 + kubeconfig 可拉取 = 端到端闭环。除集群状态外，还须确认边缘节点已注册在线（业务可用性，Edge 地域须实际核实）+ kubeconfig 可连通集群，是进下一阶段（部署应用）的前置。
 
 ---
 
@@ -328,7 +328,7 @@ tccli tke DescribeTKEEdgeClusterCredential --region <EDGE_REGION> --ClusterId "<
 - [专用工作负载概览](index.md) — 边缘 / EKS / 虚拟节点选型
 - [标准集群概览](../clusters/index.md) — 对比标准集群
 
-## 精确 Action 字段契约
+## Action 字段契约
 
 | 字段 | 所属 Action | 必填 | 说明 |
 |:---|:---|:---:|:---|

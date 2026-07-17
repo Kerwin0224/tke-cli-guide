@@ -142,7 +142,7 @@ tccli tke ModifyClusterEndpointSP --region <REGION> \
 
 ### 步骤 4：将访问链路切换为直连
 
-`SwitchClusterEndpoint` 的官方当前页（最近更新于 2025-11-26）和本地静态 API 均将其标为在线 Action，未标注废弃或下线。它切换的是指定公网或内网访问链路的**直连模式**，不是在公网端点与内网端点之间互换。官方页未给出集群类型或额外产品前置条件；因此只应在控制台或腾讯云支持已确认当前集群和目标端点支持直连，并且目标端点已经开启时使用，不要把下面命令泛化到所有集群。
+`SwitchClusterEndpoint` 的官方当前页（最近更新于 2025-11-26）与 `tccli tke SwitchClusterEndpoint help --detail` 均将其标为在线 Action，未标注废弃或下线。它切换的是指定公网或内网访问链路的**直连模式**，不是在公网端点与内网端点之间互换。官方页未给出集群类型或额外产品前置条件；因此只应在控制台或腾讯云支持已确认当前集群和目标端点支持直连，并且目标端点已经开启时使用，不要把下面命令泛化到所有集群。
 
 以下为最小切换路径；`Rollback` 默认是 `false`，不要把 `true` 写成推荐值：
 
@@ -152,7 +152,7 @@ tccli tke SwitchClusterEndpoint --region <REGION> \
   --ClusterId "<CLUSTER_ID>" --IsExtranet false --Rollback false
 # expected: 返回 RequestId
 
-# 验证目标端点仍处于已创建状态；本接口没有公开专用状态查询
+# 验证目标端点仍处于已创建状态；该 Action 没有公开专用状态查询
 tccli tke DescribeClusterEndpointStatus --region <REGION> \
   --ClusterId "<CLUSTER_ID>" --IsExtranet false
 # expected: Status="Created"；随后按步骤 6 验证实际连通性

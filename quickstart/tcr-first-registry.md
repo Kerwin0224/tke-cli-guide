@@ -11,9 +11,9 @@ fused: true
 > ⚠️ **计费警告**: 创建企业版实例即开始计费。`basic` 为按量计费最低规格。
 > 在 [Step 4: 删除实例](#step-4-删除实例清理) 中销毁可停止计费。用完即删。
 >
-> **目标读者**: DevOps / SRE — 用 TCCLI + docker 管理 TCR 镜像仓库。
+> **适用角色**: DevOps / SRE — 用 TCCLI + docker 管理 TCR 镜像仓库。
 >
-> **阅读路径**: 本文 → [TCR 概览](../tcr/index.md) → [创建实例详解](../tcr/instances/create.md)
+> **相关文档**: 本文 → [TCR 概览](../tcr/index.md) → [创建实例详解](../tcr/instances/create.md)
 >
 > **时间估计**: ~5 分钟（实例创建约 1 分钟，公网端点生效 1-2 分钟，docker push 取决于网络）
 >
@@ -25,7 +25,7 @@ fused: true
 
 - 需用 TCCLI 验证创建镜像仓库并推送一份镜像（建实例→开公网→推送→删除闭环）— 本篇是最短路径
 - 终端执行 `tccli tcr DescribeInstances` 返回空或需验证 TCR+docker 混合工作流 — 从 [Step 0 环境检查](#step-0-环境检查) 开始
-- 要使用 TCCLI 管理镜像仓库 + docker 推送的混合工作流实操 TCR 生命周期 — 本 Quickstart 含完整 docker login/tag/push + TCR 验证
+- 要使用 TCCLI 管理镜像仓库 + docker 推送的混合工作流演练 TCR 生命周期 — 本 Quickstart 含完整 docker login/tag/push + TCR 验证
 
 ## 准备工作
 
@@ -259,13 +259,13 @@ Address: 81.71.x.x
 ```
 
 > 记下 `PublicDomain` 的值（如 `my-qs-registry.tencentcloudcr.com`），
-> Step 2 和 Step 3 都会用到，下文以 `<PUBLIC_DOMAIN>` 代指。
+> Step 2 和 Step 3 都会用到，后续以 `<PUBLIC_DOMAIN>` 代指。
 
 ---
 
 ## Step 2: 开启公网访问端点
 
-> ⚠️ **docker login 的隐藏前提**: docker login/push 前必须先开启公网访问端点，
+> ⚠️ **docker login 前置**：docker login/push 前必须先开启公网访问端点，
 > 否则 `docker login` 会超时或 TLS 握手失败。
 
 公网端点默认关闭。用 `ManageExternalEndpoint --Operation Create` 开启，

@@ -96,7 +96,7 @@ tccli cam AttachRolePolicy \
 | Domain | string | 否 | 自定义签名域名；为空时使用 TCR 实例默认域名 |
 | Disabled | boolean | 否 | 是否禁用策略 |
 
-> 接口归档仅证明 `FailedOperation.DependenceError`、`InternalError.ErrorTcrUnauthorized`、`InvalidParameter.ErrorTcrInvalidParameter` 和 `UnsupportedOperation` 等接口级边界，未给出字段到错误码的一一映射；排障时应结合响应中的完整错误码和 `RequestId` 定位。
+> 当前 API 契约仅明确 `FailedOperation.DependenceError`、`InternalError.ErrorTcrUnauthorized`、`InvalidParameter.ErrorTcrInvalidParameter` 和 `UnsupportedOperation` 等接口级错误边界，未给出字段到错误码的一一映射；排障时应结合响应中的完整错误码和 `RequestId` 定位。
 
 > `KmsId` 须先在 KMS 创建用途为“非对称签名验签”、算法为 `RSA_2048` 的用户密钥；TCR 镜像签名不支持 SM2。`KmsRegion` 填写该密钥的实际地域，不要求与 TCR 实例地域一致；跨地域可用，但会增加跨地域通信开销。
 
@@ -173,7 +173,7 @@ tccli tcr DeleteSignaturePolicy --region <REGION> \
 
 | 现象 | 诊断 | 根因 | 修复 |
 |:--------|:----------|:------------|:-----|
-| 返回 `InvalidParameter.ErrorTcrInvalidParameter` | 按关键字段表逐项核对请求 | TCR 请求参数无效；接口未公布具体字段映射 | 修正参数后重试；仍失败时携带 `RequestId` 定位 |
+| 返回 `InvalidParameter.ErrorTcrInvalidParameter` | 按关键字段说明逐项核对请求 | TCR 请求参数无效；接口未公布具体字段映射 | 修正参数后重试；仍失败时携带 `RequestId` 定位 |
 | 返回 `UnsupportedOperation` | `DescribeInstances` 查看规格 | 当前实例或操作不支持镜像签名 | 确认实例为 premium；若仍失败，携带 `RequestId` 定位 |
 | 返回 `FailedOperation.DependenceError` | `DescribeKey` 核对密钥，并检查服务角色策略 | KMS 等依赖服务异常 | 确认密钥可用且服务角色具备 KMS 权限后重试 |
 | 返回 `InternalError.ErrorTcrUnauthorized` | 查用户 CAM + `ListAttachedRolePolicies --RoleName TCR_QCSRole` | TCR 操作未获授权 | 补齐用户侧权限；服务侧见 [服务角色（TCR/KMS）](#服务角色tcrkms) |

@@ -10,7 +10,7 @@ fused: true
 
 > ⚠️ **两步，不是一次 `CreateCluster`**：① [创建标准集群](../clusters/create.md)（`CreateCluster`，空控制面）→ ② 本文创建虚拟节点池/节点。`CreateCluster` **不会**单独变成「Serverless 集群」。
 >
-> 与另外两条路径区分：存量 **EKS 集群**（`CreateEKSCluster`，新建已关）与 **容器实例 CPU/GPU**（`CreateEKSContainerInstances`，无集群）见 [EKS / 容器实例](../specialized/eks-cluster.md)。三者 Action 不同，勿混用。
+> 与另外两条路径区分：存量 **EKS 集群**（`CreateEKSCluster`，新建已关）与 **容器实例 CPU/GPU**（`CreateEKSContainerInstances`，无集群）见 [EKS / 容器实例](../specialized/eks-cluster.md)。三者 Action 不同，不要混用。
 >
 > 官方文档：[超级节点资源规格](https://cloud.tencent.com/document/product/457/39808) · [节点概述](https://cloud.tencent.com/document/product/457/32201)
 >

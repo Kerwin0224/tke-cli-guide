@@ -32,7 +32,7 @@ fused: true
 |:-----|:-----------|:----:|:-----|
 | `ClusterId` | DrainExternalNode / DeleteExternalNode / DeleteExternalNodePool | 是 | 集群 ID |
 | `Name` | DrainExternalNode | 是 | 节点名（**单数**） |
-| `Names` | DeleteExternalNode | 是 | 节点名数组（**复数** `Names[]`，勿与 Drain 的 `Name` 混用） |
+| `Names` | DeleteExternalNode | 是 | 节点名数组（**复数** `Names[]`，不要与 Drain 的 `Name` 混用） |
 | `NodePoolIds` | DeleteExternalNodePool | 是 | 节点池 ID 数组 |
 | `Force` | DeleteExternalNode / DeleteExternalNodePool | 否 | 是否强制删除（默认 false 优雅） |
 
@@ -102,10 +102,10 @@ tccli tke DescribeExternalNodePools --ClusterId <CLUSTER_ID> --region <REGION> \
 
 > **不可逆警告**：注册节点与节点池删除后不可恢复。删除整个节点池同样必须按步骤 3 先枚举节点、逐一驱逐并确认工作负载迁移，再执行非强制删除。
 
-删除操作本身就是本篇清理动作，无独立回滚命令：
+删除操作即清理动作，无独立回滚命令：
 
 - 只下线单个节点时，执行步骤 1、步骤 2，并用“验证”中的节点查询确认记录为空。
-- 删除整个节点池时，只执行步骤 3 的权威流程，不要重复执行另一套删除配方。
+- 删除整个节点池时，只执行步骤 3 的流程，不要另起一套删除步骤。
 - 节点池查询为空只证明 TKE 中该节点池记录已不可见，不证明外部机器、Kubernetes Node 或关联云资源已经删除，也不证明账单已经停止。分别检查这些资源，并按对应产品的计费规则确认结算状态。
 
 > 如需重新接入节点，见[创建注册节点（专线版）](dedicated-line.md)。

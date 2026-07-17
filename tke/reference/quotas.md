@@ -4,7 +4,7 @@ subtype: 8C
 ---
 # TKE 配额与限制
 
-> 资源配额与 API 限频。**TKE 资源配额默认值**以官方 [购买集群配额限制](https://cloud.tencent.com/document/product/457/9087) 为准（可提工单调高）；API 限频以 TKE API 概览为准。超限信号列给出触发限制时看到的错误码。数值为半常量，官方调额后以官网最新表为准。
+> 资源配额与 API 限频。**TKE 资源配额默认值**以官方 [购买集群配额限制](https://cloud.tencent.com/document/product/457/9087) 为准（可提工单调高）；API 限频以 TKE API 概览为准。超限信号列给出触发限制时看到的错误码。下列数值为官方默认配额，调额后以官网最新表为准。
 
 ## 资源配额
 
@@ -35,7 +35,7 @@ subtype: 8C
 | L3000 | 150000 | 24000 | 10240 | 150000 |
 | L5000 | 200000 | 40000 | 20480 | 200000 |
 
-> 集群规格决定管理费与可管理规模；选型见创建集群 Decide。计费项拆分见官方计费概述（半常量）。
+> 集群规格决定管理费与可管理规模；选型见 [创建集群](../clusters/create.md) 的等级与容量规划说明。计费项拆分见官方计费概述（默认配额与计费数值以官网最新表为准）。
 
 ## API 限频
 
@@ -97,7 +97,7 @@ tccli tke DescribePostNodeResources --ClusterId "<CLUSTER_ID>" --NodeName "<NODE
 
 ## Pod 成本核算与预留实例抵扣
 
-> Pod 计费、按规格估算可创建数、预留实例抵扣率与利用率——成本核算任务，区别于上文的配额用量查询。
+> Pod 计费、按规格估算可创建数、预留实例抵扣率与利用率——成本核算任务，区别于资源配额与用量查询。
 
 ```bash
 # 按规格查询 Pod (CPU/Mem/GPU 规格 + 可用区, 创建前估算)
@@ -119,7 +119,7 @@ tccli tke DescribeRIUtilizationDetail --Limit 20 --region <REGION>
 
 > `DescribePodsBySpec` 按规格估算可创建 Pod 数。`DescribePodChargeInfo`/`DescribePodDeductionRate` 是 Pod 计费与预留实例抵扣。`DescribeRIUtilizationDetail` 查询预留实例利用率。
 >
-> **预留实例域边界**：本指南排除的是预留实例的**写操作**（购买/退还/续费/改范围，共 6 个，见 [README 排除表](../../README.md#本指南不覆盖哪些操作)）；预留实例的**查询用量**操作（`DescribeRIUtilizationDetail`）与 Pod 成本核算同属一个用户任务，纳入本篇覆盖，不排除。
+> **预留实例范围**：预留实例的**写操作**（购买/退还/续费/改范围）见 [本指南不覆盖哪些操作](../../README.md#本指南不覆盖哪些操作)；预留实例的**查询用量**（`DescribeRIUtilizationDetail`）与 Pod 成本核算同属成本核对任务，由本页覆盖。
 
 ## 相关文档
 

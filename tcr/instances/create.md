@@ -26,7 +26,7 @@ TCR 实例是镜像存储的容器 —— 每个实例有独立的域名、存�
 | standard (标准版) | 中小团队生产 | 100 / 3000 / 3000 / 10 | 可升级为 premium |
 | premium (高级版) | 大规模 / 完整同步与企业能力 | 500 / 5000 / 5000 / 20 | 当前最高规格 |
 
-> 配额与功能差异以官方 [产品服务层级与容量限制](https://cloud.tencent.com/document/product/1141/104731) 为准；本仓数字汇总见 [配额与限制](../reference/quotas.md)。地域级默认最多 **10** 个企业版实例（超额常见 `LimitExceeded` 类错误码，以实际响应 `Error.Code` 为准）。
+> 配额与功能差异以官方 [产品服务层级与容量限制](https://cloud.tencent.com/document/product/1141/104731) 为准；配额数字汇总见 [配额与限制](../reference/quotas.md)。地域级默认最多 **10** 个企业版实例（超额常见 `LimitExceeded` 类错误码，以实际响应 `Error.Code` 为准）。
 
 镜像与 Chart 数据落在关联 COS 桶，按 COS 用量计费（非上表「存储配额」）。**规格选择**：先按必需功能确定最低规格，再核对容量配额和计费方式；只有所需功能在 `basic` 可用且容量满足时，才从 `basic` 做最小验证，后续可按需升级。
 
@@ -97,14 +97,14 @@ tccli tcr DescribeRegions
 
 - **先核必需功能**：镜像部署阻断至少选 `standard`；镜像签名验签、按需加载容器镜像或同实例多地域就近访问选 `premium`；跨实例自定义规则同步和跨账号实例间镜像同步至少选 `standard`
 - **再核容量**：确认命名空间、仓库、Helm、VPC 接入与服务级账号配额；若功能无更高规格门槛且 `basic` 容量足够，可用 `basic` 做最小验证
-- **最后选计费**：API 默认按量（`RegistryChargeType: 0`）；购买页建议长期使用优先包年包月（防欠费回收）。文档同时保留两种路径
+- **最后选计费**：API 默认按量（`RegistryChargeType: 0`）；购买页建议长期使用优先包年包月（防欠费回收）。按量与包年包月两条路径均可执行，按场景二选一
 - **可修改**：规格可以升级（basic→standard→premium），不能降级。计费模式从按量可转包年包月；包年包月退还须满足当前退费规则
 
 ### 步骤 2：创建实例
 
 `CreateInstance` 必传 `RegistryName` + `RegistryType`。按场景**二选一**：A 最小化（basic 按量，入门测试）或 B 增强（premium 包年包月+删除保护+COS 多 AZ，生产）。
 
-> ⚠️ **A 与 B 是二选一变体，不是先做 A 再做 B**——两者各调一次 `CreateInstance` 会建**两个实例**。实例创建后改配置（规格升级/续费/存储扩容）用 `ModifyInstance`/`ModifyInstanceStorage`/`RenewInstance`（见本文"实例生命周期管理"段），**禁用第二次 `CreateInstance` 改配置**。规格可升不可降（basic→standard→premium）。
+> ⚠️ **A 与 B 是二选一变体，不是先做 A 再做 B**——两者各调一次 `CreateInstance` 会建**两个实例**。实例创建后改配置（规格升级/续费/存储扩容）用 `ModifyInstance`/`ModifyInstanceStorage`/`RenewInstance`（见本页「实例生命周期管理」段），**禁用第二次 `CreateInstance` 改配置**。规格可升不可降（basic→standard→premium）。
 
 #### 选项 A：最小化（basic 按量，入门测试）
 
@@ -164,7 +164,7 @@ tccli tcr DescribeInstances \
 
 ## 清理
 
-> ⚠️ 删除 TCR 实例会**级联删除**实例内所有命名空间/仓库/镜像（数据永久丢失，不可恢复）；自定义域名与 VPC 链接同时删除。包年包月实例应先在控制台实例列表确认是否满足五天无理由或普通自助退还条件，并以 [退费说明](https://cloud.tencent.com/document/product/1141/53319) 和控制台试算金额为准；特殊地域、特殊配置或部分活动资源可能不支持自助退还。TCR Instance 无独立删除章，本段是唯一删除入口。
+> ⚠️ 删除 TCR 实例会**级联删除**实例内所有命名空间/仓库/镜像（数据永久丢失，不可恢复）；自定义域名与 VPC 链接同时删除。包年包月实例应先在控制台实例列表确认是否满足五天无理由或普通自助退还条件，并以 [退费说明](https://cloud.tencent.com/document/product/1141/53319) 和控制台试算金额为准；特殊地域、特殊配置或部分活动资源可能不支持自助退还。本段是删除 TCR 实例的唯一操作入口。
 
 > 若需保留某些镜像，先 `tccli tcr DuplicateImage` 复制到其他实例（见 [推送拉取镜像](../images/push-pull.md)）。
 
@@ -262,9 +262,9 @@ tccli tcr DescribeNamespaces --region ap-guangzhou --RegistryId "<REGISTRY_ID>" 
 
 > 实例 `Running` = 创建完成，可进入 [访问管理](manage-access.md) 与 [命名空间/仓库](../repositories/manage.md)。`DescribeNamespaces` 须在 `Running` 后调用（`Pending`/`Deploying` 过渡态中调用通常返回空）。空实例无镜像，须先建命名空间才能 push。
 >
-> 访问端点**不在本篇强制开启**：默认拒绝全部公网/内网访问。生产优先内网 VPC；本地或外网 CI 再开公网并配白名单——见 [访问管理](manage-access.md)。docker login/push/pull 属 docker CLI（非 tccli；TCCLI 无镜像传输能力），在端点+Token 配好后于 [推送拉取镜像](../images/push-pull.md) 执行。
+> 访问端点**默认不强制开启**：默认拒绝全部公网/内网访问。生产优先内网 VPC；本地或外网 CI 再开公网并配白名单——见 [访问管理](manage-access.md)。docker login/push/pull 属 docker CLI（非 tccli；TCCLI 无镜像传输能力），在端点+Token 配好后于 [推送拉取镜像](../images/push-pull.md) 执行。
 >
-> **账号侧观察与诊断**：曾观察到企业版 `DescribeInstances`（含 `--AllRegion true`）`TotalCount: 0` 时，`CreateInstance` 返回 `FailedOperation.TradeFailed`，同次完整消息提到 `TCR_QCSRole` / 商品下单校验；这只能作为诊断线索，不能证明该角色是所有 `TradeFailed` 的确定根因。请先保存完整 `Error.Message` 与 `RequestId`：消息明确要求 `TCR_QCSRole` 时检查控制台服务角色授权；否则按消息检查计费/购买前置，并携 `RequestId` 查询原因或提交工单。
+> **账号侧诊断**：若企业版 `DescribeInstances`（含 `--AllRegion true`）`TotalCount: 0` 且 `CreateInstance` 返回 `FailedOperation.TradeFailed`，完整消息可能提到 `TCR_QCSRole` / 商品下单校验——这只是诊断线索，不能证明该角色是所有 `TradeFailed` 的确定根因。先保存完整 `Error.Message` 与 `RequestId`：消息明确要求 `TCR_QCSRole` 时检查控制台服务角色授权；否则按消息检查计费/购买前置，并携 `RequestId` 查询原因或提交工单。
 
 ---
 

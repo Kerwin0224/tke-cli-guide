@@ -21,9 +21,9 @@ fused: false
 
 **排除项（Exclusions）** = **禁止计划升级**的时间段（业务高峰封网等），不是「放开维护窗口」。
 
-| 半常量 | 约束 |
+| 固定约束 | 约束说明 |
 |:-------|:-----|
-| 维护时长 | ≥ **2** 小时；本篇 API 字段 `Duration` 取值 **2~12**（小时）；控制台文案另写上限 24，以 api/本篇字段表为准 |
+| 维护时长 | ≥ **2** 小时；本页 API 字段 `Duration` 取值 **2~12**（小时）；控制台文案另写上限 24，以本页字段说明与 `help --detail` 为准 |
 | 排除项数量 | 单地域全局 / 单集群各最多 **3** 个；单条排除起止跨度 ≤ **7** 天 |
 | 可用窗口下限 | 每 **30** 天周期内至少保留 **4** 小时维护窗口 |
 | 时区 | 维护起始时间按 **东八区** |
@@ -51,7 +51,7 @@ fused: false
 
 ### 时段选择
 
-`MaintenanceTime` 为窗口起点（`HH:MM:SS`），`Duration` 为持续时长（整数，取值 2~12，单位为小时），`DayOfWeek` 为星期枚举数组。选择原则：避开业务高峰，建议低峰期（如 `22:00:00`，Duration `2`）。现网常见配置：`22:00:00` + Duration `2` + 周二/周四/周五。
+`MaintenanceTime` 为窗口起点（`HH:MM:SS`），`Duration` 为持续时长（整数，取值 2~12，单位为小时），`DayOfWeek` 为星期枚举数组。选择原则：避开业务高峰，建议低峰期（如 `22:00:00`，Duration `2`）。示例配置：`22:00:00` + Duration `2` + 周二/周四/周五。
 
 ## 配置项
 
@@ -223,17 +223,17 @@ tccli tke DescribeClusterMaintenanceWindowAndExclusions --region <REGION> --Limi
 ## 收尾确认
 
 ```bash
-# 集群级窗口 + 全局窗口 + 排除项一次性核对（三层协同效果）
+# 集群级窗口 + 全局窗口 + 排除项一并核对（确认三层配置均符合预期）
 tccli tke DescribeClusterMaintenanceWindowAndExclusions --region <REGION> --Limit 20 \
   --filter "MaintenanceWindowAndExclusions[?ClusterID=='<CLUSTER_ID>'].{time:MaintenanceTime,dur:Duration,days:DayOfWeek,excl:Exclusions}"
 # expected: 集群级时段（如 time=22:00:00, dur=2, days=["TU","TH","FR"]）+ Exclusions 含配置的排除项
 
 tccli tke DescribeGlobalMaintenanceWindowAndExclusions --region <REGION> --Limit 20 \
   --filter "MaintenanceWindowAndExclusions[0].{time:MaintenanceTime,dur:Duration,days:DayOfWeek,regions:TargetRegions,excl:Exclusions}"
-# expected: 全局窗口时段 + TargetRegions 含目标地域 → 集群级与全局窗口协同生效
+# expected: 全局窗口时段 + TargetRegions 含目标地域 → 集群级与全局窗口均已配置生效
 ```
 
-> 集群级窗口优先于全局窗口——同集群有两层时以集群级为准。汇总核对须确认目标集群的窗口来自预期层级（集群级未配时才回落到全局），且排除项 `StartAt`/`EndAt` 落在窗口时段内才会真正跳过本次自动升级（排除项能否跳过取决于与窗口时段的交集；无交集则不生效，见 [§故障恢复](#故障恢复)）。
+> 集群级窗口优先于全局窗口——同集群有两层时以集群级为准。核对时须确认目标集群的窗口来自预期层级（集群级未配时才回落到全局），且排除项 `StartAt`/`EndAt` 落在窗口时段内才会真正跳过本次自动升级（排除项能否跳过取决于与窗口时段的交集；无交集则不生效，见 [§故障恢复](#故障恢复)）。
 
 ## 下一步
 

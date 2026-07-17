@@ -96,7 +96,7 @@ which tccli
 
 | 现象 | 诊断命令 | 根因 | 修复 |
 |:-----|:---------|:-----|:-----|
-| `command not found: uv` | `which uv` | uv 未安装或未在 PATH | 按上文"安装 uv"步骤重装；macOS/Linux 确认 `~/.local/bin` 在 PATH（`echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc` 后 `source ~/.zshrc`） |
+| `command not found: uv` | `which uv` | uv 未安装或未在 PATH | 按「安装 uv」步骤重装；macOS/Linux 确认 `~/.local/bin` 在 PATH（`echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc` 后 `source ~/.zshrc`） |
 | `command not found: tccli`（安装成功后） | `ls ~/.local/bin/tccli` | PATH 未含 `~/.local/bin` | 同上加入 PATH；Windows 将 `%USERPROFILE%\.local\bin` 加入 PATH |
 | 版本过旧，缺少新接口 | `tccli --version` 确认是否最新 | TCCLI 版本低 | `uv tool upgrade tccli` |
 | 升级后仍报旧命令不存在 | `tccli help \| grep <Action>` | 升级未生效或装了多个 TCCLI | `uv tool uninstall tccli && uv tool install tccli` 重装 |

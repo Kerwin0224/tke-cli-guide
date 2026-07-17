@@ -45,7 +45,7 @@ TCR 实例是独立的镜像仓库服务后端。企业版实例有独立存储�
 | standard（标准） | 100 | 3000 | 10 | + 镜像部署阻断 | 中型企业 |
 | premium（高级） | 500 | 5000 | 20 | + 签名验签 + 按需加载 | 大规模、安全敏感 |
 
-> 个人版免费但限额（命名空间 **10**/地域；仓库 **广州 500 / 其他 100**；Tag **100**），无 SLA，不可调额，无独立后端。生产环境用企业版。官方权威表：[产品服务层级](https://cloud.tencent.com/document/product/1141/104731)；本仓数字与用量查询见 [配额与限制](../reference/quotas.md)。地域级企业版实例默认最多 **10** 个。
+> 个人版免费但限额（命名空间 **10**/地域；仓库 **广州 500 / 其他 100**；Tag **100**），无 SLA，不可调额，无独立后端。生产环境用企业版。官方产品层级表：[产品服务层级](https://cloud.tencent.com/document/product/1141/104731)；配额数字与用量查询见 [配额与限制](../reference/quotas.md)。地域级企业版实例默认最多 **10** 个。
 
 ## 企业版 vs 个人版
 
@@ -69,7 +69,7 @@ TCR 实例是独立的镜像仓库服务后端。企业版实例有独立存储�
 | Deleting | 删除中 | `DeleteInstance` | 等待 |
 | Unhealthy / FailedCreated / FailedUpdated / Bucket-Error / Isolate / DeleteBucketFailed / DeleteFailed | 异常或回收相关 | 创建/更新/存储/删除失败或欠费隔离 | 按 [状态机](../reference/states.md) 与错误信息处理；勿在非 `Running` 时 push/pull |
 
-> 完整枚举与过程字段见 [状态机参考](../reference/states.md)（`DescribeInstances`/`DescribeInstanceStatus` 的 `Status`；官方数据结构无 `Creating` 字面值，创建过渡为 `Pending`→`Deploying`）。push/pull 前必须确认 `Running`。
+> 完整枚举与 `Conditions` 字段见 [状态机参考](../reference/states.md)（`DescribeInstances`/`DescribeInstanceStatus` 的 `Status`；官方数据结构无 `Creating` 字面值，创建过渡为 `Pending`→`Deploying`）。push/pull 前必须确认 `Running`。
 
 ## 不适用场景
 

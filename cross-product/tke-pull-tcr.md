@@ -23,7 +23,7 @@ TKE 集群拉取 TCR 镜像的三种典型场景：
 | 公网拉取 | TKE → TCR PublicDomain（公网 + 白名单） | TKE 与 TCR 不同 VPC | 高 |
 | CI/CD 自动部署 | CI 推 TCR → TKE 拉取（imagePullSecret） | 持续部署流水线 | 中 |
 
-> 本 Quickstart 走 **VPC 内网拉取** + `imagePullSecret` 场景。跨产品操作：TCCLI（取凭证）+ kubectl（配 Secret + 部署）。
+> 本 Quickstart 采用 **VPC 内网拉取** + `imagePullSecret` 场景。跨产品操作：TCCLI（取凭证）+ kubectl（配 Secret + 部署）。
 >
 > **免密替代路径**：TKE 集群可用 **TCR 插件**做内网免密拉取（无需本篇 Secret）；见 [TKE 使用 TCR 插件免密拉取](https://cloud.tencent.com/document/product/1141/48184)。公网拉取产生 COS 公网流量费；同 VPC 内网不计该费。`ImagePullBackOff` / `unauthorized` 时先核：内网端点是否接入、白名单/凭证是否有效、镜像地址是否用对域名。
 
@@ -149,7 +149,7 @@ kubectl patch deployment verify-app -p '{"spec":{"template":{"spec":{"imagePullS
 kubectl get pods -l app=verify-app -o jsonpath='{.items[0].status.containerStatuses[0].ready}'
 # expected: true → 镜像拉取+容器运行端到端成功
 
-# 清理验证 Deployment（保留 Secret，供可选清理段处理）
+# 清理验证 Deployment（保留 Secret；Secret 在下方「清理」中删除）
 kubectl delete deployment verify-app
 # expected: deployment.apps "verify-app" deleted
 ```

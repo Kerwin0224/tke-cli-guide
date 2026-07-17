@@ -12,7 +12,7 @@ subtype: 8D
 
 | 错误码 | 含义 | 可重试 | 诊断 | 修复 |
 |------|---------|:---------:|----------|-----|
-| `UnknownParameter` | 跨版本参数不兼容（如旧版 `InstanceIds` 用到新版 `DescribeClusterInstances`） | 否 | `tccli tke <Action> --version <VERSION> --generate-cli-skeleton` 逐字段核契约 | 改用目标版本的参数名（旧 `InstanceIds`/`InstanceRole` vs 新 `SortBy`/`NeedTags`） |
+| `UnknownParameter` | 跨版本参数不兼容（如旧版 `InstanceIds` 用到新版 `DescribeClusterInstances`） | 否 | `tccli tke <Action> --version <VERSION> --generate-cli-skeleton` 逐字段核对入参契约 | 改用目标版本的参数名（旧 `InstanceIds`/`InstanceRole` vs 新 `SortBy`/`NeedTags`） |
 | `UnknownAction` | 新版 Action 不带 `--version` 误走旧版，旧版无此 Action | 否 | `tccli tke help --version 2022-05-01 \| grep <Action>` 确认 Action 归属版本 | 显式带 `--version 2022-05-01` |
 
 ## TKE 特有错误码

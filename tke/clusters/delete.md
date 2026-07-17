@@ -202,7 +202,7 @@ tccli tke DescribeClusterStatus --region ap-guangzhou \
 ## 收尾确认
 
 ```bash
-# 残留资源核查：CBS/EIP/CLB 是否真清零（删除闭环标志——仅查集群 TotalCount=0 不够，还须查关联计费资源）
+# 残留资源核查：CBS/EIP/CLB 是否真清零（删除完成标志——仅查集群 TotalCount=0 不够，还须查关联计费资源）
 tccli cbs DescribeDisks --region ap-guangzhou \
   --filter "DiskSet[?DiskState=='UNATTACHED'].{id:DiskId,name:DiskName}" --output text
 # expected: 核对未挂载的 CBS 盘（集群销毁后节点 CVM 已终止，DeleteWithInstance=false 的盘变为 UNATTACHED，须清理；TKE 创建的盘 DiskName 含集群 ID 前缀如 cls-xxx/pvc-...）
@@ -216,15 +216,9 @@ tccli clb DescribeLoadBalancers --region ap-guangzhou --Forward 1 \
 # expected: 核对 CLB 数量，结合集群标签确认无该集群残留 CLB
 ```
 
-> 集群 `TotalCount=0`（步骤 3 已核）+ CBS/EIP/CLB 残留为 0 = 删除闭环完成，无持续计费。**残留资源是删除闭环的真正标志**——集群销毁不自动清理 CBS/EIP/CLB，这些资源会持续扣费（见 [§副作用](#副作用) 表）。非 0 残留须回到 [§步骤 4](#步骤-4清理残留资源) 逐个清理。
+> 集群 `TotalCount=0`（步骤 3 已核）+ CBS/EIP/CLB 残留为 0 = 删除完成，无持续计费。**残留资源是删除完成的真正标志**——集群销毁不自动清理 CBS/EIP/CLB，这些资源会持续扣费（见 [§副作用](#副作用) 表）。非 0 残留须回到 [§步骤 4](#步骤-4清理残留资源) 逐个清理。
 
 ## 下一步
 
 - [创建集群](create.md) — 重新创建一个新集群
 - [查询集群](query.md) — 确认其他集群状态
-
-## 精确 Action 字段契约
-
-| 字段 | 所属 Action | 必填 | 说明 |
-|:---|:---|:---:|:---|
-| `InstanceDeleteMode` | `DeleteCluster` | 是 | 实例删除模式 |

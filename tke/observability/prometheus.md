@@ -49,7 +49,7 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet
 ```bash
 # Prometheus 权限探测（本账号未授权时返回 UnauthorizedOperation，须先 CAM 开通）
 tccli tke DescribePrometheusInstancesOverview --region ap-guangzhou --Limit 3
-# expected: 实例列表（空则无实例）；若 Error.Code=UnauthorizedOperation → 在 CAM 授予 Prometheus/TMP 相关策略后再继续本篇
+# expected: 实例列表（空则无实例）；若 Error.Code=UnauthorizedOperation → 在 CAM 授予 Prometheus/TMP 相关策略后再继续后续步骤
 
 # 子网（创建实例需指定）
 tccli vpc DescribeSubnets --region <REGION> --Filters '[{"Name":"vpc-id","Values":["<VPC_ID>"]}]' \
@@ -60,7 +60,7 @@ tccli vpc DescribeSubnets --region <REGION> --Filters '[{"Name":"vpc-id","Values
 > ⚠️ **CAM 前置（两层）**：  
 > 1. **用户策略**：`DescribePrometheusInstancesOverview` 等在未授权账号返回 `UnauthorizedOperation`（消息含 Operation denied by Cloud API）。仅有 TKE 集群用户权限不够；须单独开通 Prometheus/TMP 相关用户 CAM 策略。  
 > 2. **服务相关角色**：官方创建监控实例前需授权 **`TKE_QCSLinkedRoleInPrometheusService`**（名称以控制台/当前账号为准），见下节。  
-> 未授权时本篇后续 Create/Run 同样会被拒，勿将 CAM 拒绝误判为参数错误。
+> 未授权时后续 Create/Run 同样会被拒，勿将 CAM 拒绝误判为参数错误。
 
 ### 服务相关角色
 

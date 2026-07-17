@@ -181,7 +181,7 @@ docker pull <REGISTRY_DOMAIN>/<NAMESPACE>/<REPO>:<TAG>
 
 ```bash
 tccli tcr DescribeInstances --region ap-guangzhou --Registryids '["<REGISTRY_ID>"]'
-# expected: 查看 Status 和 DescribeInstanceStatus 中的过程信息
+# expected: 查看 Status 和 DescribeInstanceStatus 中的 Conditions 明细
 ```
 
 **修复**：

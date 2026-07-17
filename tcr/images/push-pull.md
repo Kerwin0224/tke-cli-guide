@@ -280,7 +280,7 @@ docker pull <REGISTRY_DOMAIN>/<NAMESPACE_NAME>/<REPOSITORY_NAME>:<TAG>
 - [实例状态机](../reference/states.md) — push 前确认实例 `Running`
 - [故障排查](../troubleshooting.md) — docker login/push 失败诊断
 
-## 精确 Action 字段契约
+## Action 字段契约
 
 | 字段 | 所属 Action | 必填 | 说明 |
 |:---|:---|:---:|:---|

@@ -110,7 +110,7 @@ tccli cam AttachRolePolicy \
 | 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
 |:------|------|:--------:|------------|---------------|
 | ChartName | string | 否 | 插件名关键词 | — |
-| Arch | string | 否 | 架构枚举：`amd64` / `arm64` / `arm32`。须与节点架构匹配，否则装上后 Pod 因镜像架构不符起不来 | `InvalidParameterValue` |
+| Arch | string | 否 | 架构枚举：`amd64` / `arm64` / `arm32`。须与节点架构匹配，否则装上后 Pod 因镜像架构不符无法启动 | `InvalidParameterValue` |
 
 ```bash
 tccli tke GetTkeAppChartList --region ap-guangzhou --Arch amd64
@@ -127,13 +127,13 @@ tccli tke GetTkeAppChartList --region ap-guangzhou --Arch amd64
 
 - **最新版本 vs 指定版本**: 最新版含功能与安全修复；指定历史版本兼容旧集群
 - **默认推荐**: 用 `DescribeAddonValues` 查兼容的最新版本
-- **能降级吗?**: 能，`UpdateAddon` 指定较低版本，但可能有数据迁移风险
+- **可否降级**: 可，`UpdateAddon` 指定较低版本，但可能有数据迁移风险
 
 ### 步骤 2：安装插件
 
 `InstallAddon` 必传 `ClusterId`/`AddonName`；`AddonVersion` 可选（不传则装最新兼容版本）。按场景**二选一**：A 默认配置（用插件 DefaultValues）或 B 自定义配置（传 `RawValues`）。
 
-> ⚠️ **A 与 B 是二选一变体，不是先做 A 再做 B**——两者各调一次 `InstallAddon` 会装**两次同名插件**（第二次报已存在）。插件装好后改配置用 `UpdateAddon`，**禁用第二次 `InstallAddon` 改配置**。
+> ⚠️ **A 与 B 是二选一变体，不是先做 A 再做 B**——两者各调一次 `InstallAddon` 会装**两次同名插件**（第二次报已存在）。插件装好后改配置用 `UpdateAddon`，**不要再次调用 `InstallAddon` 改配置**。
 
 #### 选项 A：默认配置
 
@@ -198,7 +198,7 @@ tccli tke DescribeAddon --region ap-guangzhou --ClusterId "<CLUSTER_ID>" --Addon
 | 运行状态 | `kubectl get pods -n kube-system -l app=<ADDON_NAME>` | Pod Running |
 | 无异常 | `DescribeAddon` → `Addons[].Reason` | 空 |
 
-> `Phase` 枚举：`Installing`/`Upgrading`/`Terminating`/`Succeeded`/`InstallFailed`/`UpgradFailed`（api 字面；`UpgradFailed` 无 e）。失败态查 `Reason`。
+> `Phase` 枚举：`Installing`/`Upgrading`/`Terminating`/`Succeeded`/`InstallFailed`/`UpgradFailed`（`UpgradFailed` 拼写无 e）。失败态查 `Reason`。
 
 ## 清理
 
@@ -221,6 +221,7 @@ tccli tke DescribeAddon --region ap-guangzhou --ClusterId "<CLUSTER_ID>" --Addon
 
 | 字段 | 所属 Action | 必填 | 条件说明 |
 |:---|:---|:---:|:---|
+| `ClusterId` | `InstallAddon` | 是 | 目标集群 ID |
 | `AddonName` | `DescribeAddon` | 否 | 可省略；省略时返回集群中的全部插件 |
 | `AddonVersion` | `UpdateAddon` | 条件 | 与 `RawValues` 至少传一个；仅改配置时可省略版本 |
 | `RawValues` | `UpdateAddon` | 条件 | 与 `AddonVersion` 至少传一个；仅升级版本时可省略配置 |
@@ -313,12 +314,12 @@ tccli tke DeleteImageCaches --region <REGION> --ImageCacheIds '["<CACHE_ID>"]'
 
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
 ```bash
-# 插件 Phase=Succeeded（上文已查 Phase/版本/Reason，此处端到端核 Pod 真运行 + 衔接前置）
+# 插件 Phase=Succeeded（核对 Phase/版本/Reason 后，再端到端核 Pod 实际运行状态与前置衔接）
 tccli tke DescribeAddon --region ap-guangzhou --ClusterId "<CLUSTER_ID>" --AddonName "<ADDON_NAME>" \
   --filter "Addons[0].{name:AddonName,phase:Phase,version:AddonVersion}"
 # expected: phase=Succeeded
 
-# 端到端：插件 Pod 真运行且 Ready（上文查 Phase=Succeeded 但未核 Pod Ready 数）
+# 端到端：插件 Pod 实际运行且 Ready（Phase=Succeeded 不等于 Pod Ready）
 kubectl get pods -n kube-system -l app=<ADDON_NAME> -o wide \
   --no-headers | awk '{print $2, $3}'
 # expected: READY 列全为 1/1（或 N/N），STATUS=Running
@@ -328,7 +329,7 @@ kubectl get pods -n kube-system -l app=<ADDON_NAME> --no-headers | wc -l
 # expected: ≥1（插件 Pod 已调度运行）→ 插件管理闭环完成
 ```
 
-> 插件 Phase=Succeeded + Pod 全 Ready + Pod 数 ≥1 = 端到端闭环。上文验证段查 TKE 侧 Phase 与版本，此处用 kubectl 核 Pod 真运行（业务可用性），确认插件功能可被集群使用（如 cbs-csi 就绪才能创建 PVC，是进下一阶段的前置）。
+> 插件 Phase=Succeeded + Pod 全 Ready + Pod 数 ≥1 = 端到端闭环。TKE 侧先核对 Phase 与版本，再用 kubectl 核 Pod 实际运行（业务可用性），确认插件功能可被集群使用（如 cbs-csi 就绪才能创建 PVC，是进下一阶段的前置）。
 
 ---
 
@@ -337,9 +338,3 @@ kubectl get pods -n kube-system -l app=<ADDON_NAME> --no-headers | wc -l
 - [应用发布](../releases/manage.md) — 插件本质是 Helm Release
 - [创建集群](../clusters/create.md) — 建集群时选装插件
 - [故障排查](../troubleshooting.md) — 插件异常诊断
-
-## 精确 Action 字段契约
-
-| 字段 | 所属 Action | 必填 | 说明 |
-|:---|:---|:---:|:---|
-| `ClusterId` | `InstallAddon` | 是 | 目标集群 ID |

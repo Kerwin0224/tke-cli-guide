@@ -29,7 +29,7 @@ TCR 实例创建后**默认拒绝全部公网与内网访问**。登录/推拉�
 | 创建 Token | 生成 docker login 凭证 | 是 | Token 泄露 = 可 push/pull；值只显示一次 |
 | 配置白名单 | 限制公网访问来源 IP | 公网场景建议配置 | 白名单外 IP 被拒绝 |
 
-> **为什么 docker 出现在本篇**：`docker login` 用于确认端点与 Token 是否真正可用。TCCLI 只管理端点/凭证/白名单，**不提供** Registry 协议登录或镜像传输（无 daemon / 无 `docker login` 等价 Action）——能力终止处才接 docker。
+> **为什么会出现 docker**：`docker login` 用于确认端点与 Token 是否真正可用。TCCLI 只管理端点/凭证/白名单，**不提供** Registry 协议登录或镜像传输（无 daemon / 无 `docker login` 等价 Action）——能力终止处才接 docker。
 
 ## 准备工作
 
@@ -48,7 +48,7 @@ tccli tcr DescribeInstances --region ap-guangzhou --Registryids '["<REGISTRY_ID>
 - **内网 vs 公网**：内网只允许指定 VPC 访问（更快、无公网流量费、可收紧数据面）；公网让任意互联网客户端可达（本地笔记本、外网 CI）
 - **官方口径**（企业版快速入门）：建议内网推拉；开启公网会暴露独享实例，完成内网配置后应尽快关闭不必要的公网入口
 - **默认推荐**：
-  - 推拉端在腾讯云 VPC / TKE → **只开内网**（本篇步骤 2）
+  - 推拉端在腾讯云 VPC / TKE → **只开内网**（见步骤 2）
   - 本地调试或外网 CI → 再开公网 + 白名单（步骤 3–4）
   - 两者可并存，互不冲突
 - **可修改**：公网/内网可随时 `Manage*Endpoint --Operation Create|Delete`（**仅** `Create`/`Delete`；传 `Open`/`Close` 等返回 `InvalidParameter`：`not support operation, must Create or Delete`）
@@ -84,7 +84,7 @@ tccli tcr DescribeInternalEndpoints \
 # expected: AccessVpcSet 含目标 VpcId/SubnetId；项字段 Status 示例为 Running（官方示例；空接入时 AccessVpcSet 可为 null、TotalCount=0）
 ```
 
-> 内网域名解析：链路建立后，若 VPC 内无法解析实例域名，须在控制台「管理自动解析」或 Private DNS 配置（见官方内网访问控制）。TCCLI 侧对应 `CreateInternalEndpointDns` 等；本篇只保证接入链路创建。
+> 内网域名解析：链路建立后，若 VPC 内无法解析实例域名，须在控制台「管理自动解析」或 Private DNS 配置（见官方内网访问控制）。TCCLI 侧对应 `CreateInternalEndpointDns` 等；本页步骤只保证接入链路创建。
 
 ### 步骤 3：按需开启公网访问
 
@@ -164,7 +164,7 @@ printf '%s' "$TCR_TOKEN" | docker login <REGISTRY_DOMAIN> --username "$TCR_USERN
 
 建议限制公网访问来源。不要用 `0.0.0.0/0`（对全互联网开放）除非你清楚知道风险；正式启用前删除过宽规则。
 
-> 白名单策略（`CreateSecurityPolicy` / `DeleteSecurityPolicy` / `ModifySecurityPolicy` / 多策略批量 `CreateMultipleSecurityPolicy`）的完整命令见 [访问控制 — 公网白名单](../access/manage.md#createsecuritypolicy公网白名单)。本篇聚焦实例级访问开关（端点 + Token），白名单写操作归访问控制篇，避免双篇重复。
+> 白名单策略（`CreateSecurityPolicy` / `DeleteSecurityPolicy` / `ModifySecurityPolicy` / 多策略批量 `CreateMultipleSecurityPolicy`）的完整命令见 [访问控制 — 公网白名单](../access/manage.md#createsecuritypolicy公网白名单)。本页覆盖实例级访问开关（端点 + Token）；白名单写操作见访问控制。
 
 #### 为什么不用 0.0.0.0/0
 
@@ -206,7 +206,7 @@ tccli tcr ManageInternalEndpoint --RegistryId "<ID>" --Operation Delete --VpcId 
 tccli tcr ModifyInstanceToken --RegistryId "<ID>" --TokenId "<TOKEN_ID>" --Enable false
 # expected: exit 0, Token 禁用
 
-# 白名单删除（写操作归访问控制篇）
+# 白名单删除（写操作见访问控制）
 tccli tcr DeleteSecurityPolicy --RegistryId "<ID>" --PolicyIndex <INDEX>  # 见 access/manage.md
 ```
 
@@ -273,7 +273,7 @@ printf '%s' "$TCR_TOKEN" | docker login <REGISTRY_DOMAIN> --username "$TCR_USERN
 - [创建命名空间和仓库](../repositories/manage.md) — 组织你的镜像
 - [配额与限制](../reference/quotas.md) — VPC / 服务账号配额
 
-## 精确 Action 字段契约
+## Action 字段契约
 
 | 字段 | 所属 Action | 必填 | 说明 |
 |:---|:---|:---:|:---|

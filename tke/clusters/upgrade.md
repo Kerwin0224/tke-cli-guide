@@ -58,7 +58,7 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_I
 ### 资源检查
 
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
-<!-- kubectl管理K8s原生资源(Node/Pod)，tccli无K8s资源管理能力，非tccli边界 -->
+<!-- kubectl 管理 K8s 原生资源（TCCLI 无此能力） -->
 ```bash
 # 1. 查可升级版本（Versions 为空表示已是最新）
 tccli tke DescribeAvailableClusterVersion --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
@@ -234,7 +234,7 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet
 # expected: 升级中 "Upgrading" → 完成后 "Running"
 ```
 
-<!-- kubectl get nodes验证版本/状态，验证tccli升级操作结果，非tccli边界 -->
+<!-- kubectl get nodes 验证版本/状态（验证升级结果） -->
 | 维度 | 命令 | 预期 |
 |:-----|:-----|:-----|
 | 集群状态 | `DescribeClusterStatus` → `ClusterState` | `Upgrading` → `Running` |
@@ -271,7 +271,7 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet
 |:--------|:----------|:------------|:-----|
 | 长时间停在 `Upgrading` | `DescribeUpgradeTaskDetail --ID "<ID>"` → `UpgradePlans[].Status` + `GetUpgradeInstanceProgress --ClusterId "<ID>"` 查节点进度 | 某节点升级卡住 | `CancelUpgradePlan --ClusterID "<ID>" --PlanID "<PLAN_ID>"` 暂停，定位卡住节点 |
 | 升级后部分节点版本不一致 | `CheckInstancesUpgradeAble --ClusterId "<ID>" --UpgradeType reset` → `UpgradeAbleInstances[].Version`（`DescribeClusterInstances` 不返回节点版本） | 节点未跟随升级 | `UpgradeClusterInstances` 单独升级节点 |
-<!-- kubectl get nodes --v=6诊断API弃用，tccli无K8s资源诊断能力，非tccli边界 -->
+<!-- kubectl get nodes --v=6 诊断 API 弃用（TCCLI 无 K8s 资源诊断能力） -->
 | `Running` 但 kubectl 报 API 版本弃用 | `kubectl get nodes --v=6` | 工作负载用了已弃用 API | 更新工作负载 YAML，移除弃用 API |
 | 升级任务 `Failed` | `DescribeUpgradeTaskDetail` | 资源不足或组件冲突 | 查 TaskDetail，修复后重新 `UpdateClusterVersion` |
 
@@ -346,12 +346,12 @@ tccli tke CancelUpgradePlan --region ap-guangzhou \
 | `<TASK_ID>` | 升级任务 ID | `tccli tke DescribeUpgradeTasks --Offset 0 --Limit 20` → `UpgradeTasks[].ID` |
 | `<PLAN_ID>` | 升级计划 ID（整数） | `DescribeUpgradeTaskDetail --ID "<TASK_ID>"` → `UpgradePlans[].ID`（字段名是 `ID`，非 `PlanID`） |
 
-> ⚠️ 大小写不一致是真实契约：`GetUpgradeInstanceProgress`/`DescribeUpgradeTaskDetail` 用任务语义参数，`CancelUpgradePlan` 的 `ClusterID`/`PlanID` 大写。切换接口前用 `tccli tke <Action> help` 核对入参名，勿凭记忆。
+> ⚠️ 大小写不一致是真实契约：`GetUpgradeInstanceProgress`/`DescribeUpgradeTaskDetail` 用任务语义参数，`CancelUpgradePlan` 的 `ClusterID`/`PlanID` 大写。切换接口前用 `tccli tke <Action> help` 核对入参名，不要沿用其他 Action 的参数名。
 
 ## 收尾确认
 
 ```bash
-# Master 版本 + 全节点版本 + 升级任务 Succeed 三项合一（分项查状态/版本/任务后，再一次性核对三者协同达成）
+# Master 版本 + 全节点版本 + 升级任务 Succeed 三项一并核对（先分别查状态/版本/任务，再确认三者均达成）
 tccli tke DescribeClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]' \
   --filter "Clusters[0].{state:ClusterStatus,version:ClusterVersion}"
 # expected: state=Running, version=目标版本（如 1.34.1）
@@ -365,7 +365,7 @@ tccli tke DescribeUpgradeTasks --region ap-guangzhou --Offset 0 --Limit 20 \
 # expected: 取最新任务 ID，再 DescribeUpgradeTaskDetail --ID "<ID>" 核 UpgradePlans[].Status=Succeed
 ```
 
-> Master 版本=目标 + 全节点版本=目标 + 升级任务 `Succeed` 三项合一 = 升级闭环完成。验证段已分项查集群状态/版本号/任务/节点版本，此处汇总核对三项协同达成（单查任一项不足以证明升级闭环——Master 升级而节点未跟随，或任务未 Succeed，均非闭环）。**升级不可回滚**，失败只能 `DeleteCluster` 重建（见 [§清理](#清理)）。
+> Master 版本=目标 + 全节点版本=目标 + 升级任务 `Succeed` 三项均符合预期 = 升级完成。须分别核对集群状态/版本号/任务/节点版本，并确认三项均达成（单查任一项不足以证明升级完成——Master 升级而节点未跟随，或任务未 Succeed，均未完成）。**升级不可回滚**，失败只能 `DeleteCluster` 重建（见 [§清理](#清理)）。
 
 ## 下一步
 
@@ -374,9 +374,3 @@ tccli tke DescribeUpgradeTasks --region ap-guangzhou --Offset 0 --Limit 20 \
 - [创建集群](create.md) — 升级失败需重建时参考
 - [故障排查](../troubleshooting.md) — 升级卡住的诊断路径
 - [独立集群 Master 运维](master-ops.md) — 独立集群扩缩容 Master/etcd 节点
-
-## 精确 Action 字段契约
-
-| 字段 | 所属 Action | 必填 | 说明 |
-|:---|:---|:---:|:---|
-| `DstVersion` | `UpdateClusterVersion` | 是 | 目标 Kubernetes 版本 |

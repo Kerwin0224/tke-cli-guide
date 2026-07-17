@@ -65,11 +65,11 @@ fused: false
 |:-----|:-----|
 | tccli | 腾讯云命令行工具。本指南所有操作的入口。 |
 | Action | TCCLI 调用的 API 操作名，如 `CreateCluster`、`DescribeClusters`。 |
-| `--generate-cli-skeleton` | 生成 Action 入参骨架 JSON 的命令（调试用辅助命令，终端用户一般不用）。 |
+| `--generate-cli-skeleton` | 生成 Action 入参骨架 JSON 的命令（调试用；日常执行可直接按文档参数传参）。 |
 | `--filter` | JMESPath 表达式，从响应中提取字段。如 `--filter "Clusters[0].ClusterId"`。 |
 | `--version` | 指定 API 版本。TKE 有 2018-05-25（默认，全功能）和 2022-05-01（官方当前版）两版本。 |
 | `--region` | 指定地域。如 `--region ap-guangzhou`。 |
-| `# expected:` | 代码块内的注释，标注命令的成功信号。读者复制命令时保留该注释无害。 |
+| `# expected:` | 代码块内的注释，标注命令的成功信号。执行时保留该注释不影响命令。 |
 
 ## 下一步
 

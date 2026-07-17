@@ -47,7 +47,7 @@ fused: false
 ### 删除保护 / OPA 准入 / 事件持久化
 
 - 删除保护 Action 仅需 `ClusterId`。
-- `DescribeOpenPolicyList` 需 `ClusterId`，`Category` 可选；`ModifyOpenPolicyList` 要实际修改策略时必须提供 `OpenPolicyInfoList`，先从 Describe 返回中取得规则 `Name`，再回传要修改的 `EnforcementAction`。本地 API 将该列表标为 Optional，但不传便没有待修改策略，不能据此概括为“OPA 仅需 ClusterId”。
+- `DescribeOpenPolicyList` 需 `ClusterId`，`Category` 可选；`ModifyOpenPolicyList` 要实际修改策略时必须提供 `OpenPolicyInfoList`，先从 Describe 返回中取得规则 `Name`，再回传要修改的 `EnforcementAction`。`help --detail` 将该列表标为 Optional，但不传便没有待修改策略，不能据此概括为“OPA 仅需 ClusterId”。
 - 事件持久化除 `ClusterId` 外，还需 `LogsetId`/`TopicId`/`TopicRegion`（CLS 日志集/主题）。
 
 ## 应用
@@ -100,7 +100,7 @@ tccli tke ModifyOpenPolicyList --region ap-guangzhou \
 # expected: exit 0, 返回 RequestId；再 DescribeOpenPolicyList 回读该 Name 的 EnforcementAction
 ```
 
-> 静态 API/help 对 `ModifyOpenPolicyList` 的描述为“目前仅支持修改 `EnforcementAction`”。`OpenPolicyInfoList` 在模型中虽标为 Optional，但执行实际修改时必须传入待修改规则；不要凭空猜规则名。
+> `tccli tke ModifyOpenPolicyList help --detail` 说明目前仅支持修改 `EnforcementAction`。`OpenPolicyInfoList` 在入参中虽标为 Optional，但执行实际修改时必须传入待修改规则；不要凭空猜规则名。
 
 ### 开启事件持久化
 
@@ -181,10 +181,10 @@ tccli tke DisableEventPersistence --region ap-guangzhou --ClusterId "<CLUSTER_ID
 
 ## 收尾确认
 
-> 独立维度（汇总核对 + 删除保护终态）：除上文各功能逐项验证外，确认三策略整体已生效且集群处于「删除受保护」安全终态（上文仅逐功能核对，未汇总安全终态）。
+> 汇总核对 + 删除保护终态：除各功能逐项验证外，还须确认三策略整体已生效且集群处于「删除受保护」安全终态（逐功能核对不能代替安全终态汇总）。
 
 ```bash
-# 汇总核对：加密 + 删除保护 + 事件持久化 + OPA 准入（上文验证未覆盖 OPA）
+# 汇总核对：加密 + 删除保护 + 事件持久化 + OPA 准入（OPA 须单独核对）
 tccli tke DescribeEncryptionStatus --region ap-guangzhou --ClusterId "<CLUSTER_ID>" \
   --filter "Status"
 tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet[?ClusterId=='<CLUSTER_ID>'] | [0].ClusterDeletionProtection"

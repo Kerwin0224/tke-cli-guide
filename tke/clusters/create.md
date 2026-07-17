@@ -49,8 +49,8 @@ fused: true
 tccli --version
 # expected: tccli 版本号（最新版或更高）
 
-tccli cvm DescribeRegions --region ap-guangzhou
-# expected: { "TotalCount": ..., "RegionInstanceSet": [...] }  → 凭证有效（顶层键是 RegionInstanceSet，非 RegionSet；tccli 默认剥离 Response 包装层）
+tccli tke DescribeRegions
+# expected: { "TotalCount": ..., "RegionInstanceSet": [...] }  → 凭证有效 + TKE 域可达（顶层键是 RegionInstanceSet，非 RegionSet；tccli 默认剥离 Response 包装层；鉴权探针无需先假定 --region）
 ```
 
 
@@ -84,7 +84,7 @@ tccli cam DescribeRoleList --Page 1 --Rp 100 \
   --filter "List[?RoleName=='TKE_QCSRole'].RoleName" --output text
 # expected: TKE_QCSRole；空 → [配置凭证 — 补 TKE_QCSRole](../../getting-started/credentials.md#补-tke_qcsrole主服务角色)
 
-# 6. 服务角色：IPAMD（仅 NetworkType=VPC-CNI 时必查；本仓库 quickstart 默认 VPC-CNI）
+# 6. 服务角色：IPAMD（仅 NetworkType=VPC-CNI 时必查；快速入门默认 VPC-CNI）
 tccli cam DescribeRoleList --Page 1 --Rp 100 \
   --filter "List[?RoleName=='IPAMDofTKE_QCSRole'].RoleName" --output text
 # expected: IPAMDofTKE_QCSRole；空 → [配置凭证 — 补 IPAMD](../../getting-started/credentials.md#补-ipamdoftke_qcsrolevpc-cni-前置) 或 [VPC-CNI](../networking/vpc-cni.md#ipamd-服务角色)
@@ -223,7 +223,7 @@ tccli cam DescribeRoleList --Page 1 --Rp 100 \
 
 > `kube-proxy-bpf` 是第三种独立模式，非 IPVS 的子项。`DataPlaneV2=true`（cilium 替代 kube-proxy）语义上与 `KubeProxyMode` 互斥——CiliumOverlay 走 Cilium 数据面，不再走 kube-proxy 三模式。
 >
-> ⚠️ **半常量**：IPVS **仅新建时可开**，开启后**不可关闭**；iptables/ipvs 一经选择不支持更改。勿在集群内手动混用 IPVS 与 iptables。
+> ⚠️ **固定约束**：IPVS **仅新建时可开**，开启后**不可关闭**；iptables/ipvs 一经选择不支持更改。勿在集群内手动混用 IPVS 与 iptables。
 
 ### DataPlaneV2 × 镜像白名单
 
@@ -270,7 +270,7 @@ tccli cam DescribeRoleList --Page 1 --Rp 100 \
 
 > ⚠️ **本文创建的是空集群（控制面）**：`CreateCluster` 后 `ClusterState=Running` 但 `ClusterRunningNodeNum=0`，**无法运行 Pod**。
 >
-> "可运行 Pod 的集群"完整闭环 = 本步（空集群）→ [创建节点池](../nodes/nodepool-create.md)（加工作节点）→ [开端点](../networking/endpoints.md) → [kubectl 连通](../security/auth.md)。
+> "可运行 Pod 的集群"完整路径 = 本步（空集群）→ [创建节点池](../nodes/nodepool-create.md)（加工作节点）→ [开端点](../networking/endpoints.md) → [kubectl 连通](../security/auth.md)。
 >
 > 本步约 5-10 分钟，完成后须立即进入 [创建节点池](../nodes/nodepool-create.md) 加节点，否则集群无工作负载仍计管理费。完整生命周期见 [集群生命周期故事线](index.md#集群生命周期故事线)。
 
@@ -393,7 +393,7 @@ tccli tke CreateCluster \
 
 | 占位符              | 含义        | 约束          | 如何获取                                        |
 | ---------------- | --------- | ----------- | ------------------------------------------- |
-| `<CLUSTER_NAME>` | 集群名称      | ≤60 字符，全局唯一 | 自己定义                                        |
+| `<CLUSTER_NAME>` | 集群名称      | ≤60 字符，全局唯一 | 自定义（如 `prod-cluster`）                      |
 | `<VPC_ID>`       | VPC 实例 ID | 必须存在        | `tccli vpc DescribeVpcs` → `VpcSet[].VpcId` |
 
 
@@ -437,7 +437,7 @@ tccli tke CreateCluster \
 异步操作: 检查 ≥4 个维度确认集群可用。
 
 ```bash
-# 用 --waiter 自动轮询集群到 Running（避免手写循环；waiter 对所有 TKE Action 生效）
+# 用 --waiter 自动轮询集群到 Running（无需自行编写轮询循环；waiter 对所有 TKE Action 生效）
 tccli tke DescribeClusterStatus --region ap-guangzhou \
   --ClusterIds '["<CLUSTER_ID>"]' \
   --waiter '{"expr":"ClusterStatusSet[0].ClusterState","to":"Running","timeout":600,"interval":10}'
@@ -448,7 +448,7 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_I
 ```
 
 
-<!-- kubectl验证tccli操作结果(集群创建后验证节点连通)，非tccli边界 -->
+<!-- kubectl 验证节点连通（TCCLI 无 kubectl 能力） -->
 | 维度         | 命令                                                                       | 预期                                                 |
 | ---------- | ------------------------------------------------------------------------ | -------------------------------------------------- |
 | Status     | `DescribeClusterStatus`                                                  | `ClusterState: "Running"`                          |
@@ -465,9 +465,9 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_I
 
 ## 清理
 
-> 本段只删除本篇刚创建、要放弃的集群，回到干净起点。完整删除（决策、级联、残留、退费）见 [删除集群](delete.md)，本篇不复刻。
+> 本段只删除本文刚创建、要放弃的集群。完整删除（决策、级联、残留、退费）见 [删除集群](delete.md)。
 >
-> 适用：创建中途失败的半成品，或创建成功后立即销毁。与 [§收尾确认](#收尾确认) 正交：清理 = 资源应消失；收尾确认 = 资源应保留且创建闭环成立。
+> 适用：创建中途失败、未达 `Running` 的集群，或创建成功后立即销毁。与 [§收尾确认](#收尾确认) 分工不同：清理 = 资源应消失；收尾确认 = 资源应保留且创建结果符合预期。
 
 ```bash
 # 若已开删除保护则先关（未开可跳过；CAM 限制见 delete.md）
@@ -495,7 +495,7 @@ tccli tke DescribeClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]'
 | `AuthFailure.SecretIdNotFound`                                                           | `tccli tke DescribeRegions`                                 | 凭证未配置或已过期                                                                 | 见 [配置凭证](../../getting-started/credentials.md) 重新配置                |
 | `InvalidParameterValue.ClusterName`                                                      | 检查名称格式                                                      | 名称含特殊字符或超长                                                                | 使用 ≤60 字符的字母数字连字符                                                  |
 | `FailedOperation.DbRecordNotFound`（消息含 `CompId not found ... k8s <版本> record not found`） | `tccli tke DescribeVersions --region <REGION>` 查可用版本        | 版本号不存在或未用完整三段式（如 `1.30` 而非 `1.30.0`）                                      | 用 `DescribeVersions` 返回的完整版本号（如 `1.34.1`）                          |
-| `FailedOperation.Param`（消息含 `service ip number is N, but the ClusterServiceNum paramter is M`） | 核对 `ServiceCIDR` 掩码与 `MaxClusterServiceNum` | `MaxClusterServiceNum` 小于 `ServiceCIDR` 可容纳的 Service IP 数（如 `/17` → 32768，传 256 会拒） | 令 `MaxClusterServiceNum` ≥ CIDR 容量，或缩小 `ServiceCIDR`（quickstart 对 `/17` 用 `32768`） |
+| `FailedOperation.Param`（消息含 `service ip number is N, but the ClusterServiceNum paramter is M`） | 核对 `ServiceCIDR` 掩码与 `MaxClusterServiceNum` | `MaxClusterServiceNum` 小于 `ServiceCIDR` 可容纳的 Service IP 数（如 `/17` → 32768，传 256 会拒） | 令 `MaxClusterServiceNum` ≥ CIDR 容量，或缩小 `ServiceCIDR`（`ServiceCIDR` 为 `/17` 时 `MaxClusterServiceNum` 须 ≥ `32768`） |
 | `ResourceNotFound.VpcId` / `FailedOperation.CamNoAuth`（消息含 `tke:CreateCluster` + 资源 qcs） | `tccli vpc DescribeVpcs`                                    | VPC ID 不存在、跨账号，或 CAM 按资源 ARN 拒绝（假 VPC ID 也可能先被 CAM 拦成 CamNoAuth） | 确认 VPC 在该地域存在且 CAM 允许对该资源 `tke:CreateCluster`；假 ID 勿当参数格式问题 |
 | `LimitExceeded.ClusterQuota` / `InternalError.QuotaMaxClsLimit`                          | `tccli tke DescribeClusters`                                | 单地域集群数达上限（默认 **20**）                                                    | 删除闲置集群或提交工单提升配额；见 [配额](../reference/quotas.md)                    |
 | `InvalidParameterValue.ClusterCIDR`                                                      | CIDR 格式: `A.B.C.D/掩码`                                       | CIDR 格式不合法                                                                | 用合法 CIDR 格式                                                        |
@@ -522,7 +522,7 @@ tccli tke DescribeClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]'
 ## 收尾确认
 
 ```bash
-# 创建闭环核对：集群 Running + 删除保护已开 + 空集群(0 节点)
+# 创建结果核对：集群 Running + 删除保护已开 + 空集群(0 节点)
 tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet[?ClusterId=='<CLUSTER_ID>'] | [0].{state:ClusterState,running:ClusterRunningNodeNum,protect:ClusterDeletionProtection}"
 # expected: state=Running, running=0(空集群), protect=true
 
@@ -531,7 +531,7 @@ tccli tke DescribeClusterKubeconfig --region ap-guangzhou --ClusterId "<CLUSTER_
 # expected: apiVersion: v1（仅说明可写出 YAML；默认无访问端点，本机 kubectl 通常仍失败）
 ```
 
-> 集群 `Running` + `protect=true` + kubeconfig 可拉取 = **控制面创建闭环**完成。  
+> 集群 `Running` + `protect=true` + kubeconfig 可拉取 = **控制面创建完成**。  
 > **不等于**本机/公网 CI 已能 `kubectl`：须先 [加节点](../nodes/nodepool-create.md)（无 worker 不能开公网端点），再 [管理端点](../networking/endpoints.md)（公网端点 `Created` + `SecurityPolicies` + 必要时把 kubeconfig `server` 改为 `ClusterExternalEndpoint`）。  
 > `running=0` 时不能运行业务 Pod，空集群仍计管理费——立即进入下一步。
 

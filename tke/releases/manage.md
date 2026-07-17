@@ -98,13 +98,13 @@ tccli tke GetTkeAppChartList --region ap-guangzhou \
 - **tke-market**: TKE 应用市场 Chart，无需配仓库；须传 `ChartNamespace`
 - **other**: 自建或第三方 Helm 仓库，需 `ChartRepoURL`（Chart 参数可为 `*.tgz` 下载地址）
 - **默认推荐**: 官方应用用 `tke-market`；自定义应用用 `other`
-- **能换源吗?**: 能，`UpgradeClusterRelease` 改 Chart 来源
+- **可否换源**: 可，`UpgradeClusterRelease` 改 Chart 来源
 
 ### 步骤 2：创建 Release
 
 `CreateClusterRelease` 必传 `ClusterId`/`Name`/`Namespace`/`Chart`；`ChartFrom` 可选（默认 `tke-market`）。按场景**二选一**：A 最小化（应用市场）或 B 增强（外部仓库+自定义 Values）。
 
-> ⚠️ **A 与 B 是二选一变体，不是先做 A 再做 B**——两者各调一次 `CreateClusterRelease` 会装**两个同名 Release（命名空间内冲突）或两份 Release**。Release 创建后改配置（版本/Values）用 `UpgradeClusterRelease`，**禁用第二次 `CreateClusterRelease` 改配置**。
+> ⚠️ **A 与 B 是二选一变体，不是先做 A 再做 B**——两者各调一次 `CreateClusterRelease` 会装**两个同名 Release（命名空间内冲突）或两份 Release**。Release 创建后改配置（版本/Values）用 `UpgradeClusterRelease`，**不要再次调用 `CreateClusterRelease` 改配置**。
 
 #### 选项 A：最小化（应用市场 tke-market）
 
@@ -297,7 +297,7 @@ tccli tke ModifyClusterRollOutSequenceTags --region ap-guangzhou \
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
 ```bash
 # 汇总核对三项：Release Status=deployed + 历史版本数 + 关联资源 Ready
-# 1. Release 已部署（上文已查 Status/版本/Revision，此处汇总）
+# 1. Release 已部署（汇总 Status/版本/Revision）
 tccli tke DescribeClusterReleases --region ap-guangzhou --ClusterId "<CLUSTER_ID>" \
   --filter "ReleaseSet[?Name=='<RELEASE_NAME>'].{name:Name,status:Status,rev:Revision}"
 # expected: status=deployed
@@ -308,13 +308,13 @@ tccli tke DescribeClusterReleaseHistory --region ap-guangzhou \
   --filter "Total"
 # expected: Total ≥1（创建=1，升级/回滚后递增）
 
-# 3. 关联资源 Ready（端到端：Release 管理的 K8s 资源真就绪）
+# 3. 关联资源 Ready（端到端：Release 管理的 K8s 资源实际就绪）
 kubectl get all -n <NAMESPACE> -l app.kubernetes.io/instance=<RELEASE_NAME> \
   --no-headers | awk '{print $1, $2}' | head -10
 # expected: 资源列表非空且 STATUS 无 Failed → 应用发布闭环完成
 ```
 
-> Release deployed + 历史版本数 ≥1 + 关联资源 Ready = 配置完成。上文验证段查 Release 字段，此处汇总 Release 状态 + 修订历史 + 部署资源就绪三项，确认应用可用。
+> Release deployed + 历史版本数 ≥1 + 关联资源 Ready = 配置完成。除逐项核对 Release 字段外，还须汇总 Release 状态 + 修订历史 + 部署资源就绪三项，确认应用可用。
 
 ---
 
@@ -324,7 +324,7 @@ kubectl get all -n <NAMESPACE> -l app.kubernetes.io/instance=<RELEASE_NAME> \
 - [创建集群](../clusters/create.md) — 建集群后部署应用
 - [故障排查](../troubleshooting.md) — Release 失败诊断
 
-## 精确 Action 字段契约
+## Action 字段契约
 
 | 字段 | 所属 Action | 必填 | 说明 |
 |:---|:---|:---:|:---|

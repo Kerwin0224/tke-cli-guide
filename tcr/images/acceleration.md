@@ -11,7 +11,7 @@ fused: true
 
 ## 触发条件
 
-- 你需要为 TCR 企业版实例创建镜像加速服务 — 用本文创建服务并通过 `DescribeImageAccelerateService` 查询开通状态
+- 你需要为 TCR 企业版实例创建镜像加速服务 — 用本页步骤创建服务并通过 `DescribeImageAccelerateService` 查询开通状态
 - 你遇到服务未开通或状态异常 — 看 [故障恢复](#故障恢复) 段诊断
 
 ## 准备工作
@@ -23,7 +23,7 @@ fused: true
 
 ## 概述
 
-`CreateImageAccelerationService` 在指定 VPC、子网和可用区中创建 CFS，并配置存储类型和权限组。`DescribeImageAccelerateService` 返回开通状态、镜像加速状态和 `CFSVIP`；该字段的接口说明仅为“CFS 的 VIP”。现有接口说明和产品服务层级文档均未说明客户端应将 `CFSVIP` 用作 Docker、containerd 或其他镜像客户端的拉取地址，因此不能据此改写镜像引用或替代 TCR 实例访问域名。
+`CreateImageAccelerationService` 在指定 VPC、子网和可用区中创建 CFS，并配置存储类型和权限组。`DescribeImageAccelerateService` 返回开通状态、镜像加速状态和 `CFSVIP`；该字段的接口说明仅为“CFS 的 VIP”。当前接口说明与产品服务层级文档均未说明客户端应将 `CFSVIP` 用作 Docker、containerd 或其他镜像客户端的拉取地址，因此不能据此改写镜像引用或替代 TCR 实例访问域名。
 
 > **能力边界**：产品服务层级文档将“容器镜像缓存”列为企业版各规格支持，将“按需加载容器镜像”列为仅企业版高级版支持；该页面未说明本接口创建的 CFS 与“容器镜像缓存”的对应关系，也未提供 `CFSVIP` 的客户端配置步骤。创建接口可以证明会在指定 VPC/子网创建 CFS，但不能据此证明客户端直接通过 `CFSVIP` 拉取镜像。
 
@@ -34,8 +34,8 @@ fused: true
 | 场景 | 是否启用 | 说明 |
 |:-----|:--------:|:-----|
 | 需要创建接口所定义的镜像加速服务 | ✅ | 可通过接口创建并查询服务状态 |
-| 仅需使用 TCR 实例域名正常推送、拉取 | ❌ | 现有材料未要求将客户端切换到 `CFSVIP` |
-| 需要确认客户端接入方式 | ⚠️ | 接口与服务层级文档未提供 `CFSVIP` 客户端配置方法 |
+| 仅需使用 TCR 实例域名正常推送、拉取 | ❌ | 当前接口与官方文档未要求将客户端切换到 `CFSVIP` |
+| 需要确认客户端接入方式 | ⚠️ | 当前接口与服务层级文档未提供 `CFSVIP` 客户端配置方法 |
 
 ### CFS 存储选型
 
@@ -78,7 +78,7 @@ tccli tcr DescribeImageAccelerateService --region <REGION> --RegistryId <REGISTR
 }
 ```
 
-> tccli 默认输出的是 SDK 响应模型，已去除腾讯云 HTTP API 的外层 `Response` 包装；未使用 `--filter` 时，上述字段位于 tccli JSON 的顶层。`IsEnable=false` 表示未开启。接口仅将 `CFSVIP` 定义为“CFS 的 VIP”，不将其定义为镜像客户端拉取地址。
+> tccli 默认输出的是 SDK 响应模型，已去除腾讯云 HTTP API 的外层 `Response` 包装；未使用 `--filter` 时，`Status`/`CFSVIP`/`IsEnable` 等字段位于 tccli JSON 的顶层。`IsEnable=false` 表示未开启。接口仅将 `CFSVIP` 定义为“CFS 的 VIP”，不将其定义为镜像客户端拉取地址。
 
 ### 步骤 2：创建加速服务
 
@@ -105,8 +105,8 @@ tccli tcr DescribeImageAccelerateService --region <REGION> --RegistryId <REGISTR
 | 维度 | 命令 | 期望 |
 |:-----|:-----|:-----|
 | 服务已开启 | `DescribeImageAccelerateService` | `IsEnable=true` |
-| 服务状态可查询 | 同上 | 读取 `Status` 和 `CFSVIP`；接口未公布 `Status` 枚举，也未规定 `CFSVIP` 非空可单独判定服务就绪 |
-| 客户端拉取路径 | 使用 TCR 实例域名执行既有拉取流程 | 不把 `CFSVIP` 直接写入镜像引用；现有材料未提供该用法 |
+| 服务状态可查询 | `DescribeImageAccelerateService` | 读取 `Status` 和 `CFSVIP`；接口未公布 `Status` 枚举，也未规定 `CFSVIP` 非空可单独判定服务就绪 |
+| 客户端拉取路径 | 使用 TCR 实例域名执行既有拉取流程 | 不把 `CFSVIP` 直接写入镜像引用；当前接口与官方文档未提供该用法 |
 
 | 占位符 | 含义 | 约束 | 获取方式 |
 |--------|------|------|---------|

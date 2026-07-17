@@ -12,7 +12,7 @@ fused: true
 >
 > 配额：采集配置数与目标数以产品实际限制为准，TKE 侧无额外配额限制。[配额说明](https://cloud.tencent.com/document/product/457/9087)
 
-> ⚠️ 本文档所有 Action 属 **TKE 2018-05-25（默认版本）**。
+> ⚠️ 本页所有 Action 属 **TKE 2018-05-25（默认版本）**。
 > Config / RecordRule / Temp / Template / Dashboard 五类操作同处一篇。
 
 ## 触发条件

@@ -102,7 +102,7 @@ tccli tcr CreateReplicationInstance --region <SOURCE_REGION> \
 
 ### 步骤 2：配置同步规则
 
-同账号主从实例：只传 `Rule`。跨账号：另加 `PeerReplicationOption`（见上文「跨账号同步」）。
+同账号主从实例：只传 `Rule`。跨账号：另加 `PeerReplicationOption`（见 [跨账号同步](#跨账号同步)）。
 
 ```bash
 # 同账号：配置同步规则（无 PeerReplicationOption）
@@ -150,7 +150,7 @@ tccli tcr DescribeReplicationInstances --region <SOURCE_REGION> --RegistryId <SO
 | 占位符 | 含义 | 约束 | 获取方式 |
 |--------|------|------|---------|
 | `<SOURCE_REGISTRY_ID>` | 主实例 ID | standard/premium | `tccli tcr DescribeInstances --region <SOURCE_REGION>` |
-| `<DEST_REGISTRY_ID>` | 从实例 ID | 同上 | 步骤 1 返回 |
+| `<DEST_REGISTRY_ID>` | 从实例 ID | standard/premium | 步骤 1 返回 |
 | `<SOURCE_REGION>` | 主实例地域 | 如 `ap-guangzhou` | 自定义 |
 | `<DEST_REGION_ID>` | 从实例地域数字 ID | 见上表 | `tccli tcr DescribeRegions` |
 | `<DEST_REGION_NAME>` | 从实例地域名 | 如 `ap-shanghai` | `tccli tcr DescribeRegions` |

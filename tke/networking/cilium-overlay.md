@@ -40,7 +40,7 @@ CiliumOverlay 是 TKE 的三种容器网络类型之一（另两种：Global Rou
 - **能在创建后扩大容器 CIDR 吗？**：不能。须在创建前完成容量规划
 - **能通过 TCCLI 事后切换吗？**：当前公开 API 没有修改 `NetworkType` 或启停 CiliumOverlay 的 Action；这只说明公开 API 边界，不扩展为“所有产品路径都只能重建”的绝对承诺
 
-> API 的 `NetworkType` 未传时默认 `GR`，这是契约默认值，不是产品推荐。公有云推荐 VPC-CNI；注册节点推荐 CiliumOverlay。
+> API 的 `NetworkType` 未传时默认 `GR`，这是入参默认值，不是产品推荐。公有云推荐 VPC-CNI；注册节点推荐 CiliumOverlay。
 
 ## 配置项
 
@@ -78,7 +78,7 @@ tccli tke CreateCluster --region ap-guangzhou \
 
 ### 用 --generate-cli-skeleton 取完整入参骨架
 
-> `CreateCluster` 入参多且嵌套，上述命令仅列 CiliumOverlay 差异字段。实际创建前建议取完整骨架核全必填项。
+> `CreateCluster` 入参多且嵌套，上述命令仅列 CiliumOverlay 差异字段。实际创建前建议用 `--generate-cli-skeleton` 取得完整入参骨架，核对全部必填项。
 
 ```bash
 tccli tke CreateCluster --generate-cli-skeleton
@@ -99,7 +99,7 @@ tccli tke DescribeClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]'
 | 控制面子网 | `DescribeClusters` → `Clusters[].ClusterNetworkSettings.SubnetId` | CiliumOverlay 时返回控制面子网 ID |
 | 集群就绪 | `DescribeClusters` → `ClusterStatus` | `Running` |
 
-> ⚠️ **`NetworkType` 在响应层的落点**：创建时 `NetworkType` 传在 `ClusterAdvancedSettings`（入参 object），但 `DescribeClusters` 响应的 `Cluster` object **无顶层 `NetworkType` 字段**，`ClusterNetworkSettings` 也不含 `NetworkType`——`NetworkType` 藏在 `Cluster.Property` 这个 **JSON 字符串**里（如 `"{\"NodeNameType\":\"lan-ip\",\"NetworkType\":\"GR\"}"`），须二次解析。`CiliumMode`/`DataPlaneV2`/控制面 `SubnetId` 则在 `ClusterNetworkSettings`（正常字段）。确认网络类型时勿找 `ClusterNetworkSettings.NetworkType`（不存在）。
+> ⚠️ **`NetworkType` 在响应层的落点**：创建时 `NetworkType` 传在 `ClusterAdvancedSettings`（入参 object），但 `DescribeClusters` 响应的 `Cluster` object **无顶层 `NetworkType` 字段**，`ClusterNetworkSettings` 也不含 `NetworkType`——`NetworkType` 藏在 `Cluster.Property` 这个 **JSON 字符串**里（如 `"{\"NodeNameType\":\"lan-ip\",\"NetworkType\":\"GR\"}"`），须二次解析。`CiliumMode`/`DataPlaneV2`/控制面 `SubnetId` 则在 `ClusterNetworkSettings`（正常字段）。确认网络类型时不要查 `ClusterNetworkSettings.NetworkType`（不存在）。
 
 ## 回滚
 
@@ -119,7 +119,7 @@ tccli tke DescribeClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]'
 
 ### 命令返回错误 (exit ≠ 0)
 
-创建失败时先保留完整 `RequestId` 与服务端返回，再核对以下已知输入边界；不要依赖未验证的固定错误码或消息文本。
+创建失败时先保留完整 `RequestId` 与服务端返回，再对照下表已知输入边界排查；不要仅凭未在下表列出的固定错误码或消息文本下结论。
 
 | 现象 | 诊断 | 根因 | 修复 |
 |:--------|:----------|:------------|:-----|
@@ -130,7 +130,7 @@ tccli tke DescribeClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]'
 ## 收尾确认
 
 ```bash
-# 一次性核对：Running + Property.NetworkType=CiliumOverlay（勿只滤 state/name）
+# 一次性核对：Running + Property.NetworkType=CiliumOverlay（不要只滤 state/name）
 tccli tke DescribeClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]' \
   --filter "Clusters[0].{state:ClusterStatus,name:ClusterName,property:Property,subnet:ClusterNetworkSettings.SubnetId}"
 # expected: state=Running；property 解析含 NetworkType=CiliumOverlay；subnet 为创建时 SubnetId
