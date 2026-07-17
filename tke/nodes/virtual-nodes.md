@@ -140,14 +140,26 @@ tccli tke DescribeClusterVirtualNodePools \
   --ClusterId "<CLUSTER_ID>"
 # expected: { "TotalCount": 0, "NodePoolSet": [], "RequestId": "..." }
 
-# 修改虚拟节点池
+# 修改虚拟节点池；接口要求至少修改一个可选参数
+# DeletionProtection=true 可防止误删节点池；关闭保护后才可执行删除
 tccli tke ModifyClusterVirtualNodePool \
   --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" \
   --NodePoolId "<POOL_ID>" \
-  --Labels '[{"Name":"workload-type","Value":"serverless"}]'
+  --Labels '[{"Name":"workload-type","Value":"serverless"}]' \
+  --DeletionProtection true
 # expected: exit 0
 ```
+
+## 跨字段约束
+
+`ModifyClusterVirtualNodePool` 用 `ClusterId` + `NodePoolId` 定位目标后，以下字段**至少修改一个**：`Name`、`SecurityGroupIds`、`Labels`、`Taints`、`DeletionProtection`。这些字段彼此不互斥，可以在一次调用中同时修改；“至少一个”不能误写成“五选一”。
+
+| 组合 | 是否有效 | 原因 |
+|:-----|:--------:|:-----|
+| 只传定位字段，不传上述修改字段 | 否 | 没有任何变更目标 |
+| 传任意一个修改字段 | 是 | 满足至少修改一项 |
+| 同时传多个修改字段 | 是 | 字段可组合更新 |
 
 ## 验证
 

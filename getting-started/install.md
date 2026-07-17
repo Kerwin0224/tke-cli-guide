@@ -37,7 +37,7 @@ TCCLI 是腾讯云 API 的命令行客户端，用 Python 写成。本指南统�
 > uv tool upgrade tccli
 > # expected: exit 0（已是最新则显示 Nothing to upgrade）
 > tccli --version
-> # expected: 最新版本或更高
+> # expected: 输出当前已安装的 TCCLI 版本号
 > ```
 >
 > 本指南命令示例基于近期 `tccli` 版本；TCCLI 持续新增/调整 Action 与字段，若你的版本不同，优先以 `tccli <service> help` / `help --detail` 的实时契约为准。
@@ -54,6 +54,8 @@ uv 一次性安装，之后所有 Python 工具都用它管理。按平台选一
 | Windows（PowerShell） | `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 \| iex"` |
 | macOS（Homebrew） | `brew install uv` |
 | Windows（WinGet） | `winget install astral-sh.uv` |
+
+> 上述脚本地址必须保持为 uv 官方域名 `astral.sh`。安全敏感或受管环境不要直接执行未审阅的网络内容：先下载脚本并审阅，再由组织内部镜像、受管包管理器或固定版本流程安装。
 
 验证 uv 已就绪：
 
@@ -79,7 +81,7 @@ uv 会下载 TCCLI 及其依赖到独立环境，并把 `tccli` 命令链接到 
 
 ```bash
 tccli --version
-# expected: 最新版本或更高
+# expected: 输出当前已安装的 TCCLI 版本号
 ```
 ```text
 3.1.126.1
@@ -116,7 +118,7 @@ uv tool uninstall tccli
 ```bash
 # 衔接下一步：tccli 在 PATH 且可进产品域（安装闭环；凭证下一步再配）
 tccli --version
-# expected: 最新版本或更高
+# expected: 输出当前已安装的 TCCLI 版本号
 
 tccli tke help 2>&1 | head -3
 # expected: AVAILABLE VERSIONS 含 2018-05-25 / 2022-05-01 → 可进入 [配置凭证](credentials.md)

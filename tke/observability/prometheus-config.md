@@ -280,25 +280,26 @@ tccli tke DeletePrometheusTemp --region <REGION> --TemplateId <TEMPLATE_ID>
 ## 收尾确认
 
 ```bash
-# 汇总核对三项：采集配置下发 + 记录规则生效 + 模板同步成功
-# 1. 采集配置已下发（上文已查配置存在，此处查时间戳为最新）
+# 汇总核对三项：采集配置存在 + 记录规则存在 + Temp 同步成功
+# 1. 在嵌套采集器数组中核对目标名称
+# ServiceMonitor：
 tccli tke DescribePrometheusConfig --region <REGION> \
   --InstanceId <PROM_INSTANCE_ID> --ClusterId <CLUSTER_ID> \
-  --filter "{name:Name,update:LatestUpdateTimestamp}"
-# expected: 返回配置且时间戳为新
+  --filter "ServiceMonitors[?Name=='<SERVICE_MONITOR_NAME>'].{name:Name,config:Config}"
+# expected: 返回目标 ServiceMonitor；PodMonitor/RawJob/Probe 分别在 PodMonitors/RawJobs/Probes 中按 Name 查询
 
-# 2. 记录规则生效
+# 2. 记录规则存在
 tccli tke DescribePrometheusRecordRules --region <REGION> --InstanceId <PROM_INSTANCE_ID> \
-  --filter "RecordRules[].{name:Name}"
+  --filter "Records[].{name:Name}"
 # expected: 含创建的规则名
 
-# 3. 模板同步成功
+# 3. Temp 模板同步成功
 tccli tke DescribePrometheusTempSync --region <REGION> --TemplateId <TEMPLATE_ID> \
   --filter "Targets[].{instance:InstanceId,status:Status}"
-# expected: 目标实例同步 Status=Succeeded → 配置闭环完成
+# expected: 目标实例同步状态符合接口返回的成功终态
 ```
 
-> 采集配置下发 + 记录规则生效 + 模板同步 Succeeded = 跨步骤闭环。上文验证段查各维度存在性，此处汇总五类配置（Config/RecordRule/Temp/Template/Dashboard）的产物一次性核对，确认全链路生效。
+> 以上仅汇总核对 Config、RecordRule、Temp 三类产物。告警 Template 需另用 `DescribePrometheusTemplates` 与 `DescribePrometheusTemplateSync` 核对；本 API 版本没有 Dashboard 查询 Action，`CreatePrometheusDashboard` 只返回 `RequestId`，因此 Dashboard 必须到 Grafana/控制台确认存在并可渲染，不能由上述三条查询代证。
 
 ---
 

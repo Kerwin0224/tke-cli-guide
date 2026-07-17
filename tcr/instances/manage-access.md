@@ -66,6 +66,15 @@ tccli tcr ManageInternalEndpoint \
 # --Operation 仅 Create|Delete；Open/Close 非法
 ```
 
+## 跨字段约束
+
+| `Operation` | `VpcId` | `SubnetId` | 关系 |
+|:------------|:--------|:-----------|:-----|
+| `Create` | 必填 | 必填，且必须属于该 VPC | 创建指定 VPC/子网的内网访问链路 |
+| `Delete` | 按待删除端点传原 VPC | 按待删除端点传原子网 | 删除同一对 VPC/子网标识的链路 |
+
+`VpcId` 与 `SubnetId` 不是互斥字段；它们共同标识接入网络。`Open`/`Close` 不是合法 `Operation`。
+
 验证:
 
 ```bash
@@ -118,7 +127,7 @@ tccli tcr CreateInstanceToken \
 # expected: { "Token": "<LONG_TOKEN_STRING>", "Username": "..." }（tccli 默认剥离 Response 包装层）
 ```
 
-> ⚠️ **Token 只显示一次。** 保存好返回的 `Token` 值与 `TokenId`（Create 响应字段名），离开后就无法再次获取 Token 值。
+> ⚠️ **Token 只显示一次。** 将返回的 `Username` 与 `Token` 直接写入密钥管理服务或 docker credential store，不要输出到日志。保存 `TokenId`（Create 响应字段名），离开后无法再次获取 Token 值。
 >
 > **字段名分叉**：`CreateInstanceToken`（`longterm`）返回顶层 `TokenId`；`DescribeInstanceToken` 列表项字段是 **`Id`**（不是 `TokenId`），值与 Create 的 `TokenId` 相同。`DeleteInstanceToken` / `ModifyInstanceToken` 入参仍用 **`--TokenId`**，传入列表里的 `Id`。`temp` 创建时常返回 `TokenId: ""`，且通常**不会**出现在 `DescribeInstanceToken` 列表中（约 1 小时自动过期）。
 
@@ -147,7 +156,7 @@ tccli tcr DescribeInstances \
 
 > docker CLI（Registry 登录，非 tccli；TCCLI 不提供 docker daemon / Registry 协议登录能力）
 ```bash
-docker login <REGISTRY_DOMAIN> --username <USERNAME> --password <TOKEN>
+printf '%s' "$TCR_TOKEN" | docker login <REGISTRY_DOMAIN> --username "$TCR_USERNAME" --password-stdin
 # expected: Login Succeeded
 ```
 
@@ -201,6 +210,12 @@ tccli tcr ModifyInstanceToken --RegistryId "<ID>" --TokenId "<TOKEN_ID>" --Enabl
 tccli tcr DeleteSecurityPolicy --RegistryId "<ID>" --PolicyIndex <INDEX>  # 见 access/manage.md
 ```
 
+## 外网端点字段契约
+
+| 字段 | 所属 Action | 必填 | 说明 |
+|:---|:---|:---:|:---|
+| `RegistryId` | `ManageExternalEndpoint` | 是 | 目标企业版实例 ID |
+
 ## 故障恢复
 
 ### 命令返回错误（exit ≠ 0）
@@ -244,7 +259,7 @@ tccli tcr DescribeSecurityPolicies --region ap-guangzhou --RegistryId "<REGISTRY
 # expected: 公网 Opened 时包含你的出口 IP（如 "203.0.113.10/32"）
 
 # docker login 端到端确认可达
-docker login <REGISTRY_DOMAIN> --username <USERNAME> --password <TOKEN>
+printf '%s' "$TCR_TOKEN" | docker login <REGISTRY_DOMAIN> --username "$TCR_USERNAME" --password-stdin
 # expected: Login Succeeded
 ```
 
@@ -257,3 +272,10 @@ docker login <REGISTRY_DOMAIN> --username <USERNAME> --password <TOKEN>
 - [推送镜像](../images/push-pull.md) — docker push 你的第一个镜像
 - [创建命名空间和仓库](../repositories/manage.md) — 组织你的镜像
 - [配额与限制](../reference/quotas.md) — VPC / 服务账号配额
+
+## 精确 Action 字段契约
+
+| 字段 | 所属 Action | 必填 | 说明 |
+|:---|:---|:---:|:---|
+| `VpcId` | `ManageInternalEndpoint` | 是 | 端点 VPC |
+| `SubnetId` | `ManageInternalEndpoint` | 是 | 端点子网 |

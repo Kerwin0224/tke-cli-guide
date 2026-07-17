@@ -217,6 +217,14 @@ tccli tke DescribeAddon --region ap-guangzhou --ClusterId "<CLUSTER_ID>" --Addon
 # expected: Addons 为空数组
 ```
 
+## Action 字段契约
+
+| 字段 | 所属 Action | 必填 | 条件说明 |
+|:---|:---|:---:|:---|
+| `AddonName` | `DescribeAddon` | 否 | 可省略；省略时返回集群中的全部插件 |
+| `AddonVersion` | `UpdateAddon` | 条件 | 与 `RawValues` 至少传一个；仅改配置时可省略版本 |
+| `RawValues` | `UpdateAddon` | 条件 | 与 `AddonVersion` 至少传一个；仅升级版本时可省略配置 |
+
 ## 故障恢复
 
 ### 命令返回错误 (exit ≠ 0)
@@ -242,10 +250,13 @@ tccli tke DescribeAddon --region ap-guangzhou --ClusterId "<CLUSTER_ID>" --Addon
 > 镜像缓存（ImageCache）预置一组镜像到 CVM 快照，加速 Pod 启动（避免每次拉远程镜像）。属插件域的进阶功能。
 
 ```bash
-# 查询镜像缓存列表 (支持按 ID/名/过滤)
-tccli tke DescribeImageCaches --region <REGION> --Limit 10
+# 查询镜像缓存列表 (支持按名称过滤)
+tccli tke DescribeImageCaches --region <REGION> --Limit 10 \
+  --Filters '[{"Name":"image-cache-name","Values":["<CACHE_NAME>"]}]'
 # expected: exit 0, ImageCaches[] + TotalCount (无缓存则空)
 ```
+
+`DescribeImageCaches.Filters[].Name` 当前仅支持 `image-cache-name`；`Values[]` 填镜像缓存名称。
 ```json
 {"TotalCount": 0, "ImageCaches": [], "RequestId": "..."}
 ```
@@ -255,15 +266,40 @@ tccli tke DescribeImageCaches --region <REGION> --Limit 10
 tccli tke CreateImageCache --region <REGION> \
   --Images '["nginx:1.25","redis:7"]' \
   --ImageCacheName "<CACHE_NAME>" \
+  --ImageCacheSize 50 \
   --VpcId "<VPC_ID>" --SubnetId "<SUBNET_ID>" --SecurityGroupIds '["<SG_ID>"]'
 # expected: exit 0, 返回 ImageCacheId
+```
 
+`ImageCacheSize` 单位为 GiB，默认 `20`；合法范围受所用高性能云盘类型的容量限制约束。创建和更新接口使用同一容量语义，调整前先确认目标云盘类型支持该容量。
+
+## 跨字段约束
+
+| `ExistedEipId` | `AutoCreateEip` | `AutoCreateEipAttribute` | 结果 |
+|:---------------|:----------------|:-------------------------|:-----|
+| 传已有 EIP | `false` 或不传 | 不传 | 绑定已有 EIP |
+| 不传 | `true` | 可选，用于自动创建 EIP 的带宽/计费参数 | 自动创建 EIP |
+| 不传 | `false` 或不传 | 不传 | 不使用 EIP |
+
+`ExistedEipId` 与 `AutoCreateEip=true`/`AutoCreateEipAttribute` 互斥，但两组字段均为可选：仅在需要 EIP 时选择其中一种；不需要 EIP 时可全部省略。
+
+```bash
+# 选项 A：绑定已有 EIP
+--ExistedEipId "<EIP_ID>"
+
+# 选项 B：自动创建 EIP，并指定带宽与计费属性
+--AutoCreateEip true \
+--AutoCreateEipAttribute '{"InternetMaxBandwidthOut":1,"InternetChargeType":"TRAFFIC_POSTPAID_BY_HOUR"}'
+```
+
+```bash
 # 匹配最合适的镜像缓存 (按待拉镜像列表匹配)
 tccli tke GetMostSuitableImageCache --region <REGION> --Images '["nginx:1.25"]' --Snapshotter overlayfs
 # expected: exit 0, 返回匹配的 ImageCacheId
 
-# 更新镜像缓存 (改凭证/镜像列表)
-tccli tke UpdateImageCache --region <REGION> --ImageCacheId "<CACHE_ID>" --ImageCacheName "<NEW_NAME>"
+# 更新镜像缓存（名称与容量）
+tccli tke UpdateImageCache --region <REGION> --ImageCacheId "<CACHE_ID>" \
+  --ImageCacheName "<NEW_NAME>" --ImageCacheSize 50
 # expected: exit 0
 
 # 删除镜像缓存 (批量)
@@ -276,11 +312,10 @@ tccli tke DeleteImageCaches --region <REGION> --ImageCacheIds '["<CACHE_ID>"]'
 ## 收尾确认
 
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
-<!-- tccli管Addon生命周期，kubectl查Pod部署状态，非tccli边界 -->
 ```bash
 # 插件 Phase=Succeeded（上文已查 Phase/版本/Reason，此处端到端核 Pod 真运行 + 衔接前置）
 tccli tke DescribeAddon --region ap-guangzhou --ClusterId "<CLUSTER_ID>" --AddonName "<ADDON_NAME>" \
-  --filter "{name:AddonName,phase:Phase,version:AddonVersion}"
+  --filter "Addons[0].{name:AddonName,phase:Phase,version:AddonVersion}"
 # expected: phase=Succeeded
 
 # 端到端：插件 Pod 真运行且 Ready（上文查 Phase=Succeeded 但未核 Pod Ready 数）
@@ -302,3 +337,9 @@ kubectl get pods -n kube-system -l app=<ADDON_NAME> --no-headers | wc -l
 - [应用发布](../releases/manage.md) — 插件本质是 Helm Release
 - [创建集群](../clusters/create.md) — 建集群时选装插件
 - [故障排查](../troubleshooting.md) — 插件异常诊断
+
+## 精确 Action 字段契约
+
+| 字段 | 所属 Action | 必填 | 说明 |
+|:---|:---|:---:|:---|
+| `ClusterId` | `InstallAddon` | 是 | 目标集群 ID |

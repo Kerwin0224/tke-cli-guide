@@ -193,23 +193,19 @@ tccli tke DescribePrometheusClusterAgents --region <REGION> --InstanceId <PROM_I
 ## 收尾确认
 
 ```bash
-# Agent 已接入集群（上文已查 Agent 列表与 target lastError，此处查指标真上报 + 衔接前置）
+# Agent 已接入集群
 tccli tke DescribePrometheusClusterAgents --region <REGION> --InstanceId <PROM_INSTANCE_ID> \
   --filter "Agents[].{cluster:ClusterId,region:Region,status:Status}"
 # expected: 目标集群 Status=Running
 
-# 端到端：指标真可查（上文已查 target lastError，此处查指标数据已写入）
-tccli tke DescribePrometheusRecordRules --region <REGION> --InstanceId <PROM_INSTANCE_ID>
-# expected: 返回记录规则列表（说明 Agent 采集的指标已入库可查）
-
-# 下一步前置：Agent Status=Running 是配告警规则/采集配置的前置
+# 检查全部采集目标：先确认非空，再确认没有 Error 非空的目标
 tccli tke DescribePrometheusTargets --region <REGION> \
   --InstanceId <PROM_INSTANCE_ID> --ClusterType tke --ClusterId <CLUSTER_ID> \
-  --filter "Targets[].{job:ScrapeJob,lastError:LastError}" --output text | head -5
-# expected: lastError 均为空 → Agent 管理闭环完成
+  --filter "{total:sum(Jobs[].Total),failed:Jobs[].Targets[?Error!=''].{url:Url,state:State,error:Error}[]}"
+# expected: total > 0 且 failed=[]；不得截断抽样
 ```
 
-> Agent Status=Running + 指标可查 + target lastError 全空 = 端到端闭环。上文验证段查 Agent 列表与 target 状态，此处确认 Agent 就绪是进下一阶段（配采集规则/告警策略）的前置。
+> `DescribePrometheusTargets` 能证明目标非空且抓取无报错，但不能证明时序样本已写入。`DescribePrometheusRecordRules` 只返回规则配置，也不能作为指标入库证据。指标非空、新鲜时间戳与目标集群标签必须通过实例 `QueryAddress` 对应的 Prometheus 查询入口或控制台执行 PromQL 核验；未完成该查询时，只能确认“Agent 已运行且 Targets 无抓取错误”，不能宣称指标端到端入库。
 
 ---
 

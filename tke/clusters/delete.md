@@ -90,7 +90,7 @@ tccli tke DisableClusterDeletionProtection \
 
 ### 步骤 2：删除集群
 
-`DeleteCluster` 必传 `ClusterId` + `InstanceDeleteMode`（决策见 [§决策依据](#决策依据)）。按场景**二选一**：A 最小化（销毁节点，CBS/CLB/EIP 保留手动清理）或 B 级联删除（连 CBS/CLB 一起删，一键清理）。
+`DeleteCluster` 必传 `ClusterId` + `InstanceDeleteMode`（决策见 [§决策依据](#决策依据)）。按场景**二选一**：A 最小化（销毁节点，CBS/CLB/EIP 保留手动清理）或 B 级联删除（连 CBS/CLB 一起删，减少残留资源）。
 
 > ⚠️ **A 与 B 是二选一变体，不是先做 A 再做 B**——两者各调一次 `DeleteCluster` 删的是同一个集群，第二次调用报集群已不存在。CBS/CLB 残留清理见 [§步骤 4](#步骤-4清理残留资源)。
 
@@ -106,7 +106,7 @@ tccli tke DeleteCluster \
 
 #### 选项 B：级联删除（连 CBS/CLB 一起删）
 
-> **与 A 二选一，非在 A 之后执行**。连 CBS 盘、CLB 一起删（真正的一键清理）:
+> **与 A 二选一，非在 A 之后执行**。连 CBS 盘、CLB 一起删除：
 
 ```bash
 tccli tke DeleteCluster \
@@ -222,3 +222,9 @@ tccli clb DescribeLoadBalancers --region ap-guangzhou --Forward 1 \
 
 - [创建集群](create.md) — 重新创建一个新集群
 - [查询集群](query.md) — 确认其他集群状态
+
+## 精确 Action 字段契约
+
+| 字段 | 所属 Action | 必填 | 说明 |
+|:---|:---|:---:|:---|
+| `InstanceDeleteMode` | `DeleteCluster` | 是 | 实例删除模式 |

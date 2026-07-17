@@ -42,6 +42,19 @@ spec:
       targetPort: 8080
 ```
 
+将清单保存为 `registered-nodeport-svc.yaml`，再创建并等待 CLB 地址：
+
+<!-- tccli管集群注册，kubectl管K8s原生Service，非tccli边界 -->
+> kubectl（K8s 原生命令，非 tccli；TCCLI 不提供 Kubernetes Service 创建能力）
+```bash
+kubectl apply -f registered-nodeport-svc.yaml
+kubectl get svc registered-nodeport-svc --watch
+# expected: service 创建成功，EXTERNAL-IP 从 <pending> 变为 CLB VIP；取得 VIP 后结束 watch
+
+kubectl get endpointslice -l kubernetes.io/service-name=registered-nodeport-svc -o wide
+# expected: 至少一个就绪端点，且对应注册节点上的 Pod
+```
+
 > 注册节点的 Pod 需调度到注册节点池，CLB 后端才会包含对应节点。通过节点池 Labels / 工作负载 `nodeSelector` 约束调度目标。
 
 ## 七层接入（Ingress）
@@ -65,6 +78,20 @@ spec:
                 name: registered-nodeport-svc
                 port:
                   number: 80
+```
+
+将清单保存为 `registered-ingress.yaml`，再创建并等待七层入口就绪：
+
+<!-- tccli管集群注册，kubectl管K8s原生Ingress，非tccli边界 -->
+> kubectl（K8s 原生命令，非 tccli；TCCLI 不提供 Kubernetes Ingress 创建能力）
+```bash
+kubectl apply -f registered-ingress.yaml
+kubectl get ingress registered-ingress --watch
+# expected: ingress 创建成功，ADDRESS 出现入口地址；取得地址后结束 watch
+
+kubectl describe ingress registered-ingress
+kubectl get endpointslice -l kubernetes.io/service-name=registered-nodeport-svc -o wide
+# expected: Ingress 后端指向 registered-nodeport-svc:80，Service 至少有一个就绪端点
 ```
 
 ## 准备工作
@@ -95,6 +122,16 @@ tccli tke DescribeExternalNode \
 ```bash
 kubectl get svc registered-nodeport-svc -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
 # expected: 返回 CLB VIP，外部可访问
+```
+
+## 清理
+
+<!-- kubectl删除本文创建的K8s原生资源，非tccli边界 -->
+> kubectl（K8s 原生命令，非 tccli；TCCLI 不提供 Kubernetes Service/Ingress 删除能力）
+```bash
+kubectl delete -f registered-ingress.yaml
+kubectl delete -f registered-nodeport-svc.yaml
+# expected: Ingress 与 Service 删除完成；确认关联 CLB 已按产品回收流程释放后再结束
 ```
 
 ## 故障恢复

@@ -11,7 +11,7 @@ fused: false
 
 ## 触发条件
 
-- `tccli tcr DescribeUserQuotaPersonal` 返回 `Data.LimitInfo` 显示个人版配额（无个人版用户时 `CreateUserPersonal` 报 `ResourceNotFound.ErrNoUser`）
+- `tccli tcr DescribeUserQuotaPersonal` 返回 `Data.LimitInfo` 显示个人版配额；查询或修改类 Action 返回 `ResourceNotFound.ErrNoUser` 时，需先用 `CreateUserPersonal` 初始化个人版用户
 - `docker login ccr.ccs.tencentyun.com` 报 `unauthorized`（个人版用户未创建或密码错），或 `DescribeNamespacePersonal` 返回 `Data.NamespaceCount: 0`（无命名空间无法 push）
 - 个人开发/小团队场景，企业版实例成本过高，`DescribeInstances` 返回 `TotalCount: 0`
 
@@ -129,7 +129,7 @@ tccli tcr CreateRepositoryPersonal --RepoName "<NAMESPACE_NAME>/<REPO_NAME>"
 > docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）
 ```bash
 # 登录个人版（域名 ccr.ccs.tencentyun.com）
-docker login ccr.ccs.tencentyun.com -u "<USERNAME>" -p "<PASSWORD>"
+printf '%s\n' "<PASSWORD>" | docker login ccr.ccs.tencentyun.com --username "<USERNAME>" --password-stdin
 # expected: Login Succeeded
 
 # 打标签并推送
@@ -169,7 +169,7 @@ tccli tcr DescribeRepositoryPersonal --RepoName "<NAMESPACE_NAME>/<REPO_NAME>"
 
 ## 清理
 
-> **副作用警告**：删除命名空间会级联删除其下所有仓库与镜像，不可恢复。
+> **副作用警告**：删除镜像或仓库不可恢复。删除命名空间前须先删除其下所有仓库。
 
 ```bash
 # 1. 删除镜像（RepoName = namespace/repo；无 --Namespace）
@@ -214,7 +214,7 @@ tccli tcr DescribeNamespacePersonal --Namespace "<NAMESPACE_NAME>" --Limit 10 --
 > docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）
 ```bash
 # 端到端：docker login + push 成功
-docker login ccr.ccs.tencentyun.com -u "<USERNAME>" -p "<PASSWORD>"
+printf '%s\n' "<PASSWORD>" | docker login ccr.ccs.tencentyun.com --username "<USERNAME>" --password-stdin
 # expected: Login Succeeded
 
 docker push ccr.ccs.tencentyun.com/<NAMESPACE_NAME>/<REPO_NAME>:v1
@@ -236,3 +236,9 @@ docker pull ccr.ccs.tencentyun.com/<NAMESPACE_NAME>/<REPO_NAME>:v1
 - [TCR 企业版](../instances/index.md) — 升级路径
 - [推送拉取镜像](../images/push-pull.md) — 企业版推送（对比）
 - [故障排查](../troubleshooting.md) — docker login/push 失败诊断
+
+## 精确 Action 字段契约
+
+| 字段 | 所属 Action | 必填 | 说明 |
+|:---|:---|:---:|:---|
+| `Password` | `CreateUserPersonal` | 是 | 个人版用户密码 |

@@ -67,7 +67,9 @@ basic 实例不能作主也不能作从。需先 [创建实例](../instances/cre
 | `Rule.DestNamespace` | ManageReplication | 是 | 目标命名空间 |
 | `RegistryId` | CreateReplicationInstance | 是 | 主实例 ID |
 | `ReplicationRegionId` | CreateReplicationInstance | 条件 | 从实例地域数字 ID；与 `ReplicationRegionName` **二选一或同传**（API 层二者均 Optional，实际须给地域） |
-| `ReplicationRegionName` | CreateReplicationInstance | 条件 | 从实例地域名（如 `ap-beijing`）；可与数字 ID 同传 |
+| `ReplicationRegionId` | DeleteReplicationInstance | 是 | 待删除从实例的地域数字 ID |
+| `ReplicationRegionId` | DescribeReplicationInstanceCreateTasks | 是 | 与 `ReplicationRegistryId` 联合定位从实例创建任务 |
+| `ReplicationRegionName` | CreateReplicationInstance | 条件 | 与 `ReplicationRegionId` 二选一时必传；从实例地域名（如 `ap-beijing`），也可与数字 ID 同传 |
 | `SyncTag` | CreateReplicationInstance | 否 | 是否同步 TCR 云标签至 COS Bucket |
 
 ### TCR 地域数字 ID（ReplicationRegionId 取值）

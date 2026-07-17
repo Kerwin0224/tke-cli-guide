@@ -3,7 +3,7 @@ doc_type: How-to
 subtype: 6A
 fused: true
 ---
-> 官方文档：[节点概述](https://cloud.tencent.com/document/product/457/32201) · [注册节点价格和配额说明](https://cloud.tencent.com/document/product/457/79747) · [容器服务安全组设置](https://cloud.tencent.com/document/product/457/9084)
+> 官方文档：[节点概述](https://cloud.tencent.com/document/product/457/32201) · [注册节点公网版](https://cloud.tencent.com/document/product/457/57916) · [注册节点常见问题](https://cloud.tencent.com/document/product/457/79751) · [注册节点价格和配额说明](https://cloud.tencent.com/document/product/457/79747) · [容器服务安全组设置](https://cloud.tencent.com/document/product/457/9084)
 >
 > 配额：公网带宽配额、安全组规则数量限制。[配额说明](https://cloud.tencent.com/document/product/457/9087)
 >
@@ -39,17 +39,20 @@ fused: true
 | Prometheus 监控 | 支持 | 不支持 |
 | 安全 | 生产推荐 | 谨慎使用 |
 
-公网连接开关（`EnabledPublicConnect` / `PublicConnectUrl` / `PublicCustomDomain`）在控制台注册节点配置中开启；接入流程与命令行步骤与专线版一致。
+公网连接开关（`EnabledPublicConnect` / `PublicConnectUrl` / `PublicCustomDomain`）需在控制台注册节点配置中开启。`EnableExternalNodeSupport` 的 `ClusterExternalConfig` 不提供公网连接开关字段，因此 TCCLI 负责开启外部节点支持、建池、取脚本和回读状态，不能代替此控制台步骤。
+
+> 公网版还有以下专项边界：仅适用于 Kubernetes 1.20 及以上、Global Router 容器网络的集群；云上与云下 Pod 默认隔离；目标节点需能访问公网接入所用 CLB 的 TCP 443、9000 端口及注册脚本依赖的镜像站点。公网版不支持 LoadBalancer Service、CLB/Nginx Ingress、Prometheus、云产品监控和 CLS 日志对接。
 
 ## 操作步骤
 
 公网版的 tccli 步骤与专线版相同：
 
-1. 查询支持现状：`DescribeExternalNodeSupportConfig`（以 `Status` 为准：`Disabled`/`Initializing`/`Enabled`/`InitFailed`）
-2. 开启支持：`EnableExternalNodeSupport`（`NetworkType` 仅 `HostNetwork`/`CiliumBGP`，与专线版相同；公网能力看 `EnabledPublicConnect`/`PublicConnectUrl`）
-3. 创建节点池：`CreateExternalNodePool`
-4. 获取脚本：`DescribeExternalNodeScript`（响应 `Command`/`Link`/`Token`）
-5. 在目标机器执行 `Command`，节点上线
+1. **控制台开启公网连接**：进入目标集群的注册节点配置，开启公网连接。
+2. 查询支持现状：`DescribeExternalNodeSupportConfig`，确认 `EnabledPublicConnect=true` 且 `PublicConnectUrl` 非空；外部节点支持状态以 `Status` 为准（`Disabled`/`Initializing`/`Enabled`/`InitFailed`）。
+3. 若 `Status=Disabled`，用 `EnableExternalNodeSupport` 开启外部节点支持（`NetworkType` 仅 `HostNetwork`/`CiliumBGP`）；该 Action 不开启公网连接。
+4. 创建节点池：`CreateExternalNodePool`。
+5. 获取脚本：`DescribeExternalNodeScript`（响应 `Command`/`Link`/`Token`）。
+6. 在目标机器执行 `Command`，节点上线。
 
 完整命令、字段表、占位符与验证见[创建注册节点（专线版）](dedicated-line.md)。本篇不重复命令，仅说明公网相关的差异与约束。
 

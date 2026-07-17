@@ -155,7 +155,8 @@ tccli tke DescribeClusterReleaseHistory --region ap-guangzhou \
 
 # 回滚到某修订版
 tccli tke RollbackClusterRelease --region ap-guangzhou \
-  --ClusterId "<CLUSTER_ID>" --Name "<RELEASE_NAME>" --Namespace "<NAMESPACE>"
+  --ClusterId "<CLUSTER_ID>" --Name "<RELEASE_NAME>" --Namespace "<NAMESPACE>" \
+  --Revision <TARGET_REVISION>
 # expected: exit 0
 ```
 
@@ -173,7 +174,7 @@ tccli tke DescribeClusterReleases --region ap-guangzhou --ClusterId "<CLUSTER_ID
 | 版本一致 | `DescribeClusterReleases` → `ChartVersion` | 等于目标版本 |
 | 修订号 | `DescribeClusterReleases` → `Revision` | 创建=1，升级递增 |
 | 资源就绪 | `kubectl get all -n <NAMESPACE>` | Release 管理的资源 Ready |
-| 回滚生效 | `DescribeClusterReleaseHistory` | 回滚后 Revision 指向目标 |
+| 回滚生效 | `DescribeClusterReleases` / `DescribeClusterReleaseHistory` | 当前 Release 的目标 Chart/Values 内容与所选历史修订一致；回滚会形成新的当前修订，不要求当前 `Revision` 等于历史目标 |
 
 > `Status` 枚举：`deployed`/`failed`/`pending-upgrade`/`pending-rollback`。`deployed` 为终态成功。
 
@@ -294,7 +295,6 @@ tccli tke ModifyClusterRollOutSequenceTags --region ap-guangzhou \
 ## 收尾确认
 
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
-<!-- tccli管Release生命周期，kubectl查部署资源状态；helm为能力边界（tccli无helm原生命令），非tccli边界 -->
 ```bash
 # 汇总核对三项：Release Status=deployed + 历史版本数 + 关联资源 Ready
 # 1. Release 已部署（上文已查 Status/版本/Revision，此处汇总）
@@ -323,3 +323,11 @@ kubectl get all -n <NAMESPACE> -l app.kubernetes.io/instance=<RELEASE_NAME> \
 - [插件管理](../addons/manage.md) — 插件本质是 Release
 - [创建集群](../clusters/create.md) — 建集群后部署应用
 - [故障排查](../troubleshooting.md) — Release 失败诊断
+
+## 精确 Action 字段契约
+
+| 字段 | 所属 Action | 必填 | 说明 |
+|:---|:---|:---:|:---|
+| `Name` | `CreateClusterRelease` | 是 | Release 名称 |
+| `Chart` | `CreateClusterRelease` | 是 | Chart 名称 |
+| `Chart` | `UpgradeClusterRelease` | 是 | 目标 Chart 名称 |

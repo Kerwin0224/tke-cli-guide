@@ -129,7 +129,7 @@ tccli tke ModifyClusterSchedulerPolicy --ClusterId "<CLUSTER_ID>" --region <REGI
 ```bash
 # SchedulerName + PluginConfigs + Extenders 三项一次性核对（分项查字段存在后，再核对配置项协同生效）
 tccli tke DescribeClusterSchedulerPolicy --ClusterId "<CLUSTER_ID>" --region <REGION> \
-  --filter "SchedulerPolicyConfig[0].{name:SchedulerName,plugins:PluginConfigs[0].Name,extenders:Extenders[0].ExtenderClientConfig.url}"
+  --filter "{name:SchedulerPolicyConfig[0].SchedulerName,plugins:SchedulerPolicyConfig[0].PluginConfigs[0].Name,extenders:Extenders[0].ExtenderClientConfig.url}"
 # expected: name=目标调度器 + plugins=目标插件 + extenders=扩展器 url（若未配 Extenders 则 null）
 
 # 端到端核对：Pod 是否按新策略调度（仅查配置字段不够，还须确认配置是否影响 Pod 调度）

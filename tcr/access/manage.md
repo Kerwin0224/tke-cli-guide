@@ -306,7 +306,7 @@ tccli tcr DescribeInternalEndpoints --region <REGION> --RegistryId "<REGISTRY_ID
 # expected: 含已接入的 VPC（未开内网则空，仅白名单场景可豁免此项）
 
 # 端到端：用配置的访问方式 docker login 成功
-docker login <REGISTRY_DOMAIN> --username <USERNAME> --password <TOKEN_OR_SA_PASSWORD>
+printf '%s\n' "<TOKEN_OR_SA_PASSWORD>" | docker login <REGISTRY_DOMAIN> --username "<USERNAME>" --password-stdin
 # expected: Login Succeeded
 ```
 

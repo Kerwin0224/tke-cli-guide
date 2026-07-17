@@ -117,7 +117,18 @@ tccli tke CreateHealthCheckPolicy --version 2022-05-01 --region <REGION> \
 # expected: exit 0, 返回 RequestId
 ```
 
-### 步骤 3：查询策略确认创建
+### 步骤 3：绑定策略到 Native 节点池
+
+静态契约中没有独立的“绑定策略” Action；绑定写入位于 `ModifyNodePool.Native.HealthCheckPolicyName`。先取得目标 Native 节点池 ID，再执行：
+
+```bash
+tccli tke ModifyNodePool --version 2022-05-01 --region <REGION> \
+  --ClusterId <CLUSTER_ID> --NodePoolId <NODE_POOL_ID> \
+  --Native '{"HealthCheckPolicyName":"<POLICY_NAME>"}'
+# expected: exit 0, 返回 RequestId；节点池进入更新流程后恢复 Running
+```
+
+### 步骤 4：查询策略与绑定确认
 
 ```bash
 tccli tke DescribeHealthCheckPolicies --version 2022-05-01 --region <REGION> --ClusterId <CLUSTER_ID>
@@ -139,7 +150,7 @@ tccli tke DescribeHealthCheckPolicies --version 2022-05-01 --region <REGION> --C
 |:-----|:-----|:-----|
 | 策略存在 | `DescribeHealthCheckPolicies --ClusterId <CLUSTER_ID>` | `TotalCount >= 1`，含 `<POLICY_NAME>` |
 | 规则已启用 | 同上，查策略 `Rules` | 目标规则 `Enabled=true` |
-| 绑定生效 | `DescribeHealthCheckPolicyBindings --version 2022-05-01 --ClusterId <CLUSTER_ID>` | 返回绑定关系 |
+| 绑定生效 | `DescribeHealthCheckPolicyBindings --version 2022-05-01 --ClusterId <CLUSTER_ID>` | 目标策略记录的 `NodePools` 含 `<NODE_POOL_ID>` |
 | 自动修复配置 | `DescribeHealthCheckPolicies` → `Rules[].AutoRepairEnabled` | 可修复规则 `AutoRepairEnabled=true`（High 规则须为 false） |
 
 ```bash
@@ -159,17 +170,17 @@ tccli tke DeleteHealthCheckPolicy --version 2022-05-01 --region <REGION> \
 # expected: exit 0
 ```
 
-> `DeleteHealthCheckPolicy` 用 `HealthCheckPolicyName`（字符串）而非 ID。修改策略用 `ModifyHealthCheckPolicy`，入参与 `CreateHealthCheckPolicy` 一致（覆盖式更新）。
+> `DeleteHealthCheckPolicy` 用 `HealthCheckPolicyName`（字符串）而非 ID。修改策略用 `ModifyHealthCheckPolicy`，入参与 `CreateHealthCheckPolicy` 一致。
 
 ```bash
-# 修改健康检查策略（覆盖式，HealthCheckPolicy 结构同 Create）
+# 修改健康检查策略：先 Describe 取得当前完整 Rules，在完整返回基础上修改后回传
 tccli tke ModifyHealthCheckPolicy --version 2022-05-01 --region <REGION> \
   --ClusterId <CLUSTER_ID> \
   --HealthCheckPolicy '{"Name":"<POLICY_NAME>","Rules":[{"Name":"KubeletUnhealthy","Enabled":true,"AutoRepairEnabled":true}]}'
 # expected: CAM 拦截 AuthFailure.UnauthorizedOperation；授权后 exit 0
 ```
 
-> `ModifyHealthCheckPolicy` 的 `HealthCheckPolicy` 是覆盖式整体更新（非增量），调用前先用 `DescribeHealthCheckPolicies` 取当前规则，改完整体回传，避免遗漏已有规则。
+> 静态 API 模型未声明该更新是 replace 还是 merge，因此不作“覆盖式”断言。保守流程是先用 `DescribeHealthCheckPolicies` 读取当前完整 `Rules`，只修改目标字段后回传完整策略，再次 Describe 对比修改前后差异，避免因省略规则产生不确定结果。
 
 ## 故障恢复
 
@@ -189,17 +200,17 @@ tccli tke ModifyHealthCheckPolicy --version 2022-05-01 --region <REGION> \
 tccli tke DescribeHealthCheckPolicyBindings --version 2022-05-01 --region <REGION> \
   --ClusterId "<CLUSTER_ID>" \
   --Filter '[{"Name":"HealthCheckPolicyName","Values":["<POLICY_NAME>"]}]' \
-  --filter "HealthCheckPolicyBindings[].{name:HealthCheckPolicyName,nodes:NodeNames}"
-# expected: 含 <POLICY_NAME> 的绑定记录，NodeNames 非空（策略已绑定到节点，规则将对该批节点生效）
+  --filter "HealthCheckPolicyBindings[?Name=='<POLICY_NAME>'] | [0].{name:Name,nodePools:NodePools}"
+# expected: name=<POLICY_NAME>，NodePools 含 <NODE_POOL_ID>（策略已绑定到目标 Native 节点池）
 
 # 策略规则配置核对（Rules[].Enabled/AutoRepairEnabled 是可核实字段，非顶层 Enable）
 tccli tke DescribeHealthCheckPolicies --version 2022-05-01 --region <REGION> \
   --ClusterId "<CLUSTER_ID>" \
-  --filter "HealthCheckPolicySet[0].{name:Name,rules:Rules}"
+  --filter "HealthCheckPolicies[?Name=='<POLICY_NAME>'] | [0].{name:Name,rules:Rules}"
 # expected: name=<POLICY_NAME>; Rules 含目标规则，Enabled=true 且可修复规则 AutoRepairEnabled 符合预期
 ```
 
-> 策略绑定生效（DescribeHealthCheckPolicyBindings 返回绑定且节点匹配规则）+ 规则配置正确（Rules[].Enabled/AutoRepairEnabled）= 节点健康检查闭环完成。入参契约无顶层 `Enable` 字段（只有 `Rules[].Enabled`/`AutoRepairEnabled`），确认时查绑定生效，勿查不存在的顶层 Enable。
+> 策略绑定生效（`DescribeHealthCheckPolicyBindings` 返回目标策略且 `NodePools` 含目标节点池）+ 规则配置正确（`Rules[].Enabled/AutoRepairEnabled`）= 节点健康检查闭环完成。入参契约无顶层 `Enable` 字段（只有 `Rules[].Enabled`/`AutoRepairEnabled`），确认时核对节点池绑定，勿查询不存在的 `NodeNames` 或顶层 Enable。
 
 ---
 

@@ -6,7 +6,7 @@ fused: false
 # 自定义域名
 
 > 为 TCR 企业版实例绑定自定义域名，用公司自有域名访问镜像仓库。
-> 控制台: [容器镜像服务 - 实例 - 自定义域名](https://console.cloud.tencent.com/tcr/repository)
+> 控制台: [容器镜像服务 - 实例管理](https://console.cloud.tencent.com/tcr/) → 选择目标实例 →「自定义域名」（控制台无稳定的实例级自定义域名深链）
 > 官方文档: [创建自定义域名](https://cloud.tencent.com/document/product/1141/79579) · [使用自定义域名及云联网实现跨地域内网访问](https://cloud.tencent.com/document/product/1141/76084)
 
 ## 触发条件
@@ -151,7 +151,7 @@ tccli tcr DescribeInstanceCustomizedDomain --region ap-guangzhou --RegistryId "<
 # expected: domain 与配置一致, cert 与绑定参数一致, status 正常
 
 # 用自定义域名 docker login 端到端确认可达（绑定记录存在后，再验证自有域名可登录仓库）
-docker login <DOMAIN_NAME> --username <USERNAME> --password <TOKEN>
+printf '%s' "$TCR_TOKEN" | docker login <DOMAIN_NAME> --username "$TCR_USERNAME" --password-stdin
 # expected: Login Succeeded（CNAME 已生效 + 证书校验通过 + TCR 侧路由命中）
 ```
 

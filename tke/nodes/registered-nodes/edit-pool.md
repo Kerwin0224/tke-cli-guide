@@ -36,7 +36,7 @@ fused: true
 | `Labels` | ModifyExternalNodePool | 否 | 注册节点标签 |
 | `Taints` | ModifyExternalNodePool | 否 | 注册节点污点 |
 | `DeletionProtection` | ModifyExternalNodePool | 否 | 删除保护开关 |
-| `UserScript` | ModifyExternalNodePool | 否 | base64 编码的用户脚本，k8s 组件运行后执行 |
+| `UserScript` | ModifyExternalNodePool | 否 | base64 编码的用户脚本，k8s 组件运行后执行；调用方必须保证脚本可重入并自行实现重试逻辑，脚本及其日志位于节点 `/data/ccs_userscript/` |
 
 ## 操作步骤
 
@@ -70,8 +70,9 @@ tccli tke ModifyExternalNodePool --region <REGION> \
 
 ```bash
 tccli tke DescribeExternalNodePools --ClusterId <CLUSTER_ID> --region <REGION> \
-  --filter "NodePoolSet[?NodePoolId=='<NODEPOOL_ID>'].{state:LifeState,labels:Labels,protect:DeletionProtection}"
-# expected: LifeState=normal, 返回修改后的 Labels / Taints / DeletionProtection
+  --filter "NodePoolSet[?NodePoolId=='<NODEPOOL_ID>'].{state:LifeState,labels:Labels,taints:Taints,protect:DeletionProtection}"
+# expected: 目标池 LifeState=normal；Labels 含 Name=env、Value=hybrid；
+#           Taints 含 Key=dedicated、Value=registered、Effect=NoSchedule；DeletionProtection=true
 ```
 
 ## 回滚
@@ -99,14 +100,6 @@ tccli tke ModifyExternalNodePool --region <REGION> \
 |:-----|:-----|:-----|
 | `FailedOperation.RecordNotFound` | `NodePoolId` 错误 | 用 `DescribeExternalNodePools` 核对节点池 ID |
 | 状态长时间 `updating` | 节点池正在应用配置 | 等待状态回到 `normal` 再操作 |
-
-## 收尾确认
-
-```bash
-tccli tke DescribeExternalNodePools --ClusterId "<CLUSTER_ID>" --region ap-guangzhou \
-  --filter "NodePoolSet[?NodePoolId=='<NODEPOOL_ID>'].LifeState"
-# expected: normal（配置已生效）
-```
 
 ## 下一步
 

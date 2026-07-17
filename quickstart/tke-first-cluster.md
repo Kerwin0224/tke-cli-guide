@@ -3,7 +3,7 @@ doc_type: Quickstart
 fused: true
 ---
 
-# TKE: 5 分钟创建第一个集群
+# TKE：创建第一个托管集群
 
 > 官方文档: [TKE 产品文档](https://cloud.tencent.com/document/product/457) | 控制台: [TKE 集群创建](https://console.cloud.tencent.com/tke2/cluster/create?rid=1)
 >
@@ -14,7 +14,7 @@ fused: true
 >
 > **阅读路径**: 本文 → [TKE 概览](../tke/index.md) → [创建集群详解](../tke/clusters/create.md)
 >
-> **时间估计**: ~5 分钟（集群创建等待约 3-5 分钟）
+> **时间估计**：集群创建通常需要数分钟；实际时长受地域与后端资源影响。
 
 ---
 
@@ -100,7 +100,7 @@ tccli tke CreateCluster \
     --ClusterType MANAGED_CLUSTER \
     --ClusterBasicSettings '{
         "ClusterName": "<CLUSTER_NAME>",
-        "ClusterVersion": "1.34.1",
+        "ClusterVersion": "<K8S_VERSION>",
         "VpcId": "<VPC_ID>",
         "SubnetId": "<SUBNET_ID>",
         "ClusterLevel": "L5"
@@ -109,8 +109,6 @@ tccli tke CreateCluster \
         "ServiceCIDR": "10.100.0.0/17",
         "MaxNodePodNum": 64,
         "MaxClusterServiceNum": 32768,
-        "IgnoreClusterCIDRConflict": true,
-        "IgnoreServiceCIDRConflict": true,
         "EniSubnetIds": ["<SUBNET_ID>"]
     }' \
     --ClusterAdvancedSettings '{
@@ -136,6 +134,7 @@ tccli tke CreateCluster \
 |--------|------|------|---------|
 | `<REGION>` | 目标地域 | 如 `ap-guangzhou` | `tccli tke DescribeRegions` |
 | `<CLUSTER_NAME>` | 集群名称 | 1-60 字符，字母开头 | 自定义 |
+| `<K8S_VERSION>` | 当前地域支持的 Kubernetes 版本 | 从 Step 0 的 `DescribeVersions` 结果中选择 | `tccli tke DescribeVersions --region <REGION>` |
 | `<VPC_ID>` | VPC ID | 格式 `vpc-xxxxxxxx` | `tccli vpc DescribeVpcs --region <REGION>` |
 | `<SUBNET_ID>` | 子网 ID | 格式 `subnet-xxxxxxxx`，VPC-CNI 模式必填 | `tccli vpc DescribeSubnets --region <REGION>` |
 
@@ -202,7 +201,7 @@ tccli tke DescribeClusterStatus \
 
 > **边界**：下面维度 1–2 只证明 **托管控制面已 `Running`**。  
 > **本机 / 公网 CI 的 kubectl 不会因此自动可用**——集群创建后默认 **无访问端点**；且部分环境对 kubeconfig 默认域名 `cls-*.ccs.tencent-cloud.com` **无法解析（NXDOMAIN）**。  
-> 要在本机连 API Server，必须另走完整路径（加节点 → 开公网端点 → ACL → 用 CLB 地址改写 `server`），见下方 **「本机 kubectl 可达（必做）」** 与 [管理端点](../tke/networking/endpoints.md)。
+> 要在本机连 API Server，须另走包含 worker、端点与 ACL 的扩展路径，见下方 **「可选：让本机 kubectl 可达」** 与 [管理端点](../tke/networking/endpoints.md)。这不是完成本 Quickstart 主路径的必做条件，也不会要求用户为主路径额外增加付费 worker。
 
 | 维度 | 命令 | 预期 | 含义 |
 |:-----|:-----|:-----|:-----|
@@ -247,7 +246,7 @@ tccli tke DescribeClusterKubeconfig --region <REGION> --ClusterId <CLUSTER_ID> \
 > ⚠️ kubeconfig 含访问凭证，勿提交到 git 或公开分享。  
 > ⚠️ **不要**在未开公网端点、未确认 `ClusterExternalEndpoint` 前，把 `kubectl cluster-info` 成功当作本 Quickstart 的完成标准。
 
-### 本机 kubectl 可达（必做，若目标是本机/公网 CI 操作集群）
+### 可选：让本机 kubectl 可达（需先按节点专题添加 worker）
 
 空集群 `Running` 后，按顺序完成（**不可跳步**）。**现行唯一路径**：`CreateClusterEndpoint --IsExtranet true` → `ModifyClusterEndpointSP` → 用 `ClusterExternalEndpoint` 改写 kubeconfig `server`。  
 **禁止** `CreateClusterEndpointVip`（官方废弃）。细节与故障码：[管理端点](../tke/networking/endpoints.md)。
@@ -427,7 +426,17 @@ tccli tke DescribeClusters --region <REGION> --ClusterIds '["<CLUSTER_ID>"]' \
 {"TotalCount": 0, "Clusters": [], "RequestId": "..."}
 ```
 
-`TotalCount: 0` → 集群已删除。删除是异步的，查询可能短暂仍有记录，等几秒后 `TotalCount` 归零即确认删除完成。
+`TotalCount: 0` → 目标集群已删除。删除是异步操作；只执行一次 `DeleteCluster`，随后在查询型 `DescribeClusters` 上使用 TCCLI waiter 等待目标 ID 消失。以下等待最多 10 分钟、每 10 秒查询一次：
+
+```bash
+tccli tke DescribeClusters --region <REGION> \
+    --ClusterIds '["<CLUSTER_ID>"]' \
+    --waiter '{"expr":"TotalCount","to":0,"timeout":600,"interval":10}' \
+    --output json
+# expected: TotalCount = 0；waiter 超时则命令失败，不把删除判为成功
+```
+
+> `to` 使用 JSON 数字 `0`，与 `TotalCount` 的数值类型一致。超时后不要重复执行 `DeleteCluster`；保留首次删除返回的 `RequestId`，用 `tccli tke DescribeTasks --version 2018-05-25 --region <REGION> --ClusterId <CLUSTER_ID>` 和 `DescribeClusterStatus` 检查任务/状态，持续失败时携 RequestId 提交工单。
 
 ---
 
@@ -442,13 +451,13 @@ tccli tke DescribeClusters --region <REGION> --ClusterIds '["<CLUSTER_ID>"]' \
 | `EniSubnetIds must be set` | 检查是否传了 `EniSubnetIds` | VPC-CNI 模式缺弹性网卡子网 | 在 `ClusterCIDRSettings` 中加 `"EniSubnetIds":["<SUBNET_ID>"]` |
 | `DeleteCluster` 返回 exit 252 | 检查命令是否含 `--InstanceDeleteMode` | 缺少必填参数 `InstanceDeleteMode` | 补 `--InstanceDeleteMode terminate` 或 `retain` |
 | 删除被 API 拒绝 | `DescribeClusterStatus` 查 `ClusterDeletionProtection` | 删除保护开启中 | 先执行 `tccli tke DisableClusterDeletionProtection --region <REGION> --ClusterId <CLUSTER_ID>` |
-| 集群卡 `Creating` > 10min | `DescribeTasks --region <REGION> --ClusterId <CLUSTER_ID>` 查任务状态 | 子网 IP 不足或后端异常 | 换子网重试；若持续失败则提工单并附 `RequestId` |
+| 集群卡 `Creating` > 10min | `tccli tke DescribeTasks --version 2018-05-25 --region <REGION> --ClusterId <CLUSTER_ID>` 查任务状态 | 子网 IP 不足或后端异常 | 换子网重试；若持续失败则提工单并附 `RequestId` |
 
 ### 命令成功但状态不对 (exit = 0)
 
 | 现象 | 诊断 | 根因 | 说明 |
 |:-----|:-----|:-----|:-----|
-| 删除后 `DescribeClusters` 仍有记录 | `DescribeClusters --ClusterIds '["<CLUSTER_ID>"]' --filter "TotalCount" --output text` | 删除是异步操作，短暂窗口内列表未刷新 | 等几秒再查，`TotalCount: 0` 即确认删除（**无需等 30s**） |
+| 删除后 `DescribeClusters` 仍有记录 | `DescribeClusters --ClusterIds '["<CLUSTER_ID>"]' --filter "TotalCount" --output text` | 删除是异步操作，短暂窗口内列表未刷新 | 使用上方 10 分钟有界 waiter；超时后用 `tccli tke DescribeTasks --version 2018-05-25 ...` / `DescribeClusterStatus` 诊断并保留 RequestId |
 | 删除后 CVM 仍存在 | `tccli cvm DescribeInstances --region <REGION>` | 删除时可能用了 `--InstanceDeleteMode retain` | 手动终止残留 CVM，下次使用 `terminate` 模式 |
 | `DescribeClusterSecurity` 返回空字段 | `DescribeClusterStatus` 查 `ClusterState` | 集群非 `Running` 时端点不可用 | 等待集群 `Running` 后再查 |
 
@@ -457,18 +466,15 @@ tccli tke DescribeClusters --region <REGION> --ClusterIds '["<CLUSTER_ID>"]' \
 ## 收尾确认
 
 ```bash
-# 残留资源核查：DeleteCluster 不会自动删除 CBS 云硬盘、EIP、CLB，须手动清零
-tccli cbs DescribeDisks --region <REGION> --filter "TotalCount" --output text
-# expected: 0（或仅余与 TKE 无关的盘）→ 无 TKE 残留 CBS
-
-tccli vpc DescribeAddresses --region <REGION> --filter "TotalCount" --output text
-# expected: 0（或仅余与 TKE 无关的 EIP）→ 无 TKE 残留 EIP
-
-tccli clb DescribeLoadBalancers --region <REGION> --filter "TotalCount" --output text
-# expected: 0（或仅余与 TKE 无关的 CLB）→ 无 TKE 残留 CLB
+# 目标集群删除判据（仅限本次记录的 CLUSTER_ID）
+tccli tke DescribeClusters --region <REGION> --ClusterIds '["<CLUSTER_ID>"]' \
+  --filter "TotalCount" --output text
+# expected: 0
 ```
 
-> 集群已删（TotalCount=0）+ CBS/EIP/CLB 均清零 = 本 Quickstart 的创建→查询→删除闭环完成，无残留资源计费。
+DeleteCluster 不会自动删除所有关联资源。CBS/EIP/CLB 只能按创建阶段记录的资源 ID 或明确标签逐个核对；若本 Quickstart 的空集群未创建这些资源，则无需把账号全局存量清零。无法建立归属时，全局 `TotalCount` 只能作为人工盘点信息，不能作为本次清理通过条件，也不得据此删除无关资源。
+
+> 本 Quickstart 的闭环判据是：目标 `<CLUSTER_ID>` 查询 `TotalCount=0`，并且创建期间记录的、可归属于该集群的资源 ID 均已处理。账号内其他合法 CBS/EIP/CLB 不影响判定。
 
 ---
 

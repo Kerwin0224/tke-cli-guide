@@ -43,10 +43,10 @@ graph TD
 | 概念 | 含义 | 为什么重要 |
 |------|------|-----------|
 | Registry | TCR 企业版实例（API 术语为 Registry，tccli 命令用 `DescribeInstances` 返回 `Registries` 字段） | 镜像的顶级容器，每个实例有独立域名和存储 |
-| Namespace | 仓库的逻辑分组 | 组织镜像（如 `backend` / `frontend`），对应 K8s namespace |
+| Namespace | 仓库的逻辑分组，与 Kubernetes Namespace 是彼此独立的资源（可按团队约定同名，但不会自动关联） | 组织镜像（如 `backend` / `frontend`） |
 | Repository | 单个镜像的存储单元 | 如 `backend/api-server`，包含多个 Tag |
 | Image Tag | 镜像版本标识 | `v1.0.0` / `latest`，Tag 可被覆盖（除非开启不可变） |
-| Token | 长期访问凭证 | docker login 的密码，比临时凭证更适合 CI/CD |
+| Token | Registry 访问凭证，可按任务创建临时或长期类型 | 作为 docker login 密码；须按密钥管理，泄露后立即轮换 |
 
 ## 企业版 vs 个人版
 

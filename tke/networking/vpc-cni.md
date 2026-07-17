@@ -107,7 +107,7 @@ tccli tke EnableVpcCniNetworkType --region ap-guangzhou \
   --VpcCniType tke-route-eni \
   --EnableStaticIp true \
   --Subnets '["<SUBNET_ID>"]' \
-  --ExpiredSeconds 300
+  --ExpiredSeconds 3600
 # expected: exit 0, 返回 RequestId
 ```
 

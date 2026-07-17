@@ -5,7 +5,7 @@ fused: true
 ---
 # 边缘集群 (TKEEdge)
 
-> 创建和管理 TKE 边缘集群 —— 适合边缘计算场景的轻量级 K8s 集群。
+> 存量 TKE 边缘集群的查询、迁移与受保护清理。新建边缘场景改用标准集群 + 注册节点公网版。
 > 控制台: [容器服务 - 边缘集群](https://console.cloud.tencent.com/tke2/edge)
 >
 > 官方文档：[边缘集群下线公告](https://cloud.tencent.com/document/product/457/108732) · [边缘集群迁移至标准集群](https://cloud.tencent.com/document/product/457/110447)
@@ -44,22 +44,24 @@ fused: true
 
 ## 关键操作
 
-### 创建边缘集群（存量对照 / 禁止新建）
+### 识别旧创建脚本（禁止调用新建）
 
-> ⚠️ **禁止新建**：产品已下线，创建入口已封闭；下列命令仅供存量脚本对照与参数名核对。新边缘/IDC 需求改走标准集群 + [注册节点公网版](https://cloud.tencent.com/document/product/457/57916) / [注册节点](../nodes/registered-nodes/overview.md)。调用可能返回产品侧拒绝或 `UnsupportedRegion`。
+产品已下线，创建入口已封闭。旧脚本中的 `CreateTKEEdgeCluster` 仅用于识别待迁移资产，不得执行。历史字段为 `K8SVersion`、`VpcId`、`PodCIDR` 和 `ServiceCIDR`；新边缘/IDC 需求改走 [创建标准集群](../clusters/create.md) + [注册节点公网版](https://cloud.tencent.com/document/product/457/57916) / [注册节点](../nodes/registered-nodes/overview.md)。
 
-```bash
-tccli tke CreateTKEEdgeCluster \
-  --region <EDGE_REGION> \
-  --ClusterName "<NAME>-edge" \
-  --K8SVersion "1.28.3" \
-  --VpcId "<VPC_ID>" \
-  --PodCIDR "<POD_CIDR>" \
-  --ServiceCIDR "<SERVICE_CIDR>"
-# expected: 存量对照可能返回 { "ClusterId": "cls-xxxxxxxx" }；下线后以实际 Error.Code 为准；UnsupportedRegion → 换 <EDGE_REGION>（如 ap-beijing）
-```
+| 旧脚本字段 | 用途 | 迁移时的处理 |
+|:-----------|:-----|:-------------|
+| `ClusterName` | 旧边缘集群名称 | 用 `DescribeTKEEdgeClusters` 对照存量集群 |
+| `K8SVersion` | 旧集群 Kubernetes 版本 | 作为标准集群版本兼容性评估输入 |
+| `VpcId` | 旧集群 VPC | 核对标准集群和注册节点的网络可达性 |
+| `PodCIDR` / `ServiceCIDR` | 旧集群网段 | 迁移前检查与目标集群网段是否冲突 |
 
-> ⚠️ **参数名核对**: `CreateTKEEdgeCluster` 顶层参数是 `K8SVersion`（非 `ClusterVersion`）、`VpcId`（无 `SubnetId`，边缘集群节点通过 VPC 接入，不指定子网）。完整入参以 `tccli tke CreateTKEEdgeCluster help --detail` 为准。`ap-guangzhou` 对 Edge Action 返回 `UnsupportedRegion`，存量运维前先用 `DescribeTKEEdgeClusters --region <候选>` 探测支持地域。
+`CheckEdgeClusterCIDR` 的检查入参契约：
+
+| 字段 | 所属 Action | 必填 | 说明 |
+|:---|:---|:---:|:---|
+| `VpcId` | `CheckEdgeClusterCIDR` | 是 | 待检查网段所属 VPC |
+| `PodCIDR` | `CheckEdgeClusterCIDR` | 是 | Pod 网段 |
+| `ServiceCIDR` | `CheckEdgeClusterCIDR` | 是 | Service 网段 |
 
 ### 查询边缘集群
 
@@ -170,17 +172,30 @@ tccli tke DescribeEdgeClusterInstances --ClusterID "<CLUSTER_ID>" --region <EDGE
 
 ---
 
-## 清理
+## 清理（仅迁移后退役存量边缘集群）
+
+`DeleteTKEEdgeCluster` 仅用于完成迁移后的存量集群退役，删除不可作为迁移步骤的替代。执行前逐项确认：
+
+1. 已按官方 [迁移至标准集群](https://cloud.tencent.com/document/product/457/110447) 完成标准集群和注册节点接入。
+2. 工作负载、流量、配置、密钥及持久数据已迁移，并在目标集群完成业务验证；需要回退的数据已备份。
+3. 旧边缘节点已停止承载业务，依赖方已切换；已保留迁移回退窗口。
+4. 操作者再次核对 `<CLUSTER_ID>` 和 `<EDGE_REGION>`，并明确确认删除后不再通过该集群提供服务。
+
+仅当以上四项全部满足时，设置确认变量后执行：
 
 ```bash
-# 1. 删除边缘集群
+read -r -p "输入 DELETE 确认退役存量边缘集群 <CLUSTER_ID>: " CONFIRM
+[ "$CONFIRM" = "DELETE" ] || { printf '%s\n' "已取消删除"; exit 1; }
+
 tccli tke DeleteTKEEdgeCluster --region <EDGE_REGION> --ClusterId "<CLUSTER_ID>"
 # expected: exit 0
 
-# 2. 验证
+# 验证目标集群已不在存量列表中
 tccli tke DescribeTKEEdgeClusters --region <EDGE_REGION>
-# expected: TotalCount 减少，目标集群不在列表中
+# expected: 目标 ClusterId 不在 Clusters 中
 ```
+
+若任一迁移或业务保全条件未满足，保留存量集群并提交工单，不执行删除。
 
 ## API 参考
 
@@ -192,8 +207,8 @@ tccli tke DescribeTKEEdgeClusters --region <EDGE_REGION>
 | 查询 | `DescribeTKEEdgeClusters` / `DescribeTKEEdgeClusterStatus` | 列表/状态 |
 | 凭证 | `DescribeTKEEdgeClusterCredential` / `DescribeTKEEdgeExternalKubeconfig` | kubeconfig |
 | 节点 | `DescribeEdgeClusterInstances` / `DescribeTKEEdgeScript` / `DeleteEdgeClusterInstances` | 节点/注册脚本/删节点 |
-| Edge CVM | `CreateEdgeCVMInstances` / `DescribeEdgeCVMInstances` / `DeleteEdgeCVMInstances` | 边缘 CVM 实例 |
-| ECM | `CreateECMInstances` / `DescribeECMInstances` / `DeleteECMInstances` | 边缘计算模块实例 |
+| Edge CVM | `CreateEdgeCVMInstances`（历史对象识别，禁止新建） / `DescribeEdgeCVMInstances` / `DeleteEdgeCVMInstances` | 存量边缘 CVM 实例识别/查询/删除 |
+| ECM | `CreateECMInstances`（历史对象识别，禁止新建） / `DescribeECMInstances` / `DeleteECMInstances` | 存量边缘计算模块实例识别/查询/删除 |
 | 升级 | `DescribeEdgeClusterUpgradeInfo` / `UpdateEdgeClusterVersion` / `DescribeAvailableTKEEdgeVersion` | 版本管理 |
 | 日志 | `CreateEdgeLogConfig` / `DescribeEdgeLogSwitches` / `InstallEdgeLogAgent` / `UninstallEdgeLogAgent` | 日志采集 |
 | 其他 | `CheckEdgeClusterCIDR` | CIDR 冲突检查 |
@@ -244,56 +259,43 @@ tccli tke DescribeEdgeClusterInstances --ClusterID "<CLUSTER_ID>" --region <REGI
 # expected:  UnsupportedRegion（ap-guangzhou 不支持，需 Edge 地域）；可用时返回 TotalCount+InstanceInfoSet
 ```
 
-> ⚠️ `DescribeEdgeClusterInstances` 用大写 `ClusterID`（同 `CreateEdgeCVMInstances`/`DescribeEdgeCVMInstances`），区别于 `UpdateTKEEdgeCluster`/`DescribeAvailableTKEEdgeVersion` 等的小写 `ClusterId`——Edge 域大小写不一致是真实契约，切换接口前用 `--generate-cli-skeleton` 核对。`CheckEdgeClusterCIDR` 不绑集群（建集群前用），需 `VpcId`+`PodCIDR`+`ServiceCIDR` 三参数。
+> `DescribeEdgeClusterInstances` 用大写 `ClusterID`（同存量 `DescribeEdgeCVMInstances`），区别于 `UpdateTKEEdgeCluster`/`DescribeAvailableTKEEdgeVersion` 等的小写 `ClusterId`——Edge 域大小写不一致是真实契约，切换接口前用 `--generate-cli-skeleton` 核对。`CheckEdgeClusterCIDR` 不绑集群，历史上用于检查 `VpcId`+`PodCIDR`+`ServiceCIDR`；当前产品已下线，不得将其作为新建引导。
 
-## Edge 节点实例管理
+## 存量 Edge 节点实例管理
 
-> Edge 集群的 CVM 节点与 ECM（边缘计算模块）实例管理。⚠️ 这些 Action 用 `--ClusterID`（大写 ID），区别于其他 TKE 接口的 `--ClusterId`。
+> 本节仅用于识别、查询和迁移后清理存量 Edge CVM / ECM 对象，禁止新增实例。旧脚本可能出现 `CreateEdgeCVMInstances` 或 `CreateECMInstances`：前者历史字段包括 `ClusterID`、`RunInstancePara`、`CvmRegion`、`CvmCount`；后者包括 `ClusterID`、`ModuleId`、`ZoneInstanceCountISPSet`。这些字段只用于资产识别和迁移对照，不构成可执行的新建流程。新增边缘容量应先迁移到标准集群，再走注册节点公网版。
 
-### Edge CVM 实例
+### 查询与清理存量 Edge CVM 实例
 
 ```bash
-# 创建 Edge CVM 实例 (RunInstancePara 透传 CVM JSON, CvmRegion/CvmCount)
-tccli tke CreateEdgeCVMInstances --ClusterID "<CLUSTER_ID>" --region <REGION> \
-  --RunInstancePara "<CVM_JSON>" --CvmRegion "<CVM_REGION>" --CvmCount 1
-# expected: exit 0
-
-# 查询 Edge CVM 实例 (Filters 过滤)
+# 查询存量 Edge CVM 实例 (Filters 过滤)
 tccli tke DescribeEdgeCVMInstances --ClusterID "<CLUSTER_ID>" --region <REGION> \
   --Filters '[{"Name":"zone","Values":["<ZONE>"]}]'
-# expected: exit 0, 实例列表
+# expected: 返回存量实例列表，用于迁移盘点
 
-# 删除 Edge CVM 实例 (CvmIdSet[] 批量)
+# 仅在实例承载的工作负载、流量和数据已迁移并验证后删除
 tccli tke DeleteEdgeCVMInstances --ClusterID "<CLUSTER_ID>" --region <REGION> --CvmIdSet '["<CVM_ID>"]'
 # expected: exit 0
 
-# 删除 Edge 集群节点 (InstanceIds[], 注意此接口用 ClusterId 小写)
+# 删除存量 Edge 集群节点 (InstanceIds[]，注意此接口用 ClusterId 小写)
 tccli tke DeleteEdgeClusterInstances --ClusterId "<CLUSTER_ID>" --region <REGION> --InstanceIds '["<INSTANCE_ID>"]'
 # expected: exit 0
 ```
 
-> `CreateEdgeCVMInstances` 用 `ClusterID`（大写）+ `CvmRegion`（CVM 地域）+ `CvmCount`。`DeleteEdgeClusterInstances` 用 `ClusterId`（小写）+ `InstanceIds[]`——同域大小写不一致，切换接口时核对。
-
-### ECM 实例（边缘计算模块）
+### 查询与清理存量 ECM 实例（边缘计算模块）
 
 ```bash
-# 创建 ECM 实例 (ModuleId + ZoneInstanceCountISPSet[] 按可用区/ISP 分配)
-tccli tke CreateECMInstances --ClusterID "<CLUSTER_ID>" --region <REGION> \
-  --ModuleId "<MODULE_ID>" \
-  --ZoneInstanceCountISPSet '[{"Zone":"<ZONE>","InstanceCount":1,"ISP":"<ISP>"}]'
-# expected: exit 0
-
-# 查询 ECM 实例 (Filters 过滤)
+# 查询存量 ECM 实例 (Filters 过滤)
 tccli tke DescribeECMInstances --ClusterID "<CLUSTER_ID>" --region <REGION> \
   --Filters '[{"Name":"zone","Values":["<ZONE>"]}]'
-# expected: exit 0
+# expected: 返回存量实例列表，用于迁移盘点
 
-# 删除 ECM 实例 (EcmIdSet[] 批量)
+# 仅在实例承载的工作负载、流量和数据已迁移并验证后删除
 tccli tke DeleteECMInstances --ClusterID "<CLUSTER_ID>" --region <REGION> --EcmIdSet '["<ECM_ID>"]'
 # expected: exit 0
 ```
 
-> ECM 用 `ModuleId`（边缘计算模块 ID）+ `ZoneInstanceCountISPSet[]`（按可用区+ISP 运营商分配）。`EcmIdSet[]`/`CvmIdSet[]` 是实例 ID 数组。
+> `EcmIdSet[]` / `CvmIdSet[]` 是存量实例 ID 数组。删除前必须完成迁移盘点、业务切流、配置/密钥/持久数据保全和目标集群验证；条件不满足时保留实例并提交工单。
 
 ## 收尾确认
 
@@ -325,3 +327,9 @@ tccli tke DescribeTKEEdgeClusterCredential --region <EDGE_REGION> --ClusterId "<
 - [虚拟节点 (超级节点)](../nodes/virtual-nodes.md) — 标准集群内免 CVM 容量（先 CreateCluster）
 - [专用工作负载概览](index.md) — 边缘 / EKS / 虚拟节点选型
 - [标准集群概览](../clusters/index.md) — 对比标准集群
+
+## 精确 Action 字段契约
+
+| 字段 | 所属 Action | 必填 | 说明 |
+|:---|:---|:---:|:---|
+| `EdgeVersion` | `UpdateEdgeClusterVersion` | 是 | 目标边缘版本 |

@@ -17,8 +17,8 @@ fused: false
 | 主账号 | Root account | 腾讯云注册账号，拥有全部权限。其 API 密钥风险最高，生产环境用子账号。 |
 | 子账号 | Sub-account / CAM 用户 | 主账号下创建的用户，授予最小权限。生产/CI/CD 应使用子账号密钥。 |
 | profile | — | TCCLI 的命名配置集。一个 profile 存一组凭证+地域，用 `--profile <NAME>` 切换，支持多账号。 |
-| 地域 | Region | 腾讯云数据中心的地理区域，如 `ap-guangzhou`（广州）、`ap-shanghai`（上海）。资源不可跨地域访问。 |
-| VPC | Virtual Private Cloud | 虚拟私有云。腾讯云上逻辑隔离的网络空间，TKE 集群和 TCR 实例都部署在 VPC 内。 |
+| 地域 | Region | 腾讯云数据中心的地理区域，如 `ap-guangzhou`（广州）、`ap-shanghai`（上海）。多数资源的创建、查询和默认端点具有地域作用域；复制、同步或网络互通等跨地域能力以具体产品功能为准。 |
+| VPC | Virtual Private Cloud | 腾讯云上逻辑隔离的网络空间。TKE 节点位于用户选择的 VPC 子网；TCR 企业版是托管 Registry，可配置连接用户 VPC 的私网访问链路，不等于实例本身部署在用户 VPC 内。 |
 | 子网 | Subnet | VPC 内的 IP 地址段。TKE 节点、CVM 实例从子网分配内网 IP。 |
 | CIDR | Classless Inter-Domain Routing | 无类别域间路由，表示 IP 地址段（如 `10.0.0.0/16`）。TKE 集群的 Pod 网段、Service 网段用 CIDR 表示。 |
 | CVM | Cloud Virtual Machine | 腾讯云服务器。TKE 工作节点本质是带 K8s 组件的 CVM。 |

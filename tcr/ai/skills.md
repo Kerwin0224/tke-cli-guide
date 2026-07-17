@@ -17,7 +17,7 @@ AI Skill 是可被智能体调用的工具包，挂在企业版实例下。每�
 | `ListSkillVersions` | 列出某 Skill 的版本 | `RegistryId` + `SkillName` |
 | `DescribeSkillDetail` | 查 Skill 详情（类型/运行时/状态） | `RegistryId` + `SkillName` + `SkillVersion` |
 | `DescribeSkillDownloadInfo` | 获取预签名下载链接 | `RegistryId` + `SkillName` + `SkillVersion` |
-| `DeleteSkill` | 删除 Skill | `RegistryId`（`Items[]` 选填） |
+| `DeleteSkill` | 删除指定 Skill 版本 | `RegistryId`（调用时显式传 `Items[]` 指定目标） |
 
 ## 触发条件
 
@@ -38,12 +38,13 @@ AI Skill 是可被智能体调用的工具包，挂在企业版实例下。每�
 |:-----|:-----------|:----:|:-----|
 | `RegistryId` | 全部 | 是 | 企业版实例 ID |
 | `SearchKey` | ListSkills | 否 | 模糊查询（匹配 Skill 名） |
-| `SkillName` | ListSkills / ListSkillVersions / DescribeSkillDetail / DescribeSkillDownloadInfo / DeleteSkill.Items | 否/是 | Skill 名称；`ListSkillVersions` 及以后必填 |
+| `SkillName` | ListSkills | 否 | 可选名称筛选 |
+| `SkillName` | ListSkillVersions / DescribeSkillDetail / DescribeSkillDownloadInfo | 是 | Skill 名称 |
 | `SkillType` | ListSkills | 否 | 按类型过滤，枚举：`MCP Server` |
 | `Status` | ListSkills | 否 | 按状态过滤，枚举：`active` |
 | `Offset` / `Limit` | ListSkills / ListSkillVersions | 否 | 分页；`Limit` 默认 20 |
 | `SkillVersion` | DescribeSkillDetail / DescribeSkillDownloadInfo / DeleteSkill.Items | 是 | Skill 版本 |
-| `Items[]` | DeleteSkill | 否 | 删除项数组，每项含 `SkillName` + `SkillVersion`；省略 `Items` 视实例策略 |
+| `Items[]` | DeleteSkill | API 可选；本文调用时必传 | 删除项数组，每项含 `SkillName` + `SkillVersion`；显式指定删除目标 |
 
 ## 操作步骤
 
@@ -96,7 +97,7 @@ tccli tcr DescribeSkillDownloadInfo --region <REGION> --RegistryId <REGISTRY_ID>
 
 ### 步骤 5：删除 Skill
 
-`DeleteSkill` 通过 `Items[]` 嵌套数组删除，每项用 `SkillName` + `SkillVersion` 定位。`Items` 为选填——省略时行为以实例策略为准（建议显式传 `Items` 明确删除目标）。
+`DeleteSkill` 通过 `Items[]` 嵌套数组删除，每项用 `SkillName` + `SkillVersion` 定位。虽然 API 将 `Items` 标为可选，删除操作应显式传入 `Items`，避免删除目标不明确。
 
 ```bash
 tccli tcr DeleteSkill --region <REGION> --RegistryId <REGISTRY_ID> \
@@ -104,7 +105,7 @@ tccli tcr DeleteSkill --region <REGION> --RegistryId <REGISTRY_ID> \
 # expected: exit 0, { "RequestId": "..." }（删除成功仅返回 RequestId）
 ```
 
-> 删除不可恢复。删除后 `ListSkillVersions` / `ListSkills` 该 Skill 不再返回。删错须重新创建 Skill 内容。
+> 删除不可恢复。删除后先用 `ListSkillVersions` 确认目标版本不再返回；仅当删除的是最后一个版本时，才能进一步确认 `ListSkills` 不再返回该 Skill。
 
 ## 验证
 
@@ -117,7 +118,7 @@ tccli tcr ListSkillVersions --region <REGION> --RegistryId <REGISTRY_ID> \
 
 ## 清理
 
-> `DeleteSkill` 即清理操作（见 [步骤 5](#步骤-5删除-skill)）。删除不可逆：删错 Skill 须重新创建 Skill 内容并 push。删除前已用 `ListSkillVersions` 确认目标 `SkillVersion`。
+> `DeleteSkill` 即清理操作（见 [步骤 5](#步骤-5删除-skill)）。删除不可逆。删除前已用 `ListSkillVersions` 确认目标 `SkillVersion`。
 
 ## 故障恢复
 
@@ -133,9 +134,21 @@ tccli tcr ListSkillVersions --region <REGION> --RegistryId <REGISTRY_ID> \
 ## 收尾确认
 
 ```bash
+# 确认目标版本已删除
+# 若版本较多，请按实际总数调整 Limit 或继续翻页，避免只检查第一页
+tccli tcr ListSkillVersions --region <REGION> --RegistryId "<REGISTRY_ID>" \
+  --SkillName "<SKILL_NAME>" --Limit 100 \
+  --filter "VersionList[?Version=='<SKILL_VERSION>'].Version"
+# expected: []（目标 SkillVersion 不再返回）
+```
+
+如果删除前确认目标版本是该 Skill 的最后一个版本，可再运行：
+
+```bash
 tccli tcr ListSkills --region <REGION> --RegistryId "<REGISTRY_ID>" \
-  --SkillName "<SKILL_NAME>" --filter "TotalCount"
-# expected: TotalCount=0（删除后该 Skill 不再返回）
+  --SearchKey "<SKILL_NAME>" \
+  --filter "SkillList[?SkillName=='<SKILL_NAME>'].SkillName"
+# expected: []（仅适用于已删除最后一个版本）
 ```
 
 ## 下一步

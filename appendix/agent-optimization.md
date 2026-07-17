@@ -115,7 +115,7 @@ tccli cvm DescribeInstances --profile prod
 # 跨账号 STS 角色切换
 # expected: 假定角色成功后返回目标账号实例列表；RoleArn 无效则 AuthFailure
 tccli cvm DescribeInstances --profile master \
-  --role-arn arn:aws:sts::123456789:role/cross-account-readonly \
+  --role-arn qcs::cam::uin/100000000001:roleName/cross-account-readonly \
   --role-session-name agent-session
 ```
 

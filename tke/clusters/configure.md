@@ -106,6 +106,11 @@ tccli tke DescribeClusterAvailableExtraArgs --ClusterVersion "<VERSION>" --Clust
 # expected: exit 0, AvailableExtraArgs 按组件嵌套（KubeAPIServer/KubeControllerManager/…），项含 Name/Type/Usage/Default/Constraint；另回 ClusterVersion/ClusterType
 ```
 
+| 字段 | 类型 | 必填 | 说明 |
+|:-----|:-----|:----:|:-----|
+| `ClusterVersion` | string | 是 | 要查询可用控制面参数的 Kubernetes 版本 |
+| `ClusterType` | string | 是 | 集群类型 |
+
 ## 关键字段
 
 > 下表"必填"列按业务必需标注（不传则操作无意义或失败）；API 层 `required` 可能不同（如 `ModifyClusterTags` 的 `Tags` 与 `ModifyClusterRuntimeConfig` 的 `ClusterRuntimeConfig` 在 API 层均为选填，但业务上必须传）。
@@ -122,8 +127,9 @@ tccli tke DescribeClusterAvailableExtraArgs --ClusterVersion "<VERSION>" --Clust
 | `Operation` | ModifyClusterExtraArgsTaskState | 否 | 任务状态操作，枚举 `abort`（取消并回退任务） |
 | `ClusterCIDRs[]` | AddClusterCIDR | 是 | 新增容器网段 CIDR |
 | `DstK8SVersion` | ModifyClusterRuntimeConfig | 否 | 目标 K8s 版本 |
-| `ClusterRuntimeConfig` | ModifyClusterRuntimeConfig | 是 | RuntimeType/RuntimeVersion（API 层选填，业务必需——不传无运行时可改） |
-| `Component`/`Operation` | ModifyMasterComponent | 是 | 组件名(kube-apiserver/kube-scheduler/kube-controller-manager)/停机或恢复(shutdown/restore) |
+| `ClusterRuntimeConfig` | ModifyClusterRuntimeConfig | 否 | RuntimeType/RuntimeVersion；与 `NodePoolRuntimeConfig` 分别选择修改目标，两者均为 API 选填 |
+| `Component` | ModifyMasterComponent | 是 | 组件名（kube-apiserver/kube-scheduler/kube-controller-manager） |
+| `Operation` | ModifyMasterComponent | 是 | 停机或恢复（shutdown/restore） |
 | `DryRun` | ModifyMasterComponent | 否 | `true` 仅验证不实际变更，生产操作前先用 DryRun 试运行 |
 | `SubAccounts` | UpdateClusterKubeconfig | 否 | 子账户 Uin 列表，不传默认为调用者本人 |
 
@@ -232,6 +238,16 @@ tccli tke ModifyClusterRuntimeConfig --ClusterId "<CLUSTER_ID>" --region <REGION
 ```
 
 > `NodePoolRuntimeConfig[]` 可按节点池分别配置运行时。运行时变更滚动重建节点。`RuntimeVersion` 禁止凭印象填——先 `DescribeSupportedRuntime --K8sVersion` 取 `DefaultVersion` 或列表内版本。
+
+## 跨字段约束
+
+| `DstK8SVersion` | `ClusterRuntimeConfig` | `NodePoolRuntimeConfig` | 关系 |
+|:----------------|:-----------------------|:------------------------|:-----|
+| 目标 Kubernetes 版本 | 传则修改集群默认运行时 | 不传 | 运行时版本必须受目标 Kubernetes 版本支持 |
+| 目标 Kubernetes 版本 | 可选 | 传一个或多个节点池配置 | 各节点池运行时版本必须受目标 Kubernetes 版本支持 |
+| 目标 Kubernetes 版本 | 传 | 传 | 同一次调用分别更新集群默认值与指定节点池，不互斥；两类配置都受同一目标版本约束 |
+
+至少传 `ClusterRuntimeConfig` 或 `NodePoolRuntimeConfig` 中一个有实际修改的目标；二者同传是官方示例覆盖的合法组合，不应误判为互斥。
 
 ### 步骤 8：修改 Master 组件
 

@@ -218,16 +218,10 @@ tccli tke DescribeImages --region ap-guangzhou
 tccli tke CreateNodePool \
   --version 2022-05-01 \
   --region ap-guangzhou \
-  --cli-unfold-argument \
   --ClusterId "<CLUSTER_ID>" \
   --Name "prod-worker-pool" \
   --Type Native \
-  --Native.SubnetIds '["<SUBNET_ID>"]' \
-  --Native.InstanceTypes '["S5.LARGE8"]' \
-  --Native.InstanceChargeType POSTPAID_BY_HOUR \
-  --Native.SystemDisk '{"DiskType":"CLOUD_PREMIUM","DiskSize":100}' \
-  --Native.Scaling '{"MinReplicas":2,"MaxReplicas":5,"CreatePolicy":"ZoneEquality"}' \
-  --Native.MachineType NativeCVM \
+  --Native '{"SubnetIds":["<SUBNET_ID>"],"InstanceTypes":["S5.LARGE8"],"InstanceChargeType":"POSTPAID_BY_HOUR","SystemDisk":{"DiskType":"CLOUD_PREMIUM","DiskSize":100},"Scaling":{"MinReplicas":2,"MaxReplicas":5,"CreatePolicy":"ZoneEquality"},"MachineType":"NativeCVM","SecurityGroupIds":["<SECURITY_GROUP_ID>"]}' \
   --Labels '[
     {"Name":"env","Value":"production"},
     {"Name":"team","Value":"backend"}
@@ -301,6 +295,7 @@ tccli tke CreateClusterNodePool \
 | `<AS_GROUP_JSON>` 字段 | AS 弹性伸缩组 | 最小集：`MaxSize`/`MinSize`/`DesiredCapacity`/`VpcId`/`SubnetIds`；完整以 AS 文档 + 实际 API 错误响应为准 |
 | `<AS_LAUNCH_CONFIG_JSON>` 字段 | AS 启动配置 | 最小集：`InstanceType`/`InstanceChargeType`/`SystemDisk`/`SecurityGroupIds`；**不要**塞 CVM 专有键 |
 | `InstanceAdvancedSettings` | 节点高级设置 | **TCCLI 强制必填**，无自定义传 `{}` 或 `{"Unschedulable":0}` |
+| `NodePoolOs` | 节点操作系统 | 自定义镜像传镜像 ID；公共镜像传对应的 `osName` |
 | `EnableAutoscale` | 是否启用弹性扩缩容 | `false`=固定节点数，`true`=按 AS 规则弹性 |
 
 > **Launch 配置字段陷阱**：`LaunchConfigurePara` 是 **AS 启动配置** 契约，不是完整 `cvm RunInstances`。传入 `HostName`、`InstanceName` 等 CVM 键 → `FailedOperation.AsCommon` / `UnknownParameter`。用 `tccli as CreateLaunchConfiguration --generate-cli-skeleton` 或按实际 API 报错字段名收敛，勿凭 CVM 习惯填。
@@ -361,9 +356,9 @@ tccli tke RemoveNodeFromNodePool --ClusterId "<CLUSTER_ID>" --region <REGION> \
   --NodePoolId "<NODEPOOL_ID>" --InstanceIds '["<INSTANCE_ID>"]'
 # expected: exit 0
 
-# 设置节点池节点保护 (防止缩容时驱逐, InstanceIds[] 指定节点)
+# 设置节点池节点保护（防止缩容时移出；InstanceIds[] 指定节点）
 tccli tke SetNodePoolNodeProtection --ClusterId "<CLUSTER_ID>" --region <REGION> \
-  --NodePoolId "<NODEPOOL_ID>" --InstanceIds '["<INSTANCE_ID>"]' --Protected true
+  --NodePoolId "<NODEPOOL_ID>" --InstanceIds '["<INSTANCE_ID>"]' --ProtectedFromScaleIn true
 # expected: exit 0
 
 # 修改节点池机型 (InstanceTypes[] 机型列表, 滚动变更)
@@ -372,7 +367,7 @@ tccli tke ModifyNodePoolInstanceTypes --ClusterId "<CLUSTER_ID>" --region <REGIO
 # expected: exit 0
 ```
 
-> `AddNodeToNodePool` 把已存在节点（非新建）加入节点池；`RemoveNodeFromNodePool` 移出节点池但保留在集群（不销毁 CVM）。`SetNodePoolNodeProtection` 的 `Protected=true` 防止缩容驱逐（与 [扩缩容](nodepool-scale.md) 配合）。`ModifyNodePoolInstanceTypes` 变更机型会滚动重建节点。
+> `AddNodeToNodePool` 把已存在节点（非新建）加入节点池；`RemoveNodeFromNodePool` 移出节点池但保留在集群（不销毁 CVM）。`SetNodePoolNodeProtection` 的 `ProtectedFromScaleIn=true` 防止节点在手动或自动缩容时被伸缩组移出（与 [扩缩容](nodepool-scale.md) 配合）；设为 `false` 可解除保护。`ModifyNodePoolInstanceTypes` 变更机型会滚动重建节点。
 
 ## 收尾确认
 
@@ -398,3 +393,10 @@ tccli tke DescribeNodePools --version 2022-05-01 --region ap-guangzhou \
 - [扩缩容节点池](nodepool-scale.md) — 调整节点数量
 - [节点运维](instance-ops.md) — 查询/启动/停止/重启节点
 - [配置网络](../networking/index.md) — 管理集群访问端点
+
+## 精确 Action 字段契约
+
+| 字段 | 所属 Action | 必填 | 说明 |
+|:---|:---|:---:|:---|
+| `InstanceTypes` | `ModifyNodePoolInstanceTypes` | 是 | 目标机型列表 |
+| `ProtectedFromScaleIn` | `SetNodePoolNodeProtection` | 是 | 是否保护节点免于缩容 |

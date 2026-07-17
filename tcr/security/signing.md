@@ -13,7 +13,7 @@ fused: false
 
 - `tccli tcr DescribeInstances --Registryids '["<ID>"]'` 返回 `RegistryType: premium` 且需镜像完整性校验（合规/安全要求镜像不可篡改）
 - `tccli kms ListKeys` 有可用签名密钥但镜像未签名，拉取侧 TKE 验签准入控制器拒绝未签名镜像
-- `tccli tcr CreateSignature` 报 `ResourceNotFound`（签名策略未创建）或 `UnsupportedOperation`（实例非 premium）
+- `tccli tcr CreateSignature` 无法发起签名：先确认签名策略已创建，且实例为 premium
 
 
 ## 概述
@@ -31,8 +31,8 @@ fused: false
 > 签名是 **premium（高级版）** 专属；basic/standard 不支持。
 >
 > **前提**：
-> - KMS 密钥用途须为 **非对称签名验签**，算法 **RSA_2048**（其他用途/算法不可用于本功能）
-> - 建议 KMS 密钥与 TCR 实例**同地域**（可跨地域，跨地域有额外开销）
+> - KMS 密钥用途须为 **非对称签名验签**，算法仅支持 **RSA_2048**（SM2 及其他算法不可用于本功能）
+> - TCR 可读取 KMS 全地域的用户密钥；`KmsRegion` 必须填写密钥的实际地域。密钥可与 TCR 实例跨地域，但为降低跨地域通信开销，建议同地域部署
 > - 服务角色 `TCR_QCSRole` 须关联 **QcloudKMSFullAccess**（或等价 KMS 权限），否则签名失败——见下 [服务角色（TCR/KMS）](#服务角色tcrkms)
 > - **单个命名空间仅一条**签名策略
 
@@ -53,8 +53,8 @@ tccli tcr DescribeInstances --region <REGION> --Registryids '["<REGISTRY_ID>"]' 
 ### 资源检查
 
 ```bash
-# 确认 KMS 密钥存在
-tccli kms ListKeys --region <REGION> --filter "Keys[].{id:KeyId,alias:Alias}" --output text
+# 列出 KMS 密钥 ID；ListKeys 不返回别名，需确认单个密钥详情时使用 DescribeKey
+tccli kms ListKeys --region <REGION> --filter "Keys[].KeyId" --output text
 # expected: 含目标 KMS 密钥 ID
 ```
 
@@ -86,17 +86,19 @@ tccli cam AttachRolePolicy \
 
 > 完整入参以 `tccli tcr CreateSignaturePolicy help --detail` 为准。
 
-| 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
-|:------|------|:--------:|------------|---------------|
-| RegistryId | string | 是 | `tcr-xxxxxxxx` | `ResourceNotFound` |
-| Name | string | 是 | 策略名，实例内唯一 | `InvalidParameter` |
-| NamespaceName | string | 是 | 命名空间名 | `ResourceNotFound` |
-| KmsId | string | 是 | KMS 密钥 ID | `ResourceNotFound` |
-| KmsRegion | string | 是 | KMS 密钥地域 | `InvalidParameterValue` |
-| Domain | string | 否 | 自定义签名域名 | `InvalidParameterValue` |
-| Disabled | boolean | 否 | 是否禁用策略 | — |
+| 字段 | 类型 | 必填 | 约束 |
+|:------|------|:--------:|------------|
+| RegistryId | string | 是 | `tcr-xxxxxxxx`，且实例须为 premium |
+| Name | string | 是 | 策略名，实例内唯一 |
+| NamespaceName | string | 是 | 已存在的命名空间名 |
+| KmsId | string | 是 | 已存在、用途及算法符合要求的 KMS 密钥 ID |
+| KmsRegion | string | 是 | KMS 密钥实际所属地域 |
+| Domain | string | 否 | 自定义签名域名；为空时使用 TCR 实例默认域名 |
+| Disabled | boolean | 否 | 是否禁用策略 |
 
-> `KmsId` 须先在 KMS 服务创建非对称签名密钥（如 SM2/RSA）。`KmsRegion` 是 KMS 密钥所在地域，须与实例地域一致或可跨地域。
+> 接口归档仅证明 `FailedOperation.DependenceError`、`InternalError.ErrorTcrUnauthorized`、`InvalidParameter.ErrorTcrInvalidParameter` 和 `UnsupportedOperation` 等接口级边界，未给出字段到错误码的一一映射；排障时应结合响应中的完整错误码和 `RequestId` 定位。
+
+> `KmsId` 须先在 KMS 创建用途为“非对称签名验签”、算法为 `RSA_2048` 的用户密钥；TCR 镜像签名不支持 SM2。`KmsRegion` 填写该密钥的实际地域，不要求与 TCR 实例地域一致；跨地域可用，但会增加跨地域通信开销。
 
 ## 操作步骤
 
@@ -104,10 +106,9 @@ tccli cam AttachRolePolicy \
 
 #### 为什么用 KMS 托管密钥
 
-- **KMS 托管（推荐）**: 密钥在 KMS 服务管理，自动轮转，权限可控
-- **自带证书**: 手动管理证书，易泄露，不推荐
-- **默认推荐**: KMS 托管 SM2（国密）或 RSA 密钥
-- **可修改**： 策略创建后可 `ModifySignaturePolicy`（如存在）改密钥，已签名镜像不受影响
+- **KMS 托管**: 镜像签名策略使用 KMS 用户密钥，密钥权限由 KMS/CAM 管理
+- **算法要求**: KMS 托管的 `RSA_2048` 非对称签名验签密钥；本功能不支持 SM2
+- **变更密钥**: 当前 TCR API 未提供 `ModifySignaturePolicy`；需要更换密钥时，先评估删除策略会清除存量签名信息的影响，再重新创建策略
 
 ### 步骤 2：创建签名策略
 
@@ -116,7 +117,7 @@ tccli tcr CreateSignaturePolicy --region <REGION> \
   --RegistryId "<REGISTRY_ID>" --Name "<POLICY_NAME>" \
   --NamespaceName "<NAMESPACE_NAME>" \
   --KmsId "<KMS_KEY_ID>" --KmsRegion "<REGION>"
-# expected: exit 0, 返回策略 ID
+# expected: exit 0，返回 RequestId
 ```
 
 | 占位符 | 含义 | 约束 | 如何获取 |
@@ -139,26 +140,25 @@ tccli tcr CreateSignature --region <REGION> \
 
 ### 步骤 4：验证
 
-> ⚠️ TCR 无 `DescribeSignaturePolicies` 接口查询签名策略——通过控制台查看，或用 `CreateSignature` 成功（exit 0、无策略缺失类错误）确认策略存在。
+> TCR API 无 `DescribeSignaturePolicies` 接口。请在控制台的**命名空间**页面查看是否启用加签策略，并在**镜像仓库 > 版本管理**查看具体镜像的签名状态。`CreateSignature` 的成功响应只表示该请求被服务端成功处理，不能单独证明后续验签一定成功。
 
 ```bash
-# 验证签名已生成：DescribeSignature 个人版无此接口，企业版用控制台查看；
-# CreateSignature 成功（exit 0）可确认签名策略有效且签名已生成
+# 对存量镜像发起手动签名；随后在控制台“镜像仓库 > 版本管理”查看签名状态
 tccli tcr CreateSignature --region <REGION> \
   --RegistryId "<REGISTRY_ID>" --NamespaceName "<NAMESPACE_NAME>" \
   --RepositoryName "<REPOSITORY_NAME>" --ImageVersion "<TAG>"
-# expected: exit 0（重复签名不报错，策略有效）
+# expected: exit 0；签名状态仍以控制台“镜像仓库 > 版本管理”为准
 ```
 
 | 维度 | 命令 | 预期 |
 |:-----|:-----|:-----|
-| 策略存在 | 再次 `CreateSignature` 不报策略缺失类错误 | 无策略相关 `ResourceNotFound`（`CreateSignature` **无** `--DryRun` 参数） |
-| 签名成功 | `CreateSignature` | exit 0 |
-| 证书未过期 | KMS 密钥状态 `Enabled` | `tccli kms DescribeKey --KeyId "<KMS_KEY_ID>"` → `KeyMetadata.KeyState` |
+| 策略已启用 | 控制台**命名空间**页面 | 显示已开启加签策略 |
+| KMS 密钥状态 | `tccli kms DescribeKey --KeyId "<KMS_KEY_ID>"` | `KeyMetadata.KeyState=Enabled` |
+| TCR 镜像签名状态 | 控制台**镜像仓库 > 版本管理** | 目标镜像显示签名状态 |
 
 ## 清理
 
-> **副作用警告**：删除签名策略不影响已签名镜像的签名（签名是镜像的附属数据）。但新镜像无法再按该策略签名。
+> **副作用警告**：官方文档明确说明，删除签名策略会同时删除该命名空间内的存量镜像签名信息，可能导致签名验证失败。删除前应确认该命名空间不再依赖这些签名。
 
 ```bash
 # 删除签名策略（按命名空间，单命名空间仅一条策略；无 --PolicyName 参数）
@@ -173,39 +173,33 @@ tccli tcr DeleteSignaturePolicy --region <REGION> \
 
 | 现象 | 诊断 | 根因 | 修复 |
 |:--------|:----------|:------------|:-----|
-| `ResourceNotFound` (KmsId) | `tccli kms ListKeys` | KMS 密钥不存在 | 先在 KMS 创建签名密钥 |
-| `UnsupportedOperation` | `DescribeInstances` 看规格 | 实例非 premium | 升级到 premium 或换实例 |
-| `ResourceNotFound` (Namespace) | `DescribeNamespaces` 核对 | 命名空间不存在 | 先 `CreateNamespace` |
-| `InvalidParameterValue.KmsRegion` | 核对地域 | KmsRegion 与密钥实际地域不符 | 用密钥所在地域 |
-| `UnauthorizedOperation` | 查用户 CAM + `ListAttachedRolePolicies --RoleName TCR_QCSRole` | 用户无 KMS 权限，或服务角色未挂 KMS 策略 | 用户侧授予 `kms:SignByAsymmetricKey`；服务侧见 [服务角色（TCR/KMS）](#服务角色tcrkms) |
+| 返回 `InvalidParameter.ErrorTcrInvalidParameter` | 按关键字段表逐项核对请求 | TCR 请求参数无效；接口未公布具体字段映射 | 修正参数后重试；仍失败时携带 `RequestId` 定位 |
+| 返回 `UnsupportedOperation` | `DescribeInstances` 查看规格 | 当前实例或操作不支持镜像签名 | 确认实例为 premium；若仍失败，携带 `RequestId` 定位 |
+| 返回 `FailedOperation.DependenceError` | `DescribeKey` 核对密钥，并检查服务角色策略 | KMS 等依赖服务异常 | 确认密钥可用且服务角色具备 KMS 权限后重试 |
+| 返回 `InternalError.ErrorTcrUnauthorized` | 查用户 CAM + `ListAttachedRolePolicies --RoleName TCR_QCSRole` | TCR 操作未获授权 | 补齐用户侧权限；服务侧见 [服务角色（TCR/KMS）](#服务角色tcrkms) |
 
 ### 命令成功但状态不对 (exit = 0)
 
 | 现象 | 诊断 | 根因 | 修复 |
 |:--------|:----------|:------------|:-----|
-| 策略创建但签名失败 | `CreateSignature` 错误码 | KMS 密钥类型非签名类型 | 用 SM2/RSA 签名密钥 |
+| 策略创建但签名失败 | `CreateSignature` 错误码 | KMS 密钥用途或算法不符合要求 | 改用用途为“非对称签名验签”、算法为 `RSA_2048` 的 KMS 用户密钥 |
 | 签名成功但验签失败 | TKE 侧验签配置 | 验签策略未在 TKE 集群配置 | 在 TKE 集群配置镜像验签 |
-| 证书过期 | `tccli kms ListKeys` 看密钥状态 | KMS 密钥被禁用或过期 | 启用密钥或换新密钥 |
+| KMS 密钥未启用 | `tccli kms DescribeKey --KeyId "<KMS_KEY_ID>"` 查看 `KeyMetadata.KeyState` | KMS 用户密钥未处于受支持的启用状态 | 启用受支持的 KMS 用户密钥，或改用处于 `Enabled` 状态且符合签名要求的密钥 |
 
 > 签名涉及 TCR + KMS 跨产品。TCR 无查询签名策略的 API，管理主要靠控制台。
 
 ## 收尾确认
 
+汇总确认以下三项：
+- 在控制台**命名空间**页面确认加签策略已开启。
+- 在控制台**镜像仓库 > 版本管理**确认目标镜像的签名状态；策略创建前已存在的镜像需要手动触发签名。
+- `tccli kms DescribeKey` 可确认 KMS 密钥状态，但密钥为 `Enabled` 不能替代 TCR 镜像签名状态或 TKE 验签结果。
+
 ```bash
-# 汇总核对：签名策略有效 + 签名已生成 + KMS 密钥可用（TCR 无 DescribeSignaturePolicies，用 CreateSignature exit 0 确认策略有效）
-# 签名命令成功 = 策略有效 + 签名已生成（字段名 RepositoryName/ImageVersion，非 RepoName/Tag）
-tccli tcr CreateSignature --region <REGION> \
-  --RegistryId "<REGISTRY_ID>" --NamespaceName "<NAMESPACE_NAME>" \
-  --RepositoryName "<REPOSITORY_NAME>" --ImageVersion "<TAG>"
-# expected: exit 0（重复签名不报错，策略有效）
-
-# KMS 密钥未禁用（签名密钥可用）
-tccli kms DescribeKey --region <REGION> --KeyId "<KMS_KEY_ID>" \
+tccli kms DescribeKey --region <KMS_REGION> --KeyId "<KMS_KEY_ID>" \
   --filter "KeyMetadata.{id:KeyId,state:KeyState,usage:KeyUsage}"
-# expected: state=Enabled, usage 含签名用途（state=Enabled 密钥可用，签名验签才有效；Disabled/PendingDelete 密钥不可用）
+# expected: state=Enabled；再按上面的控制台检查确认镜像签名状态
 ```
-
-> CreateSignature exit 0（策略有效+签名已生成）+ KMS 密钥 Enabled（密钥可用）= 签名配置完成，镜像可被验签。密钥禁用后已签名镜像仍可验签，但新镜像无法再签名。
 
 ---
 

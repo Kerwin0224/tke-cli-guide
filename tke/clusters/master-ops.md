@@ -100,11 +100,11 @@ tccli tke DescribeClusters --region <REGION> --ClusterIds '["<CLUSTER_ID>"]' --v
 | ScaleInMasters[].NodeRole | string | 是 | `MASTER` / `ETCD` / `MASTER_ETCD`（缩容时可区分三角色） | `InvalidParameterValue` |
 | ScaleInMasters[].InstanceDeleteMode | string | 是 | `terminate`（销毁 CVM，仅按量计费）/ `retain`（仅移除，保留 CVM） | `InvalidParameterValue` |
 
-> ⚠️ **缩容不可破坏 etcd 多数派**：`MASTER_ETCD` 节点缩容后剩余数量必须仍构成 etcd 多数派（≥3 且为奇数），否则集群控制面不可用。缩容前核对剩余 Master 数。
+> ⚠️ **缩容不可破坏 etcd 多数派**：N 个健康成员的多数派为 `floor(N/2)+1`；健康成员少于该数时控制面不可用。生产通常推荐保留 ≥3 个奇数成员，因为偶数成员通常不增加可容忍故障数（例如 3 与 4 个成员都只能容忍 1 个故障），但偶数本身不等于多数派已失效。缩容前核对剩余健康 Master/etcd 成员数。
 
 ## 操作步骤
 
-> ⚠️ **高危操作**：Master 扩缩影响集群稳定性；缩容破坏 etcd 多数派（剩余<3或偶数）会导致集群控制面不可用；缩容前确认节点角色与负载。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
+> ⚠️ **高危操作**：Master 扩缩影响集群稳定性；缩容后健康 etcd 成员少于 `floor(N/2)+1` 会导致控制面不可用；偶数成员通常不增加容错数，但并非天然不可用。缩容前确认节点角色、健康状态与负载。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
 
 ### 步骤 1：决策 — 扩还是缩，缩哪个
 
@@ -183,7 +183,7 @@ tccli tke ScaleInClusterMaster --region <REGION> \
 |:-------|:-----|:-----|:---------|
 | `<INSTANCE_ID>` | 待缩容 Master CVM ID | `ins-xxxxxxxx`，须当前 Master | `tccli cvm DescribeInstances --region <REGION>` 按集群标签过滤，或控制台 Master 节点列表 |
 
-> `InstanceDeleteMode=terminate` 销毁 CVM（仅按量计费）；`retain` 仅从集群移除保留 CVM（包年包月必须 retain）。缩容前确认剩余 Master ≥3 且为奇数。
+> `InstanceDeleteMode=terminate` 销毁 CVM（仅按量计费）；`retain` 仅从集群移除保留 CVM（包年包月必须 retain）。缩容前按 `floor(N/2)+1` 核对剩余健康成员仍能形成多数派；生产通常选择 ≥3 个奇数成员，避免偶数成员不增加容错数。
 
 ### 步骤 4：验证
 
@@ -206,7 +206,7 @@ tccli tke DescribeClusterStatus --region <REGION> --filter "ClusterStatusSet[?Cl
 | 维度 | 命令 | 预期 |
 |:-----|:-----|:-----|
 | 集群状态 | `DescribeClusterStatus` → `ClusterState` | `MasterScaling` → `Running` |
-| Master 数量 | `tccli tke DescribeClusters --version 2018-05-25 --ClusterIds '["<CLUSTER_ID>"]' --filter "Clusters[0].{master:ClusterMaterNodeNum,etcd:ClusterEtcdNodeNum}"`（独立集群 Master 数在 `ClusterMaterNodeNum`/`ClusterEtcdNodeNum` 字段，不在 `DescribeClusterInstances` 工作节点列表，`ClusterRunningNodeNum` 仅计工作节点） | 扩容后增加，缩容后减少，且 ≥3 奇数 |
+| Master 数量 | `tccli tke DescribeClusters --version 2018-05-25 --ClusterIds '["<CLUSTER_ID>"]' --filter "Clusters[0].{master:ClusterMaterNodeNum,etcd:ClusterEtcdNodeNum}"`（独立集群 Master 数在 `ClusterMaterNodeNum`/`ClusterEtcdNodeNum` 字段，不在 `DescribeClusterInstances` 工作节点列表，`ClusterRunningNodeNum` 仅计工作节点） | 扩容后增加，缩容后减少；健康成员数须达到多数派，生产通常采用 ≥3 个奇数成员 |
 | etcd 健康 | 集群 `Running` 后 `kubectl get nodes`（用 kubeconfig） | 所有 Master 节点 Ready |
 | 集群可用性 | `kubectl get --raw='/healthz'` 或 `kubectl get pods -n kube-system`（`kubectl get cs` 在 K8s 1.19+ 已弃用，1.34 集群不返回） | 控制面健康 |
 
@@ -236,28 +236,27 @@ tccli tke DescribeClusterStatus --region <REGION> --filter "ClusterStatusSet[?Cl
 | 现象 | 诊断 | 根因 | 修复 |
 |:--------|:----------|:------------|:-----|
 | 长时间停在 `MasterScaling` | `tccli tke DescribeClusterStatus` + `kubectl get nodes` | 新 Master 加入 etcd 集群卡住 / CVM 初始化失败 | 查新节点 CVM 状态，必要时 `ScaleIn` 回滚新增节点 |
-| 缩容后 etcd 不可用 | `kubectl get --raw='/healthz'` 或 `kubectl get nodes` 看节点 Ready | 缩容破坏了 etcd 多数派（剩余 Master <3 或偶数） | 立即 `ScaleOutClusterMaster` 扩回节点恢复多数派 |
+| 缩容后 etcd 不可用 | `kubectl get --raw='/healthz'` 或 `kubectl get nodes` 看节点 Ready | 健康成员少于 `floor(N/2)+1`，无法形成多数派 | 立即 `ScaleOutClusterMaster` 扩回节点恢复多数派 |
 | 扩容后 Master 数未增加 | `DescribeClusterStatus` 节点计数 | CVM 创建成功但加入集群失败 | 查 CVM 是否 running，`kubectl get nodes` 看是否 Ready |
 | 缩容 `retain` 后 CVM 仍在计费 | `tccli cvm DescribeInstances` | `retain` 仅移出集群不销毁 CVM | 手动 `tccli cvm TerminateInstances --InstanceIds '["<ID>"]'`（按量计费） |
 
-> etcd 多数派破坏是最严重故障——缩容必须保留 ≥3 且奇数个 `MASTER_ETCD` 节点。生产环境缩容前先扩后缩（扩新节点 → 确认加入 → 缩旧节点），全程保持多数派。
+> etcd 多数派丢失是最严重故障——缩容后健康成员必须不少于 `floor(N/2)+1`。生产环境通常先扩后缩（扩新节点 → 确认加入 → 缩旧节点），并优先保持 ≥3 个奇数成员；偶数成员并非不可用，但通常不增加可容忍故障数。
 
 ## 收尾确认
 
 ```bash
-# Master/etcd 节点数核对奇数 ≥3（etcd 多数派安全红线；仅查 ClusterState 不够，还须核对节点数与多数派）
+# Master/etcd 节点数核对（生产通常采用 ≥3 个奇数成员；可用性以健康成员是否达到多数派为准）
 tccli tke DescribeClusters --region <REGION> --ClusterIds '["<CLUSTER_ID>"]' --version 2018-05-25 \
   --filter "Clusters[0].{master:ClusterMaterNodeNum,etcd:ClusterEtcdNodeNum}"
-# expected: master/etcd 数量为奇数且 ≥3（如 3/3 或 5/5）→ etcd 多数派安全，扩缩容闭环完成
+# expected: master/etcd 数量与计划一致；生产通常为 3/3 或 5/5，偶数成员需理解其通常不增加容错数
 
-# etcd 多数派安全证明：剩余 MASTER_ETCD 节点数 N，quorum = (N//2)+1，须 N 为奇数 ≥3
-# 3 节点 quorum=2（容忍 1 故障）；5 节点 quorum=3（容忍 2 故障）。偶数 N（如 4）不提升容错且破坏选举，禁止
+# etcd 多数派：N 个成员的 quorum = (N//2)+1；例如 3 节点 quorum=2、4 节点 quorum=3，二者都容忍 1 个故障；5 节点 quorum=3，容忍 2 个故障
 tccli tke DescribeClusterInstances --region <REGION> --version 2018-05-25 --ClusterId "<CLUSTER_ID>" --InstanceRole MASTER \
   --filter "InstanceSet[].{id:InstanceId,role:InstanceRole}" --output text
-# expected: 列出的 Master 节点数与 ClusterMaterNodeNum 一致，且为奇数
+# expected: 列出的 Master 节点数与 ClusterMaterNodeNum 一致；结合健康成员数判断是否达到 quorum
 ```
 
-> `ClusterState=Running`（步骤 4 已核）+ Master 数奇数 ≥3 = 扩缩容闭环完成。**etcd 多数派是本文核心安全红线**——缩容破坏多数派会导致集群控制面不可用（etcd 读写仲裁失败）。缩容前核对剩余节点数，生产环境先扩后缩全程保持多数派。`retain` 模式保留的 CVM 须到 CVM 侧手动销毁（下一步做计费清理），见 [§清理](#清理)。
+> `ClusterState=Running`（步骤 4 已核）+ 健康 Master/etcd 成员达到 `floor(N/2)+1` 多数派 = 扩缩容闭环完成。生产通常保留 ≥3 个奇数成员；4 个健康成员仍可形成多数派并容忍 1 个故障，只是相较 3 个成员没有提高容错数。`retain` 模式保留的 CVM 须到 CVM 侧手动销毁（下一步做计费清理），见 [§清理](#清理)。
 
 ## 下一步
 

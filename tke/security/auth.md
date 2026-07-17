@@ -45,9 +45,12 @@ fused: false
 ### kubeconfig 获取与轮转
 
 ```bash
-# 获取 kubeconfig（返回完整 kubeconfig YAML）
-tccli tke DescribeClusterKubeconfig --region <REGION> --ClusterId "<CLUSTER_ID>" > kubeconfig.yaml
-# expected: kubeconfig 文件生成，含 apiVersion/clusters/contexts/users
+# 获取 kubeconfig（响应含 Kubeconfig 与 RequestId，须提取 YAML 叶字段）
+tccli tke DescribeClusterKubeconfig --region <REGION> --ClusterId "<CLUSTER_ID>" \
+  --filter "Kubeconfig" --output text > kubeconfig.yaml
+# expected: kubeconfig 文件生成，首个顶层键为 apiVersion，并含 clusters/contexts/users
+kubectl --kubeconfig kubeconfig.yaml get nodes
+# expected: 返回节点列表
 ```
 
 ```bash
@@ -56,7 +59,7 @@ tccli tke UpdateClusterKubeconfig --region <REGION> --ClusterId "<CLUSTER_ID>"
 # expected: exit 0, 重新 DescribeClusterKubeconfig 获取新凭证
 ```
 
-> `DescribeClusterKubeconfig` 响应字段 `Kubeconfig` 含完整 YAML，重定向到文件即可用 `kubectl --kubeconfig kubeconfig.yaml get nodes`。
+> `DescribeClusterKubeconfig` 响应同时包含 `Kubeconfig` 与 `RequestId`；必须用 `--filter "Kubeconfig" --output text` 只提取完整 YAML，再重定向供 `kubectl --kubeconfig kubeconfig.yaml get nodes` 使用。
 
 ### 集群访问 Token 轮转
 
@@ -164,8 +167,11 @@ tccli tke ModifyClusterAuthenticationOptions --region <REGION> \
   --ClusterId "<CLUSTER_ID>" --ServiceAccounts '{"UseTKEDefault":true}'
 # expected: exit 0
 
-# kubeconfig 旧文件覆盖（轮转后旧凭证失效，用新文件）
-tccli tke DescribeClusterKubeconfig --region <REGION> --ClusterId "<CLUSTER_ID>" > kubeconfig.yaml
+# 获取轮转后的新 kubeconfig（旧凭证失效）
+tccli tke DescribeClusterKubeconfig --region <REGION> --ClusterId "<CLUSTER_ID>" \
+  --filter "Kubeconfig" --output text > kubeconfig.yaml
+kubectl --kubeconfig kubeconfig.yaml get nodes
+# expected: YAML 首个顶层键为 apiVersion，且返回节点列表
 ```
 
 ## 故障恢复

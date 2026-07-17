@@ -25,7 +25,7 @@ fused: true
 | 保留最新 N 个 | `latestPushedK` | 保留最近推送的 N 个版本 | `10` |
 | 保留最近 N 天 | `nDaysSinceLastPush` | 保留 N 天内推送的版本 | `30` |
 
-> 规则作用于命名空间级别（`NamespaceId`）。**单个命名空间暂只能创建一条**保留规则。规则创建后按 `CronSetting` 定时执行，也可 `CreateTagRetentionExecution` 手动触发。创建后**不可修改**生效的命名空间。
+> 规则作用于命名空间级别（`NamespaceId`）。**单个命名空间暂只能创建一条**保留规则。规则创建后按 `CronSetting` 定时执行，也可 `CreateTagRetentionExecution` 手动触发；可用 `ModifyTagRetentionRule` 修改规则内容，但不能把已有规则迁移到其他命名空间。
 
 > **删除边界**：版本保留删除的是**镜像版本信息**，**不删除**底层镜像层数据；要释放 COS 空间须再执行 GC / 制品清理（见 [生命周期概览](index.md)）。
 >
@@ -99,6 +99,15 @@ tccli tcr ModifyTagRetentionRule --region <REGION> \
 > `ModifyTagRetentionRule` 用 `RetentionId`（整数，来自 `DescribeTagRetentionRules`）定位规则，`RetentionRule`/`CronSetting` 覆盖式更新。`NamespaceId` 仍需传（规则绑命名空间）。改后用 `DescribeTagRetentionRules` 确认新值，或 `CreateTagRetentionExecution` 手动触发验证效果。
 
 ### 步骤 2：创建保留规则
+
+## 跨字段约束
+
+| Action | `NamespaceId` | `CronSetting` | `RetentionRule` | `AdvancedRuleItems` | 关系 |
+|:-------|:--------------|:--------------|:----------------|:--------------------|:-----|
+| `CreateTagRetentionRule` | 必填 | 必填 | 可单独传基本策略 | 可单独传或与基本策略同传 | 两类策略同传时高级策略优先，不是互斥 |
+| `ModifyTagRetentionRule` | 必须传原命名空间 ID | 必须传原周期设置 | 可更新基本策略 | 可更新高级策略 | 修改采用覆盖式入参；两类策略同传时仍由高级策略优先 |
+
+`ModifyTagRetentionRule` 还需用 `RetentionId` 定位原规则。`NamespaceId` 和 `CronSetting` 的“传原值”要求是修改依赖，不代表它们与策略字段互斥。
 
 `CreateTagRetentionRule` 必传 `RegistryId`/`NamespaceId`/`CronSetting`；`RetentionRule` 为常用可选对象（命名空间级全仓库时传 `{Key,Value}`，高级过滤用 `AdvancedRuleItems`）。按场景**二选一**：A 最小化（命名空间级全仓库）或 B 增强（按仓库过滤）。
 
@@ -260,7 +269,7 @@ tccli tcr DescribeWebhookTriggerLog --RegistryId "<REGISTRY_ID>" --Namespace "<N
 # 创建 GC 任务（RegistryId + GCParameters 嵌套配置；建议先 Dryrun=true 预览）
 # 字段名是 Dryrun（全小写 r），非 DryRun
 tccli tcr CreateGCJob --RegistryId "<REGISTRY_ID>" --region <REGION> \
-  --GCParameters '{"Dryrun":false}'
+  --GCParameters '{"Dryrun":true}'
 # expected: exit 0，返回 {"RequestId":"..."}（无 JobId 字段，任务用 DescribeGCJobs 查 Jobs[] 状态）
 ```
 
@@ -318,3 +327,11 @@ tccli tcr DescribeImages --region <REGION> --RegistryId "<REGISTRY_ID>" \
 - [管理命名空间和仓库](../repositories/manage.md) — 创建命名空间
 - [推送拉取镜像](../images/push-pull.md) — 手动删除单个版本
 - [故障排查](../troubleshooting.md) — 规则不生效诊断
+
+## 精确 Action 字段契约
+
+| 字段 | 所属 Action | 必填 | 说明 |
+|:---|:---|:---:|:---|
+| `CronSetting` | `CreateTagRetentionRule` | 是 | 执行周期 |
+| `NamespaceId` | `ModifyTagRetentionRule` | 是 | 命名空间 ID 原值 |
+| `CronSetting` | `ModifyTagRetentionRule` | 是 | 执行周期原值 |

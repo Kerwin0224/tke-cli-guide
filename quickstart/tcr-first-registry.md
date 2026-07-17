@@ -33,7 +33,7 @@ fused: true
 
 | # | 条件 | 验证命令 | 预期结果 |
 |:--|:-----|:--------|:---------|
-| 1 | TCCLI 已安装 (>= 3.0) | `tccli --version` | 最新版本或更高 |
+| 1 | TCCLI 已安装 (>= 3.0) | `tccli --version` | 输出 `3.x.x` 版本号 |
 | 2 | 凭证已配置 | `tccli tcr DescribeRegions` | 返回 `"RequestId"`，无 Error |
 | 3 | 目标地域可用 | `tccli tcr DescribeRegions` | `ap-guangzhou` 的 `Status` 为 `alluser` |
 | 4 | Docker 已安装 (>= v24) | `docker --version` | `Docker version 24.x.x` 或更高（29.6.0） |
@@ -44,7 +44,7 @@ fused: true
 
 ```bash
 tccli --version
-# expected: 最新版本或更高
+# expected: 输出 3.x.x 版本号
 ```
 ```text
 3.1.126.1
@@ -346,7 +346,7 @@ tccli tcr CreateInstanceToken \
 | `Desc` | 用途描述 |
 
 > ⚠️ **Token 是敏感凭证**。立即保存到环境变量，禁止硬编码、打印日志、提交 git。
-> 丢失后用 `tccli tcr DescribeInstanceToken --RegistryId tcr-xxxxxxxx` 查询现有 Token。
+> `DescribeInstanceToken` 只能查询长期凭证的 `Id`、描述、启用状态和有效期等元数据，不返回 `Token` 或 `Username` 密文。Token 密文仅在创建响应中返回；若丢失，应创建新 Token、验证登录，再禁用或删除旧 Token。
 
 ### 3.2 Docker 登录
 
@@ -374,7 +374,9 @@ echo "$TCR_TOKEN" | docker login "$TCR_ENDPOINT" -u "$TCR_USERNAME" --password-s
 
 > ⚠️ **边界**: 若 `docker login` 报 `TLS handshake timeout`（公网端点已 Open、DNS 已解析、host 侧 `curl` 可连通），多为本机 docker daemon 所在 VM（如 colima）网络栈对 TLS 握手的限制。此为环境边界，命令格式与端点均正确。可换用 Linux 裸机 docker、通过 TKE 节点内网推送，或继续用 TCCLI 侧 `DescribeImages` 验证镜像入库。
 
-### 3.3 创建命名空间
+### 3.3 创建 TCR 命名空间
+
+这里创建的是 **TCR 实例内用于镜像路径组织和访问控制的命名空间**，不是 Kubernetes Namespace；二者即使同名也不会自动关联。资源模型见 [TCR 概览](../tcr/index.md)。
 
 ```bash
 tccli tcr CreateNamespace \
@@ -484,13 +486,15 @@ false
 ```bash
 tccli tcr DeleteInstance --region ap-guangzhou \
     --RegistryId tcr-xxxxxxxx --DryRun true
-# expected: 返回 RequestId，列出待删资源但不实际删除
+# expected: 返回 RequestId；服务端完成试运行且不实际删除
 ```
 ```json
 {
     "RequestId": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 }
 ```
+
+> DryRun 响应不列出待删资源。执行前应使用上方 `DescribeInstances` 按目标 `RegistryName` 核对 `RegistryId`、删除保护和实例范围。
 
 ### 正式删除
 
@@ -565,12 +569,14 @@ tccli cos ls -b tcr-<REGISTRY_ID>-<APP_ID>
 # 说明：tccli cos 的子命令为 ls/list/download 等对象操作，不提供桶枚举，
 # 残量桶确认须基于已知桶名；否则到 COS 控制台核对 "tcr-" 前缀桶。
 
-# 实例列表最终确认
-tccli tcr DescribeInstances --region ap-guangzhou --filter "TotalCount" --output text
-# expected: 0
+# 目标实例最终确认（只按本 Quickstart 记录的唯一名称核对）
+tccli tcr DescribeInstances --region ap-guangzhou \
+  --Filters '[{"Name":"RegistryName","Values":["<REGISTRY_NAME>"]}]' \
+  --filter "TotalCount" --output text
+# expected: 0（目标实例已从列表消失；账号内其他实例不影响判据）
 ```
 
-> 实例已删（TotalCount=0）+ COS 桶无残留 = 本 Quickstart 的建实例→推送→删除闭环完成，无残留计费。
+> 目标实例已删（按 `RegistryName` 查询 `TotalCount=0`）+ 已知关联 COS 桶无残留 = 本 Quickstart 的建实例→推送→删除闭环完成。不要用账号全局实例数作为通过条件，也不要删除与本次 Quickstart 无关的资源。
 
 ---
 

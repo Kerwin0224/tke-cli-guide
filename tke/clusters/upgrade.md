@@ -63,7 +63,15 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_I
 # 1. 查可升级版本（Versions 为空表示已是最新）
 tccli tke DescribeAvailableClusterVersion --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
 # expected: 顶层返回 Versions + Clusters 字段；Versions 含目标版本，为空 [] 则无需升级
+```
 
+`DescribeAvailableClusterVersion.ClusterId` 在 API 层可选；本文单集群流程要求传入以限定目标集群。不传时返回当前地域的可升级版本信息，不限定单一集群。
+
+| 字段 | Action | 必填 | 说明 |
+|:-----|:-------|:----:|:-----|
+| `ClusterId` | DescribeAvailableClusterVersion | 条件 | 当查询单个集群可升级版本时必填；地域级查询可省略 |
+
+```bash
 # 2. 节点兼容性前置检查（UpgradeType 枚举: reset 重装升级 / hot 原地滚动小版本 / major 原地滚动大版本）
 tccli tke CheckInstancesUpgradeAble --region ap-guangzhou --ClusterId "<CLUSTER_ID>" --UpgradeType reset
 # expected: 返回 ClusterVersion/LatestVersion/UpgradeAbleInstances[]/Total/UnavailableVersionReason；UpgradeAbleInstances[] 为空或 Total=0（无可升级节点=已最新）
@@ -154,6 +162,8 @@ tccli tke CheckInstancesUpgradeAble --region ap-guangzhou \
 # expected: UpgradeAbleInstances[] 兼容（reset 兼容性最强）
 ```
 
+可用 `Filters` 缩小节点范围。`Filters[].Name` 仅支持 `ip`、`instanceId`、`hostname`、`label`；对应的 `Value` 分别填写节点 IP、实例 ID、主机名或 Kubernetes label。
+
 ### 步骤 3：升级 Master
 
 `UpdateClusterVersion` 必传 `ClusterId` + `DstVersion`（不带 `UpgradeType`，只升 Master 控制面；节点跟随升级见步骤 4 的 `UpgradeClusterInstances`）。按场景**二选一**：A 默认容忍度或 B 金丝雀（允许部分节点先升级）。
@@ -211,6 +221,8 @@ tccli tke UpgradeClusterInstances --region ap-guangzhou \
 ```
 
 > 三路径的 `UpgradeType` 必须与步骤 2 `CheckInstancesUpgradeAble` 一致，否则兼容性检查结果不对应。`reset` 会重装节点系统盘（Pod 重调度），`hot`/`major` 原地滚动重启（Pod 漂移少）。
+>
+> `UpgradeType=reset` 时可传 `ResetParam`，在节点重装后重新加入集群时透传接入已有节点参数。`ResetParam` 中的重装、登录和高级设置须遵循 [接入已有实例字段约束](../nodes/instance-ops.md#接入已有实例字段约束)；其中逐实例覆盖项与 `InstanceIds[]` 等长、同序对应。
 
 ### 步骤 5：验证
 
@@ -268,6 +280,15 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet
 ## 单独升级节点版本
 
 > Master 升级后节点未跟随升级时，用 `UpgradeClusterInstances` 对指定节点单独升级。这是异步任务型接口：`Operation` 控制任务生命周期，`UpgradeType` 仅在 `Operation=create` 时生效。
+
+## 跨字段约束
+
+| `Operation` | `UpgradeType` | `ResetParam` | 关系 |
+|:------------|:--------------|:-------------|:-----|
+| `create` | 必填：`hot`、`major` 或 `reset` | 仅 `UpgradeType=reset` 时可传 | 创建升级任务 |
+| `pause` / `resume` / `abort` | 不传 | 不传 | 操作已有任务，不创建新升级方案 |
+
+`InstanceIds` 是 `Operation=create` 的升级目标。`ResetParam` 不是所有创建任务的通用参数，只在节点重装后重新入群的 `reset` 路径使用。
 
 `Operation` 枚举（任务生命周期，来自 API 定义）：
 
@@ -353,3 +374,9 @@ tccli tke DescribeUpgradeTasks --region ap-guangzhou --Offset 0 --Limit 20 \
 - [创建集群](create.md) — 升级失败需重建时参考
 - [故障排查](../troubleshooting.md) — 升级卡住的诊断路径
 - [独立集群 Master 运维](master-ops.md) — 独立集群扩缩容 Master/etcd 节点
+
+## 精确 Action 字段契约
+
+| 字段 | 所属 Action | 必填 | 说明 |
+|:---|:---|:---:|:---|
+| `DstVersion` | `UpdateClusterVersion` | 是 | 目标 Kubernetes 版本 |

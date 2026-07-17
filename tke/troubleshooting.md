@@ -12,7 +12,7 @@ subtype: 7B
 
 ```bash
 tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]'
-# expected: ClusterStatusSet[0].ClusterState = "Running", ClusterDeletionProtection = true
+# expected: ClusterStatusSet[0].ClusterState = "Running"；ClusterDeletionProtection 显示当前删除保护状态
 ```
 
 正常输出： `ClusterState: "Running"` + `ClusterInstanceState: "AllNormal"` 表示集群正常。任何其他状态见 [状态机](reference/states.md) 或下方。
@@ -44,34 +44,46 @@ tccli tke DescribeTasks --region ap-guangzhou \
 
 **可能原因**： 可用区资源不足或 VPC 配置冲突。
 
-**诊断**：
+**诊断与保全**：
 
 ```bash
+# 1. 核对状态、删除保护和已纳管节点；不要仅凭持续时间删除集群
 tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]'
-# expected: 查看 ClusterState 值和状态变更时间
+tccli tke DescribeClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]'
+tccli tke DescribeClusterInstances --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
+# expected: 保留 ClusterState、ClusterDeletionProtection、节点及关联资源信息
+
+# 2. 按最近执行的操作类型查询异步任务
+# TaskType 为必填；替换为实际操作类型，如 node_upgrade/add_cluster_cidr/node_upgrade_ctl
+tccli tke DescribeTasks --region ap-guangzhou \
+  --Filter '[{"Name":"ClusterId","Values":["<CLUSTER_ID>"]},{"Name":"TaskType","Values":["<TASK_TYPE>"]}]' \
+  --Latest true
+# expected: Tasks[] 含进度或失败原因；无匹配时为空或 FailedOperation.TaskNotFound
 ```
 
-如果 `ClusterState: "Creating"` 持续超过 30 分钟，多为底层资源问题。
+记录失败响应的 `RequestId`，核对 CVM、CLB、CBS、VPC 子网和安全组中是否已有该集群关联资源。若已有节点、工作负载或持久数据，先停止破坏性操作并完成备份或迁移。任务原因不明确、资源残留或状态长期不变时，携带上述信息和 `RequestId` [提交工单](https://console.cloud.tencent.com/workorder)。
 
-**修复**：
+**最后手段：删除后重建**：
+
+只有在服务端诊断确认原集群无法恢复、业务与持久数据已迁移或备份、关联资源处置方案已确认，并再次核对集群 ID 后，才可关闭删除保护并删除。`--InstanceDeleteMode terminate` 会销毁关联实例，不可作为默认值执行。
 
 ```bash
-# 1. 删除卡住的集群
+read -r -p "输入 DELETE 确认删除无法恢复的集群 <CLUSTER_ID>: " CONFIRM
+[ "$CONFIRM" = "DELETE" ] || { printf '%s\n' "已取消删除"; exit 1; }
+
 tccli tke DisableClusterDeletionProtection --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
 # expected: exit 0（已关删除保护或本就未开）
 tccli tke DeleteCluster --region ap-guangzhou --ClusterId "<CLUSTER_ID>" --InstanceDeleteMode terminate
 # expected: exit 0；删除保护未关时返回保护类错误
-# 2. 换可用区重建
-tccli tke CreateCluster --region ap-guangzhou --ClusterType MANAGED_CLUSTER \
-  --ClusterBasicSettings '{"ClusterName":"<NEW_NAME>","ClusterVersion":"1.34.1",...}'
-# expected: { "ClusterId": "cls-xxxxxxxx" }；完整入参见 [创建集群](clusters/create.md)
 ```
+
+删除完成并确认关联资源处置结果后，按 [创建集群](clusters/create.md) 选择可用区和完整参数重建；不要在原集群仍可能恢复时并行创建替代集群。
 
 **验证**：
 
 ```bash
-tccli tke DescribeClusterStatus --ClusterIds '["<NEW_CLUSTER_ID>"]'
-# expected: 5-10 分钟内 ClusterState 变为 "Running"
+tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<NEW_CLUSTER_ID>"]'
+# expected: 新集群最终进入 ClusterState="Running"；过渡时间以实际响应为准
 ```
 
 ### 节点一直 initializing 或 NotReady
@@ -107,6 +119,12 @@ tccli tke DeleteClusterInstances --ClusterId "<CLUSTER_ID>" \
 # expected: exit 0；节点从集群移除
 ```
 
+| 字段 | 约束与资源后果 |
+|:-----|:---------------|
+| `ForceDelete=true` | 仅用于仍处于初始化过程中的节点 |
+| `InstanceDeleteMode=terminate` | 将节点移出集群并销毁实例；仅支持按量计费 CVM |
+| `InstanceDeleteMode=retain` | 仅将节点移出集群，保留 CVM 实例 |
+
 **验证**：
 
 ```bash
@@ -121,31 +139,39 @@ tccli tke DescribeClusterInstances --region ap-guangzhou --ClusterId "<CLUSTER_I
 **诊断**：
 
 ```bash
-# 1. 检查端点状态
-tccli tke DescribeClusterEndpoints --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
-# expected: 至少有一个端点 Status 为 Created
+# 1. 分别检查公网与内网端点；按客户端所在网络选择目标
+# 本机/公网 CI 检查公网端点
+tccli tke DescribeClusterEndpointStatus --region ap-guangzhou \
+  --ClusterId "<CLUSTER_ID>" --IsExtranet true
+# 同 VPC、专线或 VPN 客户端检查内网端点
+tccli tke DescribeClusterEndpointStatus --region ap-guangzhou \
+  --ClusterId "<CLUSTER_ID>" --IsExtranet false
+# expected: 目标端点 Status=Created；Creating 继续等待，CreateFailed 查看 ErrorMsg
 
-# 2. 重新获取 kubeconfig
+# 2. 核对实际地址：公网看 ClusterExternalEndpoint/ACL，内网看 ClusterIntranetEndpoint
+tccli tke DescribeClusterEndpoints --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
+# expected: 所选网络对应的端点字段非空
+
+# 3. 重新获取 kubeconfig
 tccli tke DescribeClusterKubeconfig --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
 # expected: 返回有效 kubeconfig (base64)
 ```
 
 **修复**：
 
-```bash
-# 如果端点未开启
-tccli tke CreateClusterEndpoint --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
-# expected: exit 0；端点创建受理（公网/内网参数见 [访问端点](networking/endpoints.md)）
+- 本机或公网 CI：按 [开启公网端点并配置 `/32` ACL](networking/endpoints.md#步骤-2开启公网端点本机--公网-ci) 操作，使用 `CreateClusterEndpoint --IsExtranet true --SecurityGroup ...`，再用 `ModifyClusterEndpointSP` 只放行客户端出口 CIDR。
+- 同 VPC、专线或 VPN：按 [开启内网端点](networking/endpoints.md#步骤-3开启内网端点同-vpc) 操作，使用 `CreateClusterEndpoint --IsExtranet false --SubnetId ... --SecurityGroup ...`，并核对客户端到该子网的路由和安全组 443 端口。
+- 不要执行缺少 `IsExtranet` 的泛化创建命令；公网客户端无法直连仅在 VPC 内可达的内网端点。
 
-# 如果 kubeconfig 过期
+```bash
+# kubeconfig 过期时更新；端点类型和网络路径仍须按上方分别修复
 tccli tke UpdateClusterKubeconfig --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
 # expected: exit 0
 ```
 
 **验证**：
 
-> kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
-<!-- tccli不提供K8s集群连通验证与节点诊断(kubectl cluster-info/nodes/describe)，排查辅助非tccli边界 -->
+> kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 集群连通验证能力）
 ```bash
 # kubectl 验证 kubeconfig 连通 (K8s 原生命令, TCCLI 不提供集群连通验证)
 kubectl --kubeconfig <KUBECONFIG_FILE> cluster-info
@@ -241,3 +267,9 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_I
 - [认证配置](security/auth.md) — kubeconfig 获取与轮转
 - [删除集群](clusters/delete.md) — 删除保护与残留清理
 
+
+## 精确 Action 字段契约
+
+| 字段 | 所属 Action | 必填 | 说明 |
+|:---|:---|:---:|:---|
+| `InstanceDeleteMode` | `DeleteClusterInstances` | 是 | 实例删除模式 |

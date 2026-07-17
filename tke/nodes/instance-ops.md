@@ -64,6 +64,16 @@ tccli tke RebootMachines --version 2022-05-01 \
 # expected: exit 0
 ```
 
+`StopMachines` 与 `RebootMachines` 共用 `StopType` 停机方式：
+
+| `StopType` | 行为 |
+|:-----------|:-----|
+| `soft` | 仅执行软关机；`RebootMachines` 的静态默认值为此值 |
+| `soft_first` | 先执行软关机，失败后再强制关机 |
+| `hard` | 直接强制关机 |
+
+`StopMachines` 的默认值以该 Action 的 `help --detail` 为准；需要固定行为时显式传 `--StopType <值>`。
+
 > 旧版 (2018-05-25) 回退方案: TKE 无节点启停 Action，走 CVM 服务 `tccli cvm StopInstances --InstanceIds '["<INSTANCE_ID>"]'`。
 
 ## 删除节点
@@ -75,6 +85,13 @@ tccli tke DeleteClusterMachines --version 2022-05-01 \
   --MachineNames '["<MACHINE_NAME>"]' --EnableScaleDown false
 # expected: exit 0
 ```
+
+`InstanceDeleteMode` 决定删除后的实例资源：
+
+| 值 | 结果 |
+|:---|:-----|
+| `terminate` | 将节点移出集群并销毁实例；仅支持按量计费 CVM |
+| `retain` | 仅将节点移出集群，保留 CVM 实例 |
 
 > 旧版 (2018-05-25) 用 `DeleteClusterInstances --version 2018-05-25 --InstanceIds '["<INSTANCE_ID>"]'`（Instance 抽象）。两版抽象不同: 新版 Machine vs 旧版 Instance。
 
@@ -202,6 +219,20 @@ tccli tke AddExistedInstances --version 2018-05-25 \
 # expected: exit 0
 ```
 
+### 接入已有实例字段约束
+
+## 跨字段约束
+
+| Action | 字段组合 | 精确关系 |
+|:-------|:---------|:---------|
+| `DescribeExistedInstances` | `ClusterId`、`InstanceIds`、`Filters` | `InstanceIds` 不能与 `ClusterId` 或 `Filters` 同传。传 `ClusterId` 时，服务会把该集群的 VPC ID 附加为过滤条件；若 `Filters` 也指定 `vpc-id`，其值必须与集群 VPC 相同 |
+| `AddExistedInstances` | `InstanceIds[]`、`InstanceAdvancedSettings`、`InstanceAdvancedSettingsOverrides[]` | 覆盖数组与实例数组按下标同序对应；对应项覆盖公共设置，未提供覆盖项的实例沿用公共设置；覆盖数组长度不得大于实例数组 |
+
+| 字段 | 所属 Action | 必填 | 条件说明 |
+|:---|:---|:---:|:---|
+| `HostName` | `AddExistedInstances` | 条件 | 仅在重装接入且集群使用 HostName 模式时必传 |
+| `InstanceAdvancedSettingsOverrides[]` | `AddExistedInstances` | 否 | 按顺序与 `InstanceIds[]` 对应；长度不得大于 `InstanceIds[]`。数组较短时，未覆盖的实例使用公共 `InstanceAdvancedSettings` |
+
 ### 新建 CVM 作节点（CreateClusterInstances）
 
 > `CreateClusterInstances` 是新建 CVM 作节点（`RunInstancePara` 透传 CVM `RunInstances` JSON），与 `AddExistedInstances`（接入已有实例）区别。**不依赖 AS 节点池**，适合「仅需 1 台普通 Worker 做最小验证」；缺 `AS_QCSRole` 时可用本路径绕过节点池。ECM/Edge 见 [边缘集群](../specialized/edge-cluster.md)。
@@ -311,3 +342,10 @@ tccli tke CreateClusterInstances --version 2018-05-25 \
 - [创建节点池](nodepool-create.md) — 节点池生命周期
 - [扩缩容节点池](nodepool-scale.md) — 调整节点数量
 - [API 版本选择](../index.md#api-版本选择) — 理解 TKE 双版本
+
+## 精确 Action 字段契约
+
+| 字段 | 所属 Action | 必填 | 说明 |
+|:---|:---|:---:|:---|
+| `InstanceIds` | `AddExistedInstances` | 是 | 待接入实例 ID 列表 |
+| `RunInstancePara` | `CreateClusterInstances` | 是 | 透传 CVM RunInstances 参数 |

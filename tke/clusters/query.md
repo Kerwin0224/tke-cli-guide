@@ -63,7 +63,7 @@ tccli tke DescribeClusters --region ap-guangzhou --version 2022-05-01 --output t
 
 ### 跨版本字段缺失的静默返回
 
-> `--filter`（JMESPath）按所调版本的响应结构取字段。**跨版本套用 `--filter` 表达式会取不到字段**——期待的字段在另一版不存在，JMESPath 不报错但返回 `None`（空），agent 据此判断会误以为"集群无此属性"。
+> `--filter`（JMESPath）按所调版本的响应结构取字段。**跨版本套用 `--filter` 表达式会取不到字段**——期待的字段在另一版不存在，JMESPath 不报错但返回 `None`（空），据此判断会误以为“集群无此属性”。
 
 | 跨版本套用 | 旧版取新版独有 | 新版取旧版独有 |
 |:-----|:-----|:-----|
@@ -109,7 +109,7 @@ tccli tke DescribeClusters --region ap-guangzhou --version 2022-05-01 --Limit 1 
 
 ```bash
 tccli tke DescribeClusters --region ap-guangzhou --version 2022-05-01 --Limit 10
-# expected: TotalCount + Clusters 列表（10 字段精简结构，顶层含 Errors）
+# expected: TotalCount + Clusters 列表（9 字段精简结构，顶层含 Errors）
 ```
 
 ```json
@@ -172,9 +172,11 @@ tccli tke DescribeClusters --region ap-guangzhou --version 2018-05-25 \
 ```
 
 ```text
-cls-example1	prod	vpc-example	4	containerd	True
-cls-example2	test	vpc-example	0	containerd	False
+True	cls-example1	prod	vpc-example	4	containerd
+False	cls-example2	test	vpc-example	0	containerd
 ```
+
+> 此投影的 text 列序按 key 名字母序固定为 `del,id,name,net,nodes,rt`，不是对象中的书写顺序；上例两行依次解释为删除保护、集群 ID、名称、VPC、节点数、运行时。若需按字段名稳定读取，改用 `--output json`。
 
 > 旧版 `Clusters[]` 28 字段中，19 个新版没有：`ClusterNetworkSettings`（含 VpcId/子网/CIDR）、`ClusterNodeNum`/`ClusterMaterNodeNum`/`ClusterEtcdNodeNum`（节点计数）、`ContainerRuntime`/`RuntimeVersion`（运行时）、`DeletionProtection`（删除保护）、`ClusterOs`/`ImageId`/`OsCustomizeType`（镜像）、`Property`/`ProjectId`/`CdcId`/`IsHighAvailability`/`ClusterCategory`/`SecurityModeConfig`/`EnableExternalNode`/`AutoUpgradeClusterLevel`/`QGPUShareEnable`。查这些字段必须走旧版。
 

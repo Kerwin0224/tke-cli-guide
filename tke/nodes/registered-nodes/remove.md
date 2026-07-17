@@ -14,7 +14,7 @@ fused: true
 > 优雅驱逐节点上的 Pod 并删除注册节点或节点池。
 > 控制台: [容器服务 - 节点池 - 注册节点](https://console.cloud.tencent.com/tke2/nodepool)
 
-移除注册节点分两步：先 `DrainExternalNode` 优雅驱逐 Pod，再 `DeleteExternalNode` 删除节点。删除节点池用 `DeleteExternalNodePool`。
+移除单个注册节点时，先 `DrainExternalNode` 优雅驱逐 Pod，再 `DeleteExternalNode` 删除节点。删除整个节点池前，也必须先枚举池内节点并逐一完成驱逐；`DeleteExternalNodePool --Force false` 在节点上仍有 Pod 时会删除失败。
 
 ## 触发条件
 
@@ -56,9 +56,31 @@ tccli tke DeleteExternalNode --ClusterId <CLUSTER_ID> --Names '["<NODE_NAME>"]' 
 
 ### 步骤 3：删除节点池（如不再需要）
 
+先查询池内全部节点：
+
+```bash
+tccli tke DescribeExternalNode --ClusterId <CLUSTER_ID> \
+  --NodePoolId <NODEPOOL_ID> --region <REGION> \
+  --filter "Nodes[].{name:Name,status:Status,unschedulable:Unschedulable}"
+# expected: 记录返回的每个 Name；空数组表示池内已无注册节点
+```
+
+若返回节点，对每个 `<POOL_NODE_NAME>` 逐一驱逐，并等待其不再承载业务 Pod。`DrainExternalNode` 成功响应只有 `RequestId`，不代表驱逐已完成；还需在集群中确认工作负载已迁移，并检查 PDB 与本地数据约束：
+
+```bash
+tccli tke DrainExternalNode --ClusterId <CLUSTER_ID> \
+  --Name <POOL_NODE_NAME> --region <REGION>
+# expected: exit 0；随后 DescribeExternalNode 中该节点 Status 可能为 Draining
+
+kubectl get pods -A --field-selector spec.nodeName=<POOL_NODE_NAME>
+# expected: 除明确允许保留的 DaemonSet/静态 Pod 外，无业务 Pod
+```
+
+全部节点完成上述检查后，再删除节点池：
+
 ```bash
 tccli tke DeleteExternalNodePool --ClusterId <CLUSTER_ID> --NodePoolIds '["<NODEPOOL_ID>"]' --Force false --region <REGION>
-# expected: exit 0
+# expected: exit 0；若节点上仍有 Pod，非强制删除会失败
 ```
 
 ## 验证
@@ -78,19 +100,13 @@ tccli tke DescribeExternalNodePools --ClusterId <CLUSTER_ID> --region <REGION> \
 
 ## 清理
 
-> **不可逆警告**：注册节点与节点池删除后不可恢复，集群侧记录随之清除。`DrainExternalNode` 是删除前置——先驱逐 Pod 再 `DeleteExternalNode`，避免 Pod 被强制终止导致业务中断。节点池删除后关联节点一并清除且计费即止。
+> **不可逆警告**：注册节点与节点池删除后不可恢复。删除整个节点池同样必须按步骤 3 先枚举节点、逐一驱逐并确认工作负载迁移，再执行非强制删除。
 
-删除即清理，本篇操作步骤即清理操作，无独立回滚命令：
+删除操作本身就是本篇清理动作，无独立回滚命令：
 
-```bash
-# 删除节点（须先 DrainExternalNode 驱逐 Pod，见 ## 操作步骤 步骤 1）
-tccli tke DeleteExternalNode --ClusterId <CLUSTER_ID> --Names '["<NODE_NAME>"]' --Force false --region <REGION>
-# expected: exit 0
-
-# 删除节点池（关联节点一并清除，不可恢复）
-tccli tke DeleteExternalNodePool --ClusterId <CLUSTER_ID> --NodePoolIds '["<NODEPOOL_ID>"]' --Force false --region <REGION>
-# expected: exit 0
-```
+- 只下线单个节点时，执行步骤 1、步骤 2，并用“验证”中的节点查询确认记录为空。
+- 删除整个节点池时，只执行步骤 3 的权威流程，不要重复执行另一套删除配方。
+- 节点池查询为空只证明 TKE 中该节点池记录已不可见，不证明外部机器、Kubernetes Node 或关联云资源已经删除，也不证明账单已经停止。分别检查这些资源，并按对应产品的计费规则确认结算状态。
 
 > 如需重新接入节点，见[创建注册节点（专线版）](dedicated-line.md)。
 
@@ -100,14 +116,6 @@ tccli tke DeleteExternalNodePool --ClusterId <CLUSTER_ID> --NodePoolIds '["<NODE
 |:-----|:-----|:-----|
 | `DeleteExternalNode` 报节点不存在 | `Names[]` 用了节点池 ID 而非节点名 | 用 `DescribeExternalNode` 返回的节点名 |
 | `Force=true` 后 Pod 丢失 | 未先驱逐直接强制删除 | 先 `DrainExternalNode` 再删除 |
-
-## 收尾确认
-
-```bash
-tccli tke DescribeExternalNodePools --ClusterId "<CLUSTER_ID>" --region ap-guangzhou \
-  --filter "NodePoolSet[?NodePoolId=='<NODEPOOL_ID>'].LifeState"
-# expected: 空（节点池已删除，关联节点清零，无持续计费）
-```
 
 ## 下一步
 

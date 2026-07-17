@@ -173,8 +173,14 @@ tccli tke DescribeExternalNode --ClusterId "<CLUSTER_ID>" \
 tccli tke DescribeExternalNodeSupportConfig --ClusterId "<CLUSTER_ID>" --region ap-guangzhou \
   --filter "{status:Status,network:NetworkType}" \
   && tccli tke DescribeExternalNodePools --ClusterId "<CLUSTER_ID>" --region ap-guangzhou \
-  --filter "NodePoolSet[0].{state:LifeState,name:Name}"
-# expected: Status=Enabled + 节点池 LifeState=normal + DescribeExternalNode 返回节点
+  --filter "NodePoolSet[0].{state:LifeState,name:Name}" \
+  && tccli tke DescribeExternalNode --ClusterId "<CLUSTER_ID>" \
+  --NodePoolId "<NODEPOOL_ID>" --region ap-guangzhou \
+  --filter "{total:TotalCount,nodes:Nodes}" \
+  && tccli tke DescribeExternalNodeScript --ClusterId "<CLUSTER_ID>" \
+  --NodePoolId "<NODEPOOL_ID>" --region ap-guangzhou \
+  --filter "{command:Command,link:Link}"
+# expected: Status=Enabled；节点池 LifeState=normal；节点 total>=1 且 nodes 非空；Command 或 Link 非空
 ```
 
 ## 下一步

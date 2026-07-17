@@ -33,7 +33,7 @@ TKE 集群节点从子网分配内网 IP，Pod/Service 用 VPC CIDR 通信。创
 
 ```bash
 tccli --version
-# expected: 最新版本或更高
+# expected: 输出当前已安装的 TCCLI 版本号
 
 tccli cvm DescribeRegions --filter "TotalCount" --output text
 # expected: 数字（如 18；随账号/产品开通变化）→ 凭证有效（凭证配置见 [配置凭证](credentials.md)）
@@ -155,18 +155,18 @@ tccli vpc CreateSecurityGroupPolicies --region <REGION> \
   }'
 # expected: RequestId
 
-# 3c. 入站（单独一次；按需收紧源 CIDR，勿长期 0.0.0.0/0 开管理面）
+# 3c. 入站（单独一次；默认只放通 VPC 内通信）
 tccli vpc CreateSecurityGroupPolicies --region <REGION> \
   --SecurityGroupId "<SECURITY_GROUP_ID>" \
   --SecurityGroupPolicySet '{
     "Ingress":[
-      {"Protocol":"ALL","Port":"ALL","CidrBlock":"<VPC_CIDR>","Action":"ACCEPT","PolicyDescription":"vpc-all"},
-      {"Protocol":"TCP","Port":"30000-32767","CidrBlock":"0.0.0.0/0","Action":"ACCEPT","PolicyDescription":"nodeport"},
-      {"Protocol":"TCP","Port":"80","CidrBlock":"0.0.0.0/0","Action":"ACCEPT","PolicyDescription":"http"}
+      {"Protocol":"ALL","Port":"ALL","CidrBlock":"<VPC_CIDR>","Action":"ACCEPT","PolicyDescription":"vpc-all"}
     ]
   }'
 # expected: RequestId
 ```
+
+> 默认路径不向公网开放 NodePort 范围。确需公网业务访问时，优先通过 CLB/Ingress 暴露；若必须直连节点端口，只按需开放实际端口，并把 `CidrBlock` 限制为可信出口 CIDR（例如办公出口 `<TRUSTED_CIDR>`），不要将 `30000-32767` 整段开放给 `0.0.0.0/0`。
 
 | 占位符 | 含义 |
 |:-------|:-----|

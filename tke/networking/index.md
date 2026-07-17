@@ -15,7 +15,7 @@ TKE 集群网络分两层：**访问端点**（kubectl/API Server 如何连接�
 
 - 你要开启或关闭集群的公网/内网访问端点（kubectl 连接 API Server 的入口）— 去 [管理访问端点](endpoints.md)
 - 你要给已建集群开启 VPC-CNI（Pod 固定 IP、安全组直通），或查 VPC-CNI 子网与固定 IP 约束 — 去 [配置 VPC-CNI](vpc-cni.md)
-- 你要创建 CiliumOverlay 集群（Cilium 数据面且不占 VPC IP），须确认控制面子网前置 — 去 [配置 CiliumOverlay](cilium-overlay.md)
+- 你要创建用于分布式云第三方节点或注册节点的 CiliumOverlay 集群，须确认控制面子网前置 — 去 [配置 CiliumOverlay](cilium-overlay.md)
 - 你要查集群当前端点地址（公网/内网 IP）— 用 `DescribeClusterEndpoints`，见 [查询集群](../clusters/query.md)
 - 你遇到三种网络模型（VPC-CNI / Global Router / CiliumOverlay）不知选哪个 — 看 [网络模型对比](#网络模型对比)
 
@@ -27,21 +27,21 @@ TKE 集群网络分两层：**访问端点**（kubectl/API Server 如何连接�
 | 公网端点 | 通过公网访问 API Server | 本地开发访问，需白名单 |
 | 内网端点 | 通过 VPC 内网访问 API Server | 生产适用：安全、低延迟 |
 | VPC-CNI | Pod 直接从 VPC 子网拿 IP | Pod 固定 IP、安全组直通 |
-| Global Router | 容器网段独立于 VPC | 默认模式，IP 消耗少 |
-| CiliumOverlay | Cilium Overlay 隧道承载 Pod 网络 | 要 Cilium 数据面但不占 VPC IP |
+| Global Router | 容器网段独立于 VPC | API `NetworkType` 的默认值，适合规模相对固定、无特殊 IP 和性能需求的简单业务 |
+| CiliumOverlay | Cilium Overlay 隧道承载 Pod 网络 | 仅用于分布式云第三方节点或注册节点场景 |
 
 ## 网络模型对比
 
-> **控制台推荐序（按场景，非 api 默认）**：① **VPC-CNI**（时延优先 / 迁移 / 固定 Pod IP / 安全组直通）→ ② **Global Router（GR）**（普通业务 / 省 VPC IP / 可后期扩网段）→ ③ **CiliumOverlay**（分布式云 / Cilium 数据面且不占 VPC IP）。  
-> api/`NetworkType` 未传时默认 **GR**——这是契约默认值，**不等于**上表场景推荐序；按上序场景选，再写入 `ClusterAdvancedSettings.NetworkType`。
+> **按场景选择**：公有云集群推荐 **VPC-CNI**；分布式云第三方节点或注册节点推荐 **CiliumOverlay**。**Global Router（GR）**适合规模相对固定、对 IP 分配和网络性能没有特殊需求的简单业务。  
+> API 的 `NetworkType` 未传时默认 **GR**，这是契约默认值，**不等于产品推荐**；选定场景后将对应值写入 `ClusterAdvancedSettings.NetworkType`。
 
-| 模型 | Pod IP 来源 | IP 消耗 | 固定 IP | 安全组直通 | 后期扩网段 | 开启方式 |
-|:-----|:-----------|:---------|:------:|:----------|:----------:|:---------|
-| VPC-CNI | VPC 子网 | 多（每 Pod 一个） | 支持 | 支持 | 不支持 | 创建时 `NetworkType=VPC-CNI`，或创建后 `EnableVpcCniNetworkType` |
-| Global Router（契约默认） | 容器网段（独立） | 少 | 不支持 | 不支持 | 支持 `AddClusterCIDR` | 创建时 `NetworkType=GR`（或不传） |
-| CiliumOverlay | Overlay 隧道 | 少（不占 VPC IP） | 不支持 | 不支持 | 不支持 | 创建时 `NetworkType=CiliumOverlay` |
+| 模型 | 适用范围 | Pod IP 来源 | 固定 IP | 安全组直通 | 后期扩网段 | 开启方式 |
+|:-----|:---------|:-----------|:------:|:----------|:----------:|:---------|
+| VPC-CNI | 公有云推荐；适合时延敏感、传统架构迁移、固定 Pod IP 或独立安全组场景 | VPC 子网 | 支持 | 支持 | 支持 | 创建时 `NetworkType=VPC-CNI`，或为 GR 集群调用 `EnableVpcCniNetworkType` 附加 |
+| Global Router（API 默认） | 规模相对固定、无特殊 IP 和性能需求的简单业务 | 容器网段（独立） | 不支持 | 不支持 | 支持（暂未产品化，`AddClusterCIDR` 需开白） | 创建时 `NetworkType=GR`（或不传） |
+| CiliumOverlay | 仅分布式云第三方节点或注册节点场景 | Overlay 隧道 | 不支持 | 不支持 | 不支持 | 创建时 `NetworkType=CiliumOverlay` |
 
-> 三模型互斥，`NetworkType` 创建时定型（仅 VPC-CNI 可创建后用 `EnableVpcCniNetworkType` 开启）。VPC-CNI 开启约束见 [配置 VPC-CNI](vpc-cni.md)；CiliumOverlay 创建时定型、不可切换见 [配置 CiliumOverlay](cilium-overlay.md)。
+> 创建 `ClusterAdvancedSettings.NetworkType` 时从 `GR`、`VPC-CNI`、`CiliumOverlay` 三选一，但不能据此断言运行态能力绝对互斥：GR 集群可通过 `EnableVpcCniNetworkType` 附加 VPC-CNI。当前公开 API 没有事后改为 CiliumOverlay 的开关或修改路径。VPC-CNI 开启约束见 [配置 VPC-CNI](vpc-cni.md)；CiliumOverlay 的创建约束见 [配置 CiliumOverlay](cilium-overlay.md)。
 
 ### 转发模式半常量（与 NetworkType 正交）
 
@@ -66,7 +66,7 @@ TKE 集群网络分两层：**访问端点**（kubectl/API Server 如何连接�
 
 - 不需要外部访问集群（仅控制台操作）→ 跳过端点配置
 - 已用 Global Router 且不需固定 IP → 不需配置 VPC-CNI
-- 不需要 Cilium 数据面 → 不需配置 CiliumOverlay
+- 不属于分布式云第三方节点或注册节点场景 → 不选 CiliumOverlay
 - 需要跨 VPC 访问 → 用对等连接/云联网，非端点问题
 
 ## 快速检查

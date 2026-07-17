@@ -73,13 +73,15 @@ tccli tcr DescribeNamespaces --region <REGION> --RegistryId "<REGISTRY_ID>" \
 
 > 完整入参以 `tccli tcr CreateRepository help --detail` 为准。
 
-| 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
+| 字段 | Action | 必填 | 约束 | 填错时的错误 |
 |:------|------|:--------:|------------|---------------|
-| RegistryId | string | 是 | `tcr-xxxxxxxx` | `ResourceNotFound` |
-| NamespaceName | string | 是 | 须已存在的命名空间 | `ResourceNotFound` |
-| RepositoryName | string | 是 | API：长度 **大于 2 且小于 245** 字符，仅允许小写字母、数字及 `.`/`_`/`-`，命名空间内唯一 | `InvalidParameter` / `LimitExceeded.Repository` |
-| BriefDescription | string | 否 | 仓库简述（`ModifyRepository` 时与 `Description` **同为必填**） | — |
-| Description | string | 否 | 仓库详细描述（`ModifyRepository` 时与 `BriefDescription` **同为必填**） | — |
+| RegistryId | CreateRepository | 是 | `tcr-xxxxxxxx` | `ResourceNotFound` |
+| NamespaceName | CreateRepository | 是 | 须已存在的命名空间 | `ResourceNotFound` |
+| RepositoryName | CreateRepository | 是 | API：长度 **大于 2 且小于 245** 字符，仅允许小写字母、数字及 `.`/`_`/`-`，命名空间内唯一 | `InvalidParameter` / `LimitExceeded.Repository` |
+| BriefDescription | CreateRepository | 否 | 仓库简述 | — |
+| BriefDescription | ModifyRepository | 是 | 仓库简述 | — |
+| Description | CreateRepository | 否 | 仓库详细描述 | — |
+| Description | ModifyRepository | 是 | 仓库详细描述 | — |
 
 ## 操作步骤
 
@@ -114,7 +116,7 @@ tccli tcr CreateRepository --region <REGION> \
 # expected: exit 0
 ```
 
-> 仓库也可在首次 `docker push` 时自动创建（若命名空间允许），但显式创建可控制可见性与描述。
+> 先显式调用 `CreateRepository` 并用 `DescribeRepositories` 确认仓库存在，再执行 `docker push`。当前 `CreateNamespace` / `ModifyNamespace` 的公开参数没有“首次 push 自动建仓”开关，因此不要把 push 当作仓库创建步骤。
 
 ### 步骤 4：查询
 
@@ -263,3 +265,9 @@ tccli tcr DescribeRepositories --region ap-guangzhou --RegistryId "<REGISTRY_ID>
 - [访问控制](../access/manage.md) — 配置谁能 push/pull
 - [创建实例](../instances/create.md) — 实例生命周期
 - [故障排查](../troubleshooting.md) — `denied` / `not found` 诊断
+
+## 精确 Action 字段契约
+
+| 字段 | 所属 Action | 必填 | 说明 |
+|:---|:---|:---:|:---|
+| `NamespaceName` | `CreateNamespace` | 是 | 命名空间名称 |

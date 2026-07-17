@@ -15,21 +15,28 @@ subtype: 8B
 
 ## Filter 查询过滤
 
-出现在所有 `Describe*` Action，结构同 TKE Filter。
+`Filters` 是部分查询 Action 提供的过滤参数。本节以 `DescribeNamespaces` 为例；其他 Action 是否支持、参数名和合法 `Name` 以该 Action 的 `help --detail` 为准。
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| Name | string | 属性名（如 `RegistryId`/`NamespaceName`/`RepositoryName`/`Status`） |
+| Name | string | `DescribeNamespaces` 当前只明确支持 `Tags`（值格式 `tagKey:tagVal`） |
 | Values | array | 属性值，同 Filter 内 OR，多 Filter 间 AND |
 
 ```bash
+# 按命名空间名查询使用顶层参数，不使用 Filter
 tccli tcr DescribeNamespaces --region <REGION> \
   --RegistryId "<REGISTRY_ID>" \
-  --Filters '[{"Name":"NamespaceName","Values":["prod"]}]'
-# expected: NamespaceList[] 只含名称含 prod 的命名空间
+  --NamespaceName "prod"
+# expected: NamespaceList[] 返回目标实例中名称为 prod 的 TCR 命名空间（若存在）
 ```
 
-> 各 Describe Action 支持的 Filter `Name` 不同，用 `tccli tcr <Action> help --detail` 查合法 Name。
+> `RegistryId` 是本 Action 的必填顶层参数，`NamespaceName` 是可选顶层参数；它们都不是 `DescribeNamespaces.Filters[].Name`。该 Action 如需按标签过滤，可传 `--Filters '[{"Name":"Tags","Values":["team:backend"]}]'`。其他 Describe Action 支持的 Filter `Name` 不同，须逐 Action 用 `tccli tcr <Action> help --detail` 核对，不可迁移复用。
+
+### DescribeNamespaces 专属筛选
+
+| 字段 | 类型 | 说明 |
+|:-----|:-----|:-----|
+| `KmsSignPolicy` | boolean | 设为 `true` 时，仅返回已启用 KMS 镜像签名的命名空间；该字段是顶层筛选参数，不是通用 `Filters[].Name` |
 
 ## TagSpecification 云标签
 
@@ -39,7 +46,10 @@ tccli tcr DescribeNamespaces --region <REGION> \
 | Tags | array | `Tag` 数组（Key/Value） |
 
 ```bash
---TagSpecification.0.ResourceType instance --TagSpecification.0.Tags.0.Key team --TagSpecification.0.Tags.0.Value backend
+--cli-unfold-argument \
+  --TagSpecification.0.ResourceType instance \
+  --TagSpecification.0.Tags.0.Key team \
+  --TagSpecification.0.Tags.0.Value backend
 ```
 
 ## Permission 服务账号权限
@@ -102,8 +112,14 @@ tccli tcr CreateNamespace --region <REGION> \
 | Deletion | bool | 是否同步删除事件 |
 
 ```bash
---Rule.0.Name prod-sync --Rule.0.DestNamespace prod --Rule.0.Override false --Rule.0.Deletion false
+--cli-unfold-argument \
+  --Rule.0.Name prod-sync \
+  --Rule.0.DestNamespace prod \
+  --Rule.0.Override false \
+  --Rule.0.Deletion false
 ```
+
+> `Override=true` 会覆盖目标端同名镜像，`Deletion=true` 会传播删除事件；启用前先确认目标命名空间和回滚方案。
 
 详见 [实例同步](../replication/manage.md)。
 

@@ -62,12 +62,15 @@ fused: false
 | 参数 | 所属 Action | 必填 | 说明 |
 |:-----|:-----------|:----:|:-----|
 | `RepoName` | 多数 | 是 | `<namespace>/<repo>`（含斜杠） |
-| `Namespace` | 部分查询 / CreateApplicationTriggerPersonal | 是/视 Action | 个人版命名空间名，或触发器里的 **K8s** 命名空间 |
+| `Namespace` | ValidateNamespaceExistPersonal | 是 | 待校验的个人版命名空间名 |
+| `Namespace` | CreateApplicationTriggerPersonal | 是 | 触发器关联工作负载的 **K8s** 命名空间 |
+| `Namespace` | 其他查询 | 视 Action | 作为筛选条件时按对应 Action 说明传入 |
 | `Public` | ModifyRepositoryAccessPersonal | 是 | 1 公开 / 0 私有 |
 | `SrcImage`/`DestImage` | DuplicateImagePersonal | 是 | `<ns>/<repo>:<tag>` |
 | `Type`/`Val` | ManageImageLifecycleGlobalPersonal | 是 | `global_keep_last_days`/`global_keep_last_nums` + 保留值 |
 | `TriggerName` | 触发器类 | 是 | 触发器名 |
-| `InvokeMethod` | Create/ModifyApplicationTriggerPersonal | 创建时是 | **仅** `all` / `taglist` / `regex`（无 `void`） |
+| `InvokeMethod` | CreateApplicationTriggerPersonal | 是 | **仅** `all` / `taglist` / `regex`（无 `void`） |
+| `InvokeMethod` | ModifyApplicationTriggerPersonal | 否 | 不修改触发方式时可省略；传入时枚举同上 |
 | `ClusterId`/`WorkloadType`/`WorkloadName`/`ContainerName`/`ClusterRegion` | CreateApplicationTriggerPersonal | 是 | 关联 TKE 集群/工作负载/容器；`ClusterRegion` 为地域**数字 ID** |
 
 ## 操作步骤

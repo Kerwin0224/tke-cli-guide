@@ -20,7 +20,7 @@ fused: true
 
 | 选项                       | 最佳场景            | 关键限制            | 升级路径         | 新建 |
 | ------------------------ | --------------- | --------------- | ------------ | ---- |
-| MANAGED_CLUSTER (托管)     | 生产环境，免运维 Master | Master 不可 SSH；不可改 Master/Etcd **节点规模**（控制面参数/组件仍可由 tccli 改，见 [配置集群](configure.md)） | 控制台/API 一键升级 | ✅ |
+| MANAGED_CLUSTER (托管)     | 生产环境，免运维 Master | Master 不可 SSH；不可改 Master/Etcd **节点规模**（控制面参数/组件仍可由 tccli 改，见 [配置集群](configure.md)） | 控制台/API 发起升级 | ✅ |
 | INDEPENDENT_CLUSTER (独立) | 存量：完全控制 Master  | 需自行维护 Master HA | 手动升级 Master  | ❌ **已停止新建** |
 
 

@@ -64,50 +64,69 @@ tccli tcr CreateInstanceToken --region ap-guangzhou \
 
 **验证**：
 
-> docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）
+> docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）。不要把 Token 写入命令行字面量；隐藏读取后仅通过 stdin 传给 Docker。
 ```bash
-docker login <REGISTRY_DOMAIN> --username <USERNAME> --password <TOKEN>
+read -r -s -p "TCR Token: " TCR_TOKEN
+printf '\n'
+printf '%s' "$TCR_TOKEN" | docker login <REGISTRY_DOMAIN> --username <USERNAME> --password-stdin
+unset TCR_TOKEN
 # expected: Login Succeeded
 ```
 
+Docker 可能把登录凭证写入 `~/.docker/config.json`。生产环境配置 Docker credential helper；临时排障完成后执行 `docker logout <REGISTRY_DOMAIN>`，并删除或禁用不再使用的临时 Token。
+
 ### docker login 超时或连接被拒绝
 
-**可能原因**： 公网访问未开启，或客户端网络无法访问 Registry 域名。
+**可能原因**： 客户端选择了错误的网络路径、目标端点未就绪，或网络无法访问 Registry 域名。
 
-**诊断**：
+**诊断与分流**：
 
 ```bash
-# 1. 检查公网端点
-tccli tcr DescribeExternalEndpointStatus --region ap-guangzhou --RegistryId "<REGISTRY_ID>"
-# expected: 查看 Status 是否为 "Opened"
+# 1. VPC 内客户端先检查内网接入链路
+tccli tcr DescribeInternalEndpoints --region ap-guangzhou --RegistryId "<REGISTRY_ID>"
+# expected: InternalEndpoint 列表中目标 VPC 链路处于可用状态；它是内网接入证据，不是 --docker-server 域名
 
-# 2. 检查网络连通性
+# 2. 仅当客户端确需从公网访问时检查公网端点
+tccli tcr DescribeExternalEndpointStatus --region ap-guangzhou --RegistryId "<REGISTRY_ID>"
+# expected: Status="Opened"
+
+# 3. 使用实例的 Registry 域名检查所选网络路径
 curl -v https://<REGISTRY_DOMAIN>/v2/
 # expected: HTTP 401 (未授权但可达) 而不是连接超时
 ```
 
 **修复**：
 
+- VPC 内客户端：优先修复 `DescribeInternalEndpoints` 显示的 VPC 内网链路、路由和 DNS，不开启公网端点；Docker 仍使用实例的 Registry 域名。
+- 公网客户端：仅在无法通过 VPC、专线或 VPN 访问时开启公网端点，并立即把访问范围限制为客户端固定出口 IP 的 `/32`。
+
 ```bash
-# 如果 Status 不是 "Opened"
+# 公网路径：开启端点
 tccli tcr ManageExternalEndpoint --region ap-guangzhou \
   --RegistryId "<REGISTRY_ID>" \
   --Operation Create
 # expected: exit 0
+
+# 端点 Opened 后，仅放行当前固定出口 IP
+tccli tcr CreateSecurityPolicy --region ap-guangzhou \
+  --RegistryId "<REGISTRY_ID>" \
+  --CidrBlock "<YOUR_EGRESS_IP>/32" \
+  --Description "Temporary troubleshooting access"
+# expected: exit 0
 ```
 
-如果开启后仍然超时，检查客户端到 Registry 域名的 443 端口连通性。如果你在防火墙/代理后:
-
-```bash
-# 配置 docker daemon 代理
-# 编辑 /etc/docker/daemon.json 添加 HTTP_PROXY
-```
+不要使用 `0.0.0.0/0`。公网排障完成后删除临时白名单，并用 `ManageExternalEndpoint --Operation Delete` 关闭不再需要的公网端点。防火墙或代理环境还需核对客户端到 Registry 域名的 443 端口。
 
 **验证**：
 
 ```bash
+# 内网路径：目标 VPC 链路仍处于可用状态
+tccli tcr DescribeInternalEndpoints --region ap-guangzhou --RegistryId "<REGISTRY_ID>"
+
+# 公网路径：端点已开启，且白名单仅含所需出口 CIDR
 tccli tcr DescribeExternalEndpointStatus --region ap-guangzhou --RegistryId "<REGISTRY_ID>"
-# expected: Status: "Opened"
+tccli tcr DescribeSecurityPolicies --region ap-guangzhou --RegistryId "<REGISTRY_ID>"
+# expected: 公网 Status="Opened"；SecurityPolicySet 含 "<YOUR_EGRESS_IP>/32"
 
 curl -s -o /dev/null -w "%{http_code}" https://<REGISTRY_DOMAIN>/v2/
 # expected: 401 (端点可达)

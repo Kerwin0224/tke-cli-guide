@@ -6,13 +6,13 @@ fused: false
 # 配置 CiliumOverlay 网络
 
 > 控制台: [容器服务控制台 - 集群网络](https://console.cloud.tencent.com/tke2/cluster)
-> 创建集群时选定 CiliumOverlay 网络模型。CiliumOverlay 用 Cilium 的 Overlay 隧道承载 Pod 网络，独立于 VPC 网段。**只能在创建集群时指定，无独立开关 Action，创建后不可切换。**
+> CiliumOverlay 仅用于分布式云第三方节点或注册节点场景。创建集群时通过 `ClusterAdvancedSettings.NetworkType=CiliumOverlay` 指定；当前公开 API 无独立开关或事后修改路径。
 
 ## 触发条件
 
-- `DescribeClusters` → `ClusterStatus=Running` 但 `Property` 解析出 `NetworkType` 非 `CiliumOverlay`，要新建集群选此模型（创建后不可切换）
-- 新建集群时评估三种 Pod 网络模型（Global Router / VPC-CNI / CiliumOverlay），需要 Cilium 数据面且不占 VPC IP
-- CiliumOverlay 集群创建后 `AddClusterCIDR` 扩 Pod 网段报错（此模型不支持），看 [限制与故障恢复](#限制与故障恢复)
+- 为分布式云第三方节点或注册节点新建集群，并选择不直接占用 VPC 子网 IP 的 CiliumOverlay 网络
+- `DescribeClusters` → `ClusterStatus=Running`，但 `Property` 解析出的 `NetworkType` 非 `CiliumOverlay`；当前公开 API 没有事后改为 CiliumOverlay 的路径
+- 规划 CiliumOverlay 集群容量；该模型不支持创建后扩大容器 CIDR
 
 
 ## 概述
@@ -21,39 +21,35 @@ CiliumOverlay 是 TKE 的三种容器网络类型之一（另两种：Global Rou
 
 | 模型 | Pod IP 来源 | 占用 VPC IP | 固定 IP | 安全组直通 | 后期扩 Pod 网段 |
 |:-----|:-----------|:----------:|:------:|:----------|:--------------:|
-| Global Router（默认） | 容器网段（独立） | ❌ | ❌ | ❌ | ✅ `AddClusterCIDR` |
+| Global Router（API 默认） | 容器网段（独立） | ❌ | ❌ | ❌ | 支持（暂未产品化，`AddClusterCIDR` 需开白） |
 | VPC-CNI | VPC 子网 | ✅ | ✅ | ✅ | ❌ |
 | CiliumOverlay | Overlay 隧道 | ❌ | ❌ | ❌ | ❌ |
 
-> 三模型对比与选用见 [网络管理](index.md#网络模型对比)。CiliumOverlay 与 VPC-CNI 互斥（均为非 GR 模型），与 Global Router 亦互斥——`NetworkType` 三选一，创建时定型。
+> 三模型对比与选用见 [网络管理](index.md#网络模型对比)。创建时 `NetworkType` 从 `GR`、`VPC-CNI`、`CiliumOverlay` 三选一，但这不代表运行态能力绝对互斥：GR 集群可事后附加 VPC-CNI。当前公开 API 没有事后改为 CiliumOverlay 的开关或修改路径。
 
-> 官方文档：[容器网络概述](https://cloud.tencent.com/document/product/457/50353) · [网络方案选型](https://cloud.tencent.com/document/product/457/106561) · [集群启用 IPVS](https://cloud.tencent.com/document/product/457/32193)
-> 配额：集群 CIDR 规划（创建时自定义，暂不支持变更）；控制面子网须预留 ≥2 IP。[配额限制](https://cloud.tencent.com/document/product/457/9087)
-> ⚠️ **高危操作**：开启 CiliumOverlay 后不可回退至 GlobalRouter（`NetworkType` 创建时定型不可切换）；DataPlaneV2 与 kube-proxy iptables 模式强绑定，误配致集群不可用。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
+> 官方文档：[容器网络概述](https://cloud.tencent.com/document/product/457/50353) · [网络方案选型](https://cloud.tencent.com/document/product/457/106561) · [Cilium-Overlay 模式介绍](https://cloud.tencent.com/document/product/457/77964)
+> 配额：集群 CIDR 在创建前规划；CiliumOverlay 不支持创建后扩大容器 CIDR。控制面子网须预留 ≥2 个可用 IP。[配额限制](https://cloud.tencent.com/document/product/457/9087)
 
 ## 决策依据
 
 #### 什么时候选 CiliumOverlay
 
-- **要 Cilium 数据面但不想占 VPC IP**: CiliumOverlay 用隧道封装，Pod 不从 VPC 子网拿 IP（区别于 VPC-CNI）；又以 Cilium 替代传统 kube-proxy/iptables 路径，适合需要 eBPF 可观测性或高性能转发的场景
-- **不需要固定 IP / 安全组直通**: 这两项是 VPC-CNI 独有，CiliumOverlay 不支持。若需 Pod 固定 IP 或安全组直通，选 VPC-CNI（见 [配置 VPC-CNI](vpc-cni.md)）
-- **不需要后期扩 Pod 网段**: 仅 Global Router 支持 `AddClusterCIDR` 扩容容器网段。CiliumOverlay 不支持（见 [配置集群 — 扩容容器网段](../clusters/configure.md#步骤-5扩容容器网段)）
-- **能切换吗?**: 不能。`NetworkType` 创建后不可变，无 `EnableCiliumOverlay`/`Disable` 类 Action（与 VPC-CNI 的 `EnableVpcCniNetworkType`/`DisableVpcCniNetworkType` 不同）。要换网络模型只能重建集群
+- **适用范围**：仅用于分布式云第三方节点或注册节点场景；全云上节点的公有云集群推荐 VPC-CNI
+- **Overlay 地址平面**：Pod 流量经 VXLAN 隧道封装，不直接占用 VPC 子网 IP；官方说明 Cilium 与 kube-proxy 同时运行，不要把 CiliumOverlay 与 Dataplane V2 的“Cilium 替代 kube-proxy”混为一谈
+- **不需要固定 IP / 安全组直通**：这两项是 VPC-CNI 的能力，CiliumOverlay 不支持。若需 Pod 固定 IP 或安全组直通，选 VPC-CNI（见 [配置 VPC-CNI](vpc-cni.md)）
+- **能在创建后扩大容器 CIDR 吗？**：不能。须在创建前完成容量规划
+- **能通过 TCCLI 事后切换吗？**：当前公开 API 没有修改 `NetworkType` 或启停 CiliumOverlay 的 Action；这只说明公开 API 边界，不扩展为“所有产品路径都只能重建”的绝对承诺
 
-> 默认推荐仍是 Global Router（`NetworkType=GR`）。仅当明确要 Cilium 数据面且接受"创建时定型、不可扩网段"约束时选 CiliumOverlay。
+> API 的 `NetworkType` 未传时默认 `GR`，这是契约默认值，不是产品推荐。公有云推荐 VPC-CNI；注册节点推荐 CiliumOverlay。
 
 ## 配置项
 
 | 字段 | 所属对象 | 类型 | 必填 | 作用 |
 |:------|:---------|------|:--------:|------|
-| NetworkType | ClusterAdvancedSettings | string | 否（默认 `GR`） | 容器网络类型枚举：`GR` / `VPC-CNI` / `CiliumOverlay`。选 CiliumOverlay 传 `CiliumOverlay` |
-| SubnetId | ClusterBasicSettings | string | **CiliumOverlay 时必填** | 控制面子网。CiliumOverlay 时 TKE 从该子网取 **2 个 IP** 创建内网负载均衡 |
-| ClusterOs | ClusterBasicSettings | string | **CiliumOverlay 时受限** | 传 `ubuntu20.04x86_64` 等报 `FailedOperation.Param`（`cluster os … is not supported to use cilium overlay mode`）；可用 **`tlinux3.1x86_64`** |
-| CiliumMode | ClusterAdvancedSettings | string | **CiliumOverlay 时禁止传** | 与 `NetworkType=CiliumOverlay` 同传报 `FailedOperation.Param`（`CiliumMode … must not set when use CiliumOverlay`） |
-| DataPlaneV2 | ClusterAdvancedSettings | boolean | **CiliumOverlay 时禁止 `true`** | 同传 `true` 报 `NetworkType CiliumOverlay is not supported to use dataplaneV2 mode` |
-| IPVS / kube-proxy | ClusterAdvancedSettings | — | **CiliumOverlay 仅 iptables** | 传 `IPVS=true` 报 `cluster of CiliumOverlay only support kubeproxy with mode iptables`；勿传 `IPVS=true` |
+| NetworkType | ClusterAdvancedSettings | string | 否（API 默认 `GR`） | 容器网络类型枚举：`GR` / `VPC-CNI` / `CiliumOverlay`。选 CiliumOverlay 传 `CiliumOverlay` |
+| SubnetId | ClusterBasicSettings | string | **CiliumOverlay 时必填** | 控制面子网。TKE 从该子网取 **2 个 IP** 创建内网负载均衡 |
 
-> ⚠️ **`SubnetId` 的条件必填**：容器网络插件为 CiliumOverlay 时，TKE 会从该子网获取 2 个 IP 用来创建内网负载均衡，故 `ClusterBasicSettings.SubnetId` 必传，且子网须有可用 IP。该字段 API 层 `required=false`（条件必填不体现在字段级 required 标记），易漏。
+> ⚠️ **`SubnetId` 的条件必填**：容器网络插件为 CiliumOverlay 时，TKE 会从指定子网获取 2 个 IP 创建内网负载均衡，故 `ClusterBasicSettings.SubnetId` 必传，且子网至少须有 2 个可用 IP。该字段 API 层 `required=false`，条件必填不体现在字段级标记中。
 
 ## 应用
 
@@ -64,7 +60,7 @@ CiliumOverlay 是 TKE 的三种容器网络类型之一（另两种：Global Rou
 ```bash
 tccli tke CreateCluster --region ap-guangzhou \
   --ClusterType MANAGED_CLUSTER \
-  --ClusterBasicSettings '{"ClusterName":"<CLUSTER_NAME>","ClusterOs":"tlinux3.1x86_64","VpcId":"<VPC_ID>","SubnetId":"<SUBNET_ID>"}' \
+  --ClusterBasicSettings '{"ClusterName":"<CLUSTER_NAME>","VpcId":"<VPC_ID>","SubnetId":"<SUBNET_ID>"}' \
   --ClusterCIDRSettings '{"ClusterCIDR":"<CLUSTER_CIDR>","ServiceCIDR":"<SERVICE_CIDR>"}' \
   --ClusterAdvancedSettings '{"NetworkType":"CiliumOverlay"}'
 # expected: { "ClusterId": "cls-xxxxxxxx", "RequestId": "..." }（tccli 默认剥离 Response 包装层）
@@ -79,8 +75,6 @@ tccli tke CreateCluster --region ap-guangzhou \
 | `<SUBNET_ID>` | 控制面子网 ID | 须在集群 VPC 内，可用 IP ≥ 2 | `tccli vpc DescribeSubnets --Filters '[{"Name":"vpc-id","Values":["<VPC_ID>"]}]'` |
 | `<CLUSTER_CIDR>` | 容器网段 | 不得与 VPC CIDR 冲突 | 自取，如 `172.16.0.0/16` |
 | `<SERVICE_CIDR>` | 服务网段 | 不与 ClusterCIDR/VPC 冲突 | 自取，如 `10.96.0.0/20` |
-
-> **CiliumOverlay 创建时只传 `NetworkType`**：勿叠 `CiliumMode` / `DataPlaneV2=true` / `IPVS=true`（同传均报 `FailedOperation.Param`）。`ClusterOs` 用 `tlinux3.1x86_64`（ubuntu 系列报错拒绝 CiliumOverlay）。
 
 ### 用 --generate-cli-skeleton 取完整入参骨架
 
@@ -109,7 +103,7 @@ tccli tke DescribeClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]'
 
 ## 回滚
 
-> CiliumOverlay 在集群创建时定型（`ClusterAdvancedSettings.NetworkType`），**创建后不可切换回 GR/VPC-CNI**——只能重建集群。集群创建后可改的属性（名称/等级/项目/高可用/安全模式等）用 `ModifyClusterAttribute`，但其入参不含 `ClusterAdvancedSettings` 的网络字段——`NetworkType` 无事后修改路径，误配只能重建集群。
+> `NetworkType` 在创建时通过 `ClusterAdvancedSettings` 传入；`ModifyClusterAttribute` 不含该网络字段，当前公开 API 也没有 CiliumOverlay 的 Enable/Disable Action。因此，TCCLI 当前没有事后改为或改出 CiliumOverlay 的路径。若需变更方案，先通过腾讯云支持确认当前产品是否提供适用于目标集群的迁移能力，再制定变更计划。
 
 ---
 
@@ -119,21 +113,19 @@ tccli tke DescribeClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]'
 
 | 限制 | 影响 | 规避 |
 |:-----|:-----|:-----|
-| 不支持 `AddClusterCIDR` 扩 Pod 网段 | 调用 **exit≠0**：`UnsupportedOperation.ClusterNotSuitAddClusterCIDR`（消息含 `CLUSTER NOT SUIT ADD CLUSTER CIDR` / `failed to get tke-bridge-agent`）；**不会**静默成功 | 容量规划在创建时一次定够；要扩网段只能选 GR 集群（见 [配置集群](../clusters/configure.md#步骤-5扩容容器网段)） |
-| 创建后不可切换网络模型 | 要换 GR/VPC-CNI 只能重建集群 | 选型在创建前定 |
-| 控制面子网须预留 ≥2 IP | IP 不足时创建失败或控制面异常 | 子网可用 IP ≥ 2，`tccli vpc DescribeSubnets` 核 `AvailableIpAddressCount` |
+| 不支持创建后扩大容器 CIDR | 容量不足时不能通过 `AddClusterCIDR` 扩大 | 创建前按业务规模规划容量 |
+| 当前公开 API 无事后修改 `NetworkType` 的路径 | TCCLI 不能直接切换网络方案 | 变更前联系腾讯云支持确认可用迁移路径 |
+| 控制面子网须预留 ≥2 个可用 IP | IP 不足会阻断内网负载均衡所需地址分配 | 用 `tccli vpc DescribeSubnets` 核对 `AvailableIpAddressCount` |
 
 ### 命令返回错误 (exit ≠ 0)
 
+创建失败时先保留完整 `RequestId` 与服务端返回，再核对以下已知输入边界；不要依赖未验证的固定错误码或消息文本。
+
 | 现象 | 诊断 | 根因 | 修复 |
 |:--------|:----------|:------------|:-----|
-| `ResourceNotFound.SubnetId` | `tccli vpc DescribeSubnets` | 控制面子网不在集群 VPC 或不存在 | 用集群 VPC 内子网；CiliumOverlay 时 `SubnetId` 必传 |
-| `InvalidParameterValue` | 查 `NetworkType` 拼写 | 非 `GR`/`VPC-CNI`/`CiliumOverlay` 三枚举值 | 用 `CiliumOverlay`（注意大小写） |
-| `FailedOperation.Param`（`cluster os … not supported to use cilium overlay`） | 查 `ClusterOs` | OS 不在 CiliumOverlay 支持集（如 ubuntu20.04） | 改 `ClusterOs=tlinux3.1x86_64` |
-| `FailedOperation.Param`（`CiliumMode … must not set when use CiliumOverlay`） | 查 AdvancedSettings | 与 Overlay 同传了 `CiliumMode`/`VpcCniType` 等 | 删 `CiliumMode`，只留 `NetworkType=CiliumOverlay` |
-| `FailedOperation.Param`（`not supported to use dataplaneV2`） | 查 `DataPlaneV2` | Overlay 与 DataPlaneV2 互斥 | 勿传 `DataPlaneV2=true` |
-| `FailedOperation.Param`（`only support kubeproxy with mode iptables`） | 查 `IPVS` | Overlay 仅 iptables | 勿传 `IPVS=true` |
-| `UnsupportedOperation.ClusterNotSuitAddClusterCIDR`（`AddClusterCIDR`） | `DescribeClusters` → `Property` 解析 `NetworkType` | 集群为 CiliumOverlay（无 tke-bridge-agent 扩网段路径） | 勿对 Overlay 调 `AddClusterCIDR`；扩网段须 GR 集群 |
+| 子网相关错误 | `tccli vpc DescribeSubnets` 核对子网与 `AvailableIpAddressCount` | `SubnetId` 不属于目标 VPC、子网不存在或可用 IP 少于 2 | 改用目标 VPC 内且至少有 2 个可用 IP 的子网 |
+| `NetworkType` 参数校验失败 | 核对 `ClusterAdvancedSettings.NetworkType` | 值不在 `GR` / `VPC-CNI` / `CiliumOverlay` 枚举内 | 使用大小写准确的 `CiliumOverlay` |
+| 容器 CIDR 扩容失败 | 解析 `DescribeClusters` 返回的 `Property.NetworkType` | CiliumOverlay 不支持创建后扩大容器 CIDR | 创建前规划容量；已建集群联系腾讯云支持确认可行方案 |
 
 ## 收尾确认
 

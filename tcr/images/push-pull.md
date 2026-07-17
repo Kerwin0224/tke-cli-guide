@@ -96,20 +96,10 @@ tccli tcr DescribeNamespaces --region <REGION> --RegistryId "<REGISTRY_ID>" \
 ```bash
 tccli tcr CreateInstanceToken --region <REGION> \
   --RegistryId "<REGISTRY_ID>" --TokenType temp --Desc "push-pull"
-# expected: 返回 Username + Token + ExpTime
+# expected: 返回 Username + Token + ExpTime；不要将 Token 输出到日志
 ```
 
-```json
-{
-    "Username": "<ACCOUNT_UIN>",
-    "Token": "eyJhbGciOiJSUzI1NiIsImtpZCI6...",
-    "ExpTime": 1782479695904,
-    "TokenId": "",
-    "RequestId": "xxx"
-}
-```
-
-> `temp` 示例：`TokenId` 常为空字符串，且通常不出现在 `DescribeInstanceToken` 的 `Tokens[]` 中。`longterm` 会返回非空 `TokenId`，列表侧对应 `Tokens[].Id`。
+> `temp` 的 `TokenId` 常为空字符串，且通常不出现在 `DescribeInstanceToken` 的 `Tokens[]` 中；不要把 `Token` 写入文档或日志。`longterm` 会返回非空 `TokenId`，列表侧对应 `Tokens[].Id`。
 
 | 占位符 | 含义 | 约束 | 如何获取 |
 |:------------|:-----|:-----|:---------|
@@ -125,11 +115,11 @@ tccli tcr CreateInstanceToken --region <REGION> \
 > docker CLI 镜像传输操作（非 tccli；TCCLI 不提供 docker daemon 操作能力）。
 
 ```bash
-docker login <REGISTRY_DOMAIN> -u "<USERNAME>" -p "<TOKEN>"
+printf '%s' "$TCR_TOKEN" | docker login <REGISTRY_DOMAIN> -u "$TCR_USERNAME" --password-stdin
 # expected: Login Succeeded
 ```
 
-> ⚠️ 凭证不应明文出现在脚本中。用环境变量或 docker credential store：`docker login <REGISTRY_DOMAIN> -u "$TCR_USER" -p "$TCR_TOKEN"`。
+> ⚠️ 凭证不应明文出现在命令参数、脚本或日志中。将 Token 注入环境变量后通过 `--password-stdin` 传递，并启用 docker credential store。
 
 ### 步骤 3：推送镜像
 
@@ -289,3 +279,9 @@ docker pull <REGISTRY_DOMAIN>/<NAMESPACE_NAME>/<REPOSITORY_NAME>:<TAG>
 - [访问管理](../instances/manage-access.md) — 公网/VPC 端点开启
 - [实例状态机](../reference/states.md) — push 前确认实例 `Running`
 - [故障排查](../troubleshooting.md) — docker login/push 失败诊断
+
+## 精确 Action 字段契约
+
+| 字段 | 所属 Action | 必填 | 说明 |
+|:---|:---|:---:|:---|
+| `SourceReference` | `DuplicateImage` | 是 | 源镜像引用 |

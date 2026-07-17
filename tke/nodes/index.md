@@ -96,3 +96,9 @@ tccli tke DescribeClusterNodePools --region <REGION> --ClusterId "<CLUSTER_ID>" 
 - [节点健康检查](health-check.md) — 健康检测策略、自动隔离与修复
 - [状态机](../reference/states.md) — LifeState / InstanceState 枚举
 - [配额和限制](../reference/quotas.md) — 节点池数（≤20/集群）、节点数上限
+
+## 精确 Action 字段契约
+
+| 字段 | 所属 Action | 必填 | 说明 |
+|:---|:---|:---:|:---|
+| `NodePoolIds` | `DeleteClusterNodePool` | 是 | 待删除节点池 ID 列表 |

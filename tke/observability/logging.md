@@ -164,7 +164,9 @@ tccli tke DeleteLogConfigs --region ap-guangzhou \
 # expected: exit 0；可选 --ClusterType tke/eks（默认 tke）
 ```
 
-> ⚠️ **高危操作**：卸载 CLS Agent 后日志采集中断，审计日志与业务日志将形成盲区，安全事件不可追溯。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
+> ⚠️ **高危操作**：卸载 CLS Agent 会中断由该 Agent 承担的业务日志采集，可能形成业务日志盲区。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
+>
+> 集群审计是独立链路，不由 `UninstallLogAgent` 的响应证明开启或关闭。卸载前后分别用审计开关、审计 Topic 与实际投递状态核验；需要关闭审计时使用独立的 `DisableClusterAudit` 流程。
 >
 > 卸载 Agent 后已投递的 CLS 日志保留，按 CLS 保留期过期。停止 CLS 计费需删除日志集。
 
@@ -221,6 +223,17 @@ tccli tke ListClusterInspectionResultsItems --ClusterId "<CLUSTER_ID>" --region 
 > `HealthyLevel` 状态：`healthy`/`warn`/`serious`/`risk`。三个巡检 Action 层级：`DescribeClusterInspectionResultsOverview` 按 Region/集群批量查概览，`ListClusterInspectionResults` 查指定集群最新一次巡检结果，`ListClusterInspectionResultsItems` 按时间范围查历史明细（`ClusterId` 必填）。集群巡检是集群级配置诊断，与 [节点级健康检查策略](../nodes/health-check.md)（2022-05-01 `HealthCheckPolicy`）层级与版本均不同，勿混。
 
 ### 控制面日志与日志配置
+
+以下字段按所属 Action 精确对账；没有 Action 的通用说明不改变各接口契约。
+
+| 字段 | 所属 Action | 必填 | 说明 |
+|:---|:---|:---:|:---|
+| `ClusterType` | `CreateCLSLogConfig` | 否 | 可选；不传按接口默认集群类型处理 |
+| `ClusterType` | `DescribeControlPlaneLogs` | 是 | 固定传 `tke` |
+| `ClusterType` | `DescribeLogConfigs` | 否 | 可选，默认 `tke` |
+| `ClusterType` | `DisableControlPlaneLogs` | 是 | 固定传 `tke` |
+| `ClusterType` | `EnableControlPlaneLogs` | 是 | 固定传 `tke` |
+| `ClusterType` | `ModifyLogConfig` | 否 | 可选，默认 `tke` |
 
 ```bash
 # 查询控制面日志（ClusterType 仅 tke）

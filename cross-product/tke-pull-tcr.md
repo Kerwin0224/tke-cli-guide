@@ -64,7 +64,7 @@ tccli tcr CreateInstanceToken --region ap-guangzhou \
 ```json
 {
     "Username": "<USERNAME>",
-    "Token": "eyJhbGciOiJSUzI1NiIs...",
+    "Token": "<TOKEN>",
     "ExpTime": 1782702866551,
     "RequestId": "xxx"
 }
@@ -76,10 +76,12 @@ tccli tcr CreateInstanceToken --region ap-guangzhou \
 
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
 ```bash
-# 获取 TCR 访问域名（公网或内网）
+# 获取 TCR 访问地址
+# PublicDomain 可直接作为公网镜像域名；InternalEndpoint 是内网接入地址，不等同于镜像域名
+
 tccli tcr DescribeInstances --region ap-guangzhou --Registryids '["<REGISTRY_ID>"]' \
-  --filter "Registries[0].{domain:PublicDomain,internal:InternalEndpoint}"
-# expected: domain=xxx.tencentcloudcr.com, internal=10.x.x.x（VPC 内网 IP）
+  --filter "Registries[0].{domain:PublicDomain,internalEndpoint:InternalEndpoint}"
+# expected: domain=xxx.tencentcloudcr.com；internalEndpoint 为内网接入地址（已接入 VPC 时非空）
 
 # 在 TKE 集群创建 imagePullSecret（用内网域名拉取，低延迟）
 kubectl create secret docker-registry tcr-secret \
@@ -95,9 +97,9 @@ kubectl create secret docker-registry tcr-secret \
 | `<REGISTRY_ID>` | TCR 实例 ID | `tcr-xxxxxxxx` | `tccli tcr DescribeInstances` |
 | `<USERNAME>` | Token 用户名 | 数字账号 ID | 步骤 1 的 `Username` 字段 |
 | `<TOKEN>` | Token 密码 | JWT 字符串 | 步骤 1 的 `Token` 字段 |
-| `<REGISTRY_INTERNAL_DOMAIN_OR_PUBLIC>` | 拉取域名 | VPC 内网用 `InternalEndpoint`，公网用 `PublicDomain` | `DescribeInstances` |
+| `<REGISTRY_INTERNAL_DOMAIN_OR_PUBLIC>` | 拉取域名 | 公网用 `PublicDomain`；VPC 内网用开通内网访问后分配的专用域名 | TCR 控制台的实例访问凭证页或内网访问说明 |
 
-> VPC 内网拉取用 `InternalEndpoint`（如 `10.1.65.235`）作 `--docker-server`，但 kubectl 需用域名而非裸 IP——实际配置时用 TCR 内网访问域名（开通 VPC 接入后生成）。公网拉取直接用 `PublicDomain`。
+> VPC 内网拉取时，`InternalEndpoint` 用于确认内网接入是否建立，不能直接作为 `--docker-server`。`--docker-server` 需填写 TCR 为实例分配的镜像访问域名；公网拉取填写 `PublicDomain`。
 
 ## 步骤 3：部署应用并验证拉取
 

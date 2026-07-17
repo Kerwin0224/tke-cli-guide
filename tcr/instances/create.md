@@ -7,11 +7,11 @@ fused: true
 
 > 创建容器镜像服务 (TCR) 企业版实例，用于存储和管理 Docker/OCI 镜像。
 > 控制台: [实例管理](https://console.cloud.tencent.com/tcr/?rid=1) →「新建」进入 [购买页](https://buy.cloud.tencent.com/tcr)（单页选购，非多步向导）
-> 官方文档: [产品概述](https://cloud.tencent.com/document/product/1141/39278) · [产品服务层级与容量限制](https://cloud.tencent.com/document/product/1141/104731) · [企业版快速入门](https://cloud.tencent.com/document/product/1141/39287) · [创建企业版实例](https://cloud.tencent.com/document/product/1141/51110)
+> 官方文档: [产品概述](https://cloud.tencent.com/document/product/1141/39278) · [产品服务层级与容量限制](https://cloud.tencent.com/document/product/1141/104731) · [企业版快速入门](https://cloud.tencent.com/document/product/1141/39287) · [创建企业版实例](https://cloud.tencent.com/document/product/1141/51110) · [退费说明](https://cloud.tencent.com/document/product/1141/53319)
 
 ## 触发条件
 
-- `tccli tcr DescribeInstances --region <REGION>` 返回 `TotalCount: 0` 或实例数已达地域级配额上限（官方默认 10；超额时服务端返回 `LimitExceeded` 类错误）需扩容/清闲置
+- `tccli tcr DescribeInstances --region <REGION>` 返回 `TotalCount: 0`，需要创建首个企业版实例；若实例数已达地域级配额上限（官方默认 10），须先清理闲置实例或申请提高配额
 - 需要独立镜像存储域名/VPC 内网访问/镜像签名能力，个人版 (`DescribeImagePersonal`) 已不满足
 - `CheckInstanceName --RegistryName "<NAME>"` 返回 `IsValidated: true`（名称未被占用）且选定地域在 `DescribeRegions` 返回列表内
 
@@ -28,7 +28,7 @@ TCR 实例是镜像存储的容器 —— 每个实例有独立的域名、存�
 
 > 配额与功能差异以官方 [产品服务层级与容量限制](https://cloud.tencent.com/document/product/1141/104731) 为准；本仓数字汇总见 [配额与限制](../reference/quotas.md)。地域级默认最多 **10** 个企业版实例（超额常见 `LimitExceeded` 类错误码，以实际响应 `Error.Code` 为准）。
 
-镜像与 Chart 数据落在关联 COS 桶，按 COS 用量计费（非上表「存储配额」）。**规格选择**: 初次使用从 `basic` 开始，后续按需升级。
+镜像与 Chart 数据落在关联 COS 桶，按 COS 用量计费（非上表「存储配额」）。**规格选择**：先按必需功能确定最低规格，再核对容量配额和计费方式；只有所需功能在 `basic` 可用且容量满足时，才从 `basic` 做最小验证，后续可按需升级。
 
 操作是**异步**的: `CreateInstance` 返回 `RegistryId` 后实例进入创建过渡态（`Pending`→`Deploying`，官方 `Registry.Status` 无 `Creating` 字面值），须轮询 `DescribeInstanceStatus` 直到 `Status: "Running"` 才可使用（约 3-5 分钟，见 [实例状态](../reference/states.md)）。
 
@@ -76,22 +76,29 @@ tccli tcr DescribeRegions
 | RegistryType | string | 是 | `basic` / `standard` / `premium`（大小写敏感，须小写） | `InvalidParameter`（`not support registry type`） |
 | RegistryChargeType | integer | 否 | `0` 按量计费（API 默认）/ `1` 预付费（包年包月） | `InvalidParameter` |
 | DeletionProtection | boolean | 否 | `true` / `false`，默认 `false` | — |
-| RegistryChargePrepaid | object | 仅预付费 | `Period` (月数) + `RenewFlag` | `InvalidParameter` |
+| RegistryChargePrepaid | CreateInstance | 条件 | 仅预付费实例适用；对象含 `Period`（月数）和 `RenewFlag` | `InvalidParameter` |
+| RegistryChargePrepaid | RenewInstance | 是 | 预付费续费标识与购买时长 | `InvalidParameter` |
 | TagSpecification | object | 否 | Tags 数组 | `InvalidParameter.ErrorTagOverLimit` |
 | SyncTag | boolean | 否 | 是否同步 COS Tag | — |
 | EnableCosMAZ | boolean | 否 | 是否开启 COS 多 AZ；购买页默认勾选并建议开启 | — |
 | EnableCosVersioning | boolean | 否 | 是否开启关联 COS 桶多版本控制 | — |
 
+| 字段 | 所属 Action | 必填 | 说明 |
+|:---|:---|:---:|:---|
+| `RegistryId` | `DeleteInstance` | 是 | 待删除实例 ID |
+| `RegistryId` | `ModifyInstance` | 是 | 待修改实例 ID |
+| `RegistryChargePrepaid` | `RenewInstance` | 是 | 预付费续费标识与购买时长 |
+
 ## 操作步骤
 
 ### 步骤 1：决策 — 选实例规格
 
-#### 为什么先选 basic
+#### 先按功能门槛选最低规格
 
-- **basic vs standard**: basic 配额 NS 50 / 仓库 1000，适合入门；standard 为 100 / 3000，更适合生产；`basic` 不支持跨实例自动同步
-- **按量 vs 包年包月**: API 默认按量（`RegistryChargeType: 0`）；购买页建议长期使用优先包年包月（防欠费回收）。文档同时保留两种路径
-- **规格选择**: `basic` + 按量 —— 熟悉后再升级规格或转预付费
-- **可修改**： 规格可以升级 (basic→standard→premium)，不能降级。计费模式从按量可转包年包月，反之需退订
+- **先核必需功能**：镜像部署阻断至少选 `standard`；镜像签名验签、按需加载容器镜像或同实例多地域就近访问选 `premium`；跨实例自定义规则同步和跨账号实例间镜像同步至少选 `standard`
+- **再核容量**：确认命名空间、仓库、Helm、VPC 接入与服务级账号配额；若功能无更高规格门槛且 `basic` 容量足够，可用 `basic` 做最小验证
+- **最后选计费**：API 默认按量（`RegistryChargeType: 0`）；购买页建议长期使用优先包年包月（防欠费回收）。文档同时保留两种路径
+- **可修改**：规格可以升级（basic→standard→premium），不能降级。计费模式从按量可转包年包月；包年包月退还须满足当前退费规则
 
 ### 步骤 2：创建实例
 
@@ -105,13 +112,16 @@ tccli tcr DescribeRegions
 tccli tcr CreateInstance \
   --region ap-guangzhou \
   --RegistryName "<INSTANCE_NAME>" \
-  --RegistryType basic
+  --RegistryType basic \
+  --RegistryChargeType 0 \
+  --TagSpecification '{"ResourceType":"instance","Tags":[{"Key":"billing","Value":"<BILLING_OWNER>"}]}'
 # expected: { "RegistryId": "tcr-xxxxxxxx", "RequestId": "..." }
 ```
 
 | 占位符 | 含义 | 约束 | 如何获取 |
 |------------|------|------|---------|
 | `<INSTANCE_NAME>` | 实例名称 | 5–50 字符，小写字母/数字/`-`，全局唯一 | 自己定义 |
+| `<BILLING_OWNER>` | 计费标签值 | 用于标识资源负责人或成本归属 | 按团队标签规范填写 |
 
 #### 选项 B：增强（premium 包年包月+删除保护+COS 多 AZ，生产）
 
@@ -128,7 +138,8 @@ tccli tcr CreateInstance \
     "RenewFlag": 1
   }' \
   --DeletionProtection true \
-  --EnableCosMAZ true
+  --EnableCosMAZ true \
+  --TagSpecification '{"ResourceType":"instance","Tags":[{"Key":"billing","Value":"<BILLING_OWNER>"}]}'
 # expected: { "RegistryId": "tcr-xxxxxxxx", "RequestId": "..." }
 ```
 
@@ -153,7 +164,7 @@ tccli tcr DescribeInstances \
 
 ## 清理
 
-> ⚠️ 删除 TCR 实例会**级联删除**实例内所有命名空间/仓库/镜像（数据永久丢失，不可恢复）；`RegistryChargeType=1` 预付费实例删除不退费；自定义域名与 VPC 链接同时删除。TCR Instance 无独立删除章，本段是唯一删除入口。
+> ⚠️ 删除 TCR 实例会**级联删除**实例内所有命名空间/仓库/镜像（数据永久丢失，不可恢复）；自定义域名与 VPC 链接同时删除。包年包月实例应先在控制台实例列表确认是否满足五天无理由或普通自助退还条件，并以 [退费说明](https://cloud.tencent.com/document/product/1141/53319) 和控制台试算金额为准；特殊地域、特殊配置或部分活动资源可能不支持自助退还。TCR Instance 无独立删除章，本段是唯一删除入口。
 
 > 若需保留某些镜像，先 `tccli tcr DuplicateImage` 复制到其他实例（见 [推送拉取镜像](../images/push-pull.md)）。
 
@@ -179,7 +190,7 @@ tccli tcr DescribeInstances --region ap-guangzhou --Registryids '["<REGISTRY_ID>
 
 > 若 DescribeInstances 仍返回实例但状态为 `Deleting`（或删除失败相关 `DeleteFailed`/`DeleteBucketFailed`），属删除中或删除异常，稍候再查或见 [实例状态](../reference/states.md)。
 
-> **计费警告**：按量计费实例删除即停止计费。包年包月实例提前删除**不退费**。
+> **计费警告**：按量计费实例删除即停止计费。包年包月实例如需提前结束，先从 [TCR 控制台实例管理](https://console.cloud.tencent.com/tcr/) 发起自助退还并查看资格与退款试算；退款金额、代金券处理、实例和 COS 的处置以当前 [退费说明](https://cloud.tencent.com/document/product/1141/53319) 及控制台结果为准，不要先用 `DeleteInstance` 代替退还流程。
 
 ## 故障恢复
 
@@ -194,7 +205,7 @@ tccli tcr DescribeInstances --region ap-guangzhou --Registryids '["<REGISTRY_ID>
 | `InvalidParameter`（`not support registry type`） | 检查 `RegistryType` 字面值 | 非 `basic`/`standard`/`premium` 或大小写错误 | 用小写规格枚举 |
 | `InvalidParameter.UnsupportedRegion` | `tccli tcr DescribeRegions` | 所选地域不支持创建实例 | 换支持的地域 |
 | `FailedOperation.ValidateRegistryNameFail` | `CheckInstanceName` | 名称校验失败 | 按控制台规则改名后再建 |
-| `FailedOperation.TradeFailed`（消息含 `TCR_QCSRole` / 商品下单参数校验） | 查 CAM 服务角色与计费开通 | 账号未授权 TCR 服务角色或计费校验失败 | 控制台开通 TCR / 授权 `TCR_QCSRole` 后重试；属账号侧前置，非入参格式错误 |
+| `FailedOperation.TradeFailed` | 保留完整 `Error.Message` 和 `RequestId`；检查购买页、计费状态与服务角色授权状态 | 交易链路校验失败；若消息明确提到 `TCR_QCSRole`，需进一步检查该服务角色，不能仅凭错误码断定根因 | 按完整消息处理对应前置；消息明确要求角色时在控制台检查/补充授权，否则携 `RequestId` 查询交易失败原因或提交工单 |
 | `LimitExceeded`（实例配额，默认地域级 10） | `tccli tcr DescribeInstances` / `--AllRegion true` | 实例数达上限 | 删除闲置实例或提工单 |
 
 ### 命令成功但状态不对（exit = 0）
@@ -243,13 +254,17 @@ tccli tcr DescribeInstanceAllNamespaces --Limit 50 --region <REGION>
 tccli tcr DescribeInstances --region ap-guangzhou --Registryids '["<REGISTRY_ID>"]' \
   --filter "Registries[0].{status:Status,name:RegistryName,type:RegistryType,protect:DeletionProtection}"
 # expected: status="Running", name/type 与创建参数一致, protect 与创建参数一致
+
+# 确认新实例尚无命名空间，下一步从创建命名空间开始
+tccli tcr DescribeNamespaces --region ap-guangzhou --RegistryId "<REGISTRY_ID>" --filter "TotalCount"
+# expected: 0
 ```
 
 > 实例 `Running` = 创建完成，可进入 [访问管理](manage-access.md) 与 [命名空间/仓库](../repositories/manage.md)。`DescribeNamespaces` 须在 `Running` 后调用（`Pending`/`Deploying` 过渡态中调用通常返回空）。空实例无镜像，须先建命名空间才能 push。
 >
 > 访问端点**不在本篇强制开启**：默认拒绝全部公网/内网访问。生产优先内网 VPC；本地或外网 CI 再开公网并配白名单——见 [访问管理](manage-access.md)。docker login/push/pull 属 docker CLI（非 tccli；TCCLI 无镜像传输能力），在端点+Token 配好后于 [推送拉取镜像](../images/push-pull.md) 执行。
 >
-> **账号边界**：若当前账号企业版 `DescribeInstances`（含 `--AllRegion true`）`TotalCount: 0` 且 `CreateInstance` 返回 `FailedOperation.TradeFailed`（含 `TCR_QCSRole` / 商品下单校验），属账号开通/角色前置，不是文档命令写错；先完成控制台开通与服务角色授权再创建。
+> **账号侧观察与诊断**：曾观察到企业版 `DescribeInstances`（含 `--AllRegion true`）`TotalCount: 0` 时，`CreateInstance` 返回 `FailedOperation.TradeFailed`，同次完整消息提到 `TCR_QCSRole` / 商品下单校验；这只能作为诊断线索，不能证明该角色是所有 `TradeFailed` 的确定根因。请先保存完整 `Error.Message` 与 `RequestId`：消息明确要求 `TCR_QCSRole` 时检查控制台服务角色授权；否则按消息检查计费/购买前置，并携 `RequestId` 查询原因或提交工单。
 
 ---
 
