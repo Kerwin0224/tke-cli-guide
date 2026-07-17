@@ -121,8 +121,10 @@ tccli --version
 # expected: 输出当前已安装的 TCCLI 版本号
 
 tccli tke help 2>&1 | head -3
-# expected: AVAILABLE VERSIONS 含 2018-05-25 / 2022-05-01 → 可进入 [配置凭证](credentials.md)
+# expected: AVAILABLE VERSIONS 含 2018-05-25 / 2022-05-01
 ```
+
+可进入 [配置凭证](credentials.md)
 
 ## 下一步
 

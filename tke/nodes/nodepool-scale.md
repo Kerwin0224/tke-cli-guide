@@ -48,16 +48,22 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet
 
 ### 资源检查
 
+#### 1. 确认节点池存在且正常
+
 ```bash
-# 1. 确认节点池存在且正常
 tccli tke DescribeClusterNodePools --region ap-guangzhou --ClusterId "<CLUSTER_ID>" \
   --filter "NodePoolSet[].{id:NodePoolId,name:Name,state:LifeState,max:MaxNodesNum,min:MinNodesNum,desired:DesiredNodesNum}"
 # expected: 目标节点池 LifeState="normal"
-
-# 2. 确认配额未满（扩容时）
-tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet[?ClusterId=='<CLUSTER_ID>'] | [0].ClusterRunningNodeNum"
-# expected: 节点数 < 集群配额（见 [配额](../reference/quotas.md)）
 ```
+
+#### 2. 确认配额未满（扩容时）
+
+```bash
+tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet[?ClusterId=='<CLUSTER_ID>'] | [0].ClusterRunningNodeNum"
+# expected: 节点数 < 集群配额
+```
+
+配额说明见 [配额](../reference/quotas.md)
 
 ## 关键字段
 
@@ -105,18 +111,29 @@ tccli tke ScaleNodePool --version 2022-05-01 --region ap-guangzhou \
 
 > `ModifyNodePoolDesiredCapacityAboutAsg` 与 `ScaleNodePool` 的请求只有目标容量，没有目标实例 ID。直接降低容量时控制器按节点池策略选点，无法保证删除某个预先 drain 的节点。执行前应确认池内任一潜在候选被移除都安全；需要定点移除时，不走本文的容量缩减，改用支持 `InstanceIds` 的节点移出/删除流程（见 [节点实例操作](instance-ops.md)）。
 
+#### 1. 容量缩减前检查池内节点与工作负载
+
+不要把 drain 单个节点当作定点删除保证。
+
 ```bash
-# 1. 容量缩减前检查池内节点与工作负载；不要把 drain 单个节点当作定点删除保证
 kubectl get nodes
 kubectl get pods -A -o wide
 # expected: 已识别全部潜在缩容候选，任一候选被控制器选中都不会造成不可接受的数据或可用性影响
+```
 
-# 2a. 旧版 ASG 节点池：DesiredCapacity 减小
+#### 2a. 旧版 ASG 节点池：DesiredCapacity 减小
+
+```bash
 tccli tke ModifyNodePoolDesiredCapacityAboutAsg --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" --NodePoolId "<NODE_POOL_ID>" --DesiredCapacity 2
 # expected: exit 0
+```
 
-# 2b. 新版 Native 节点池：ScaleNodePool 设 Replicas（与 2a 二选一，按池版本）
+#### 2b. 新版 Native 节点池：ScaleNodePool 设 Replicas
+
+与 2a 二选一，按池版本。
+
+```bash
 tccli tke ScaleNodePool --version 2022-05-01 --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" --NodePoolId "<NODE_POOL_ID>" --Replicas 2
 # expected: exit 0

@@ -204,21 +204,28 @@ tccli cam ListAttachedRolePolicies --Page 1 --Rp 50 --RoleName TKE_QCSRole \
 > **推荐主路径**：首次登录 [容器服务控制台](https://console.cloud.tencent.com/tke2) 弹窗 **同意授权**（官方 43416）。  
 > **CLI 等价**（子账号须有 `cam:CreateRole` / `cam:AttachRolePolicy`；无 CAM 写权限则只能控制台主账号授权）：
 
+#### 1. 创建角色（Principal 必须是 ccs.qcloud.com）
+
 ```bash
-# 1) 创建角色（Principal 必须是 ccs.qcloud.com）
 tccli cam CreateRole \
   --RoleName TKE_QCSRole \
   --Description "TKE service role for accessing CVM CLB CBS and related resources" \
   --PolicyDocument '{"version":"2.0","statement":[{"effect":"allow","action":"sts:AssumeRole","principal":{"service":"ccs.qcloud.com"}}]}'
 # expected: RoleId；角色已存在则跳过（Error 含已存在/Role 相关则复验 List）
+```
 
-# 2) 挂默认访问策略（建集群最低）
+#### 2. 挂默认访问策略（建集群最低）
+
+```bash
 tccli cam AttachRolePolicy \
   --AttachRoleName TKE_QCSRole \
   --PolicyName QcloudAccessForTKERole
 # expected: RequestId
+```
 
-# 3) 运维/日志（与控制台默认同批时常需要）
+#### 3. 运维/日志（与控制台默认同批时常需要）
+
+```bash
 tccli cam AttachRolePolicy \
   --AttachRoleName TKE_QCSRole \
   --PolicyName QcloudAccessForTKERoleInOpsManagement

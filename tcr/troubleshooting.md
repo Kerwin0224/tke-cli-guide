@@ -81,16 +81,23 @@ Docker 可能把登录凭证写入 `~/.docker/config.json`。生产环境配置 
 
 **诊断与分流**：
 
+#### 1. VPC 内客户端先检查内网接入链路
+
 ```bash
-# 1. VPC 内客户端先检查内网接入链路
 tccli tcr DescribeInternalEndpoints --region ap-guangzhou --RegistryId "<REGISTRY_ID>"
 # expected: InternalEndpoint 列表中目标 VPC 链路处于可用状态；它是内网接入证据，不是 --docker-server 域名
+```
 
-# 2. 仅当客户端确需从公网访问时检查公网端点
+#### 2. 仅当客户端确需从公网访问时检查公网端点
+
+```bash
 tccli tcr DescribeExternalEndpointStatus --region ap-guangzhou --RegistryId "<REGISTRY_ID>"
 # expected: Status="Opened"
+```
 
-# 3. 使用实例的 Registry 域名检查所选网络路径
+#### 3. 使用实例的 Registry 域名检查所选网络路径
+
+```bash
 curl -v https://<REGISTRY_DOMAIN>/v2/
 # expected: HTTP 401 (未授权但可达) 而不是连接超时
 ```
@@ -138,21 +145,29 @@ curl -s -o /dev/null -w "%{http_code}" https://<REGISTRY_DOMAIN>/v2/
 
 **诊断**：
 
+#### 0. 先确认公网端点
+
 ```bash
-# 0. 先确认公网端点（Closed 时 DescribeSecurityPolicies 报 ResourceNotFound: Failed to get security group id）
+# Closed 时 DescribeSecurityPolicies 报 ResourceNotFound: Failed to get security group id
 tccli tcr DescribeExternalEndpointStatus --region ap-guangzhou --RegistryId "<REGISTRY_ID>"
 # expected: Status=Opened；若 Closed → 先 ManageExternalEndpoint --Operation Create
+```
 
-# 1. 检查白名单
+#### 1. 检查白名单
+
+```bash
 tccli tcr DescribeSecurityPolicies --region ap-guangzhou --RegistryId "<REGISTRY_ID>"
 # expected: SecurityPolicySet 列表；Closed 端点 → ResourceNotFound（非「无白名单」）
+```
 
-# 2. 检查当前公网 IP
+#### 2. 检查当前公网 IP
+
+```bash
 curl -s ifconfig.me
 # expected: 你的公网 IP
-
-# 对比: IP 是否在白名单中的某个 CidrBlock 范围内
 ```
+
+对比: IP 是否在白名单中的某个 CidrBlock 范围内
 
 **修复**：
 
@@ -236,21 +251,31 @@ tccli tcr DescribeImages --region ap-guangzhou \
 
 如果以上步骤无法解决问题，收集以下信息:
 
+#### 1. 实例信息
+
 ```bash
-# 1. 实例信息
 tccli tcr DescribeInstances --region ap-guangzhou --Registryids '["<REGISTRY_ID>"]' > tcr-info.json
 # expected: 文件写入成功，JSON 含 Registries[]
+```
 
-# 2. 访问配置
+#### 2. 访问配置
+
+```bash
 tccli tcr DescribeExternalEndpointStatus --region ap-guangzhou --RegistryId "<ID>" > tcr-endpoint.json
 # expected: 文件写入成功，含 Status（Opened/Closed）
 tccli tcr DescribeSecurityPolicies --region ap-guangzhou --RegistryId "<ID>" > tcr-policies.json
 # expected: 文件写入成功；公网 Closed 时可能 ResourceNotFound
+```
 
-# 3. 操作日志 (CloudAudit)
+#### 3. 操作日志 (CloudAudit)
+
+```bash
 # 从控制台获取或: tccli cloudaudit LookUpEvents --LookupAttributes '[{"AttributeKey":"ResourceName","AttributeValue":"<REGISTRY_ID>"}]'
+```
 
-# 4. 失败操作的 RequestId
+#### 4. 失败操作的 RequestId
+
+```bash
 # 从之前失败的 API 响应中获取
 ```
 

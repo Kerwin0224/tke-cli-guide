@@ -171,20 +171,30 @@ tccli tcr DescribeRepositoryPersonal --RepoName "<NAMESPACE_NAME>/<REPO_NAME>"
 
 > **副作用警告**：删除镜像或仓库不可恢复。删除命名空间前须先删除其下所有仓库。
 
+#### 1. 删除镜像（RepoName = namespace/repo；无 --Namespace）
+
 ```bash
-# 1. 删除镜像（RepoName = namespace/repo；无 --Namespace）
 tccli tcr DeleteImagePersonal --RepoName "<NAMESPACE_NAME>/<REPO_NAME>" --Tag "<TAG>"
 # expected: exit 0
+```
 
-# 2. 删除仓库（RepoName = namespace/repo；无 --Namespace）
+#### 2. 删除仓库（RepoName = namespace/repo；无 --Namespace）
+
+```bash
 tccli tcr DeleteRepositoryPersonal --RepoName "<NAMESPACE_NAME>/<REPO_NAME>"
 # expected: exit 0
+```
 
-# 3. 删除命名空间（须无仓库）
+#### 3. 删除命名空间（须无仓库）
+
+```bash
 tccli tcr DeleteNamespacePersonal --Namespace "<NAMESPACE_NAME>"
 # expected: exit 0
+```
 
-# 4. 验证已删
+#### 4. 验证已删
+
+```bash
 tccli tcr DescribeNamespacePersonal --Namespace "<NAMESPACE_NAME>" --Limit 10 --Offset 0
 # expected: Data.NamespaceInfo 不含目标
 ```

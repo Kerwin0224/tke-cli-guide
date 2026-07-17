@@ -130,9 +130,11 @@ tccli tcr DescribeNamespaces --region <REGION> --RegistryId "<REGISTRY_ID>" \
 tccli tcr DescribeRepositories --region <REGION> --RegistryId "<REGISTRY_ID>" \
   --NamespaceName "<NAMESPACE_NAME>" --Limit 20 \
   --filter "RepositoryList[].{name:Name,ns:Namespace}" --output text
-# expected: 仓库列表；text 多键投影列序按投影 key 名字母序（name 在 ns 前），与书写序无关——勿用 awk 按书写序取列；机器解析用 `--output json`（见 [agent-optimization](../../appendix/agent-optimization.md)）
+# expected: 仓库列表；text 多键投影列序按投影 key 名字母序（name 在 ns 前），与书写序无关——勿用 awk 按书写序取列；机器解析用 `--output json`
 # expected: 全实例条数 --filter TotalCount（可不传 NamespaceName）
 ```
+
+多键 text 列序说明见 [agent-optimization](../../appendix/agent-optimization.md)
 
 ## 验证
 
@@ -164,18 +166,25 @@ tccli tcr ModifyNamespace --region <REGION> \
 
 > **副作用警告**：删除命名空间会级联删除其下所有仓库与镜像版本，不可恢复。删除仓库会删除该仓库所有镜像版本，不可恢复。命名空间创建后不可改名，只能删除重建。
 
+#### 1. 删除仓库（先删仓库再删命名空间）
+
 ```bash
-# 1. 删除仓库（先删仓库再删命名空间）
 tccli tcr DeleteRepository --region <REGION> \
   --RegistryId "<REGISTRY_ID>" --NamespaceName "<NAMESPACE_NAME>" --RepositoryName "<REPOSITORY_NAME>"
 # expected: exit 0（可选 `--ForceDelete false`：有镜像时先检查；默认 true 直接删）
+```
 
-# 2. 删除命名空间（须无仓库才能删）
+#### 2. 删除命名空间（须无仓库才能删）
+
+```bash
 tccli tcr DeleteNamespace --region <REGION> \
   --RegistryId "<REGISTRY_ID>" --NamespaceName "<NAMESPACE_NAME>"
 # expected: exit 0
+```
 
-# 3. 验证已删
+#### 3. 验证已删
+
+```bash
 tccli tcr DescribeNamespaces --region <REGION> --RegistryId "<REGISTRY_ID>" \
   --filter "NamespaceList[?Name=='<NAMESPACE_NAME>']"
 # expected: 空数组

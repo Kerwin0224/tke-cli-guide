@@ -55,14 +55,26 @@ TCR 个人版是腾讯云容器镜像服务的免费版本，提供基础的镜�
 个人版与企业版是独立服务，**无自动迁移**。已有镜像需手动搬迁：
 
 > docker CLI（本地镜像传输，非 tccli；TCCLI 不提供镜像层传输）
+
+#### 1. 拉取个人版镜像
+
 ```bash
-# 1. 拉取个人版镜像
 docker pull <PERSONAL_DOMAIN>/<NAMESPACE>/<REPO>:<TAG>
+```
 
-# 2. 重新打标为企业版域名（企业版实例域名见 DescribeInstances）
+#### 2. 重新打标为企业版域名
+
+企业版实例域名见 `DescribeInstances`。
+
+```bash
 docker tag <PERSONAL_DOMAIN>/<NAMESPACE>/<REPO>:<TAG> <ENTERPRISE_DOMAIN>/<NAMESPACE>/<REPO>:<TAG>
+```
 
-# 3. 推送到企业版（须先在企业版实例创建命名空间+仓库，见 repositories/manage.md）
+#### 3. 推送到企业版
+
+须先在企业版实例创建命名空间+仓库，见 [repositories/manage.md](../repositories/manage.md)。
+
+```bash
 docker push <ENTERPRISE_DOMAIN>/<NAMESPACE>/<REPO>:<TAG>
 ```
 

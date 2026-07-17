@@ -36,8 +36,10 @@ tccli --version
 # expected: 输出当前已安装的 TCCLI 版本号
 
 tccli tke DescribeRegions --filter "TotalCount" --output text
-# expected: 数字（如 19；随账号/产品开通变化）→ 凭证有效 + TKE 域可达（凭证配置见 [配置凭证](credentials.md)）
+# expected: 数字（如 19；随账号/产品开通变化）→ 凭证有效 + TKE 域可达
 ```
+
+凭证配置见 [配置凭证](credentials.md)
 
 ### 资源检查
 
@@ -88,8 +90,9 @@ tccli vpc CreateVpc --region <REGION> \
 
 `CreateVpc` 本身不分配 IPv6 CIDR。双栈所需的 IPv6 地址段须创建 VPC 后用 `AssignIpv6CidrBlock` 分配；子网再 `AssignIpv6SubnetCidrBlock`。
 
+#### 1. 创建 VPC（IPv4 CIDR；IPv6 下一步再分配）
+
 ```bash
-# 1. 创建 VPC（IPv4 CIDR；IPv6 下一步再分配）
 tccli vpc CreateVpc --region <REGION> \
   --VpcName "<VPC_NAME>" --CidrBlock "10.0.0.0/16"
 # expected: exit 0，返回 Vpc.VpcId
@@ -97,12 +100,18 @@ tccli vpc CreateVpc --region <REGION> \
 # 可选：--EnableRouteVpcPublishIpv6 控制 VPC 关联云联网时的 IPv6 路由发布策略
 # （true=CIDR 路由发布，须工单加白名单；false=子网路由发布，创建默认）。
 # 该标志**不等于**「给 VPC 开通 IPv6 地址段」，开通地址段看下一步 AssignIpv6CidrBlock。
+```
 
-# 2. 给 VPC 分配 IPv6 CIDR（AssignIpv6CidrBlock；每个 VPC 只能申请一个 IPv6 网段）
+#### 2. 给 VPC 分配 IPv6 CIDR（AssignIpv6CidrBlock；每个 VPC 只能申请一个 IPv6 网段）
+
+```bash
 tccli vpc AssignIpv6CidrBlock --region <REGION> --VpcId "<VPC_ID>"
 # expected: { "Ipv6CidrBlock": "2402:xxxx::/56", "RequestId": "..." } → VPC 已有 IPv6 CIDR
+```
 
-# 3. 给子网分配 IPv6 CIDR（AssignIpv6SubnetCidrBlock，子网创建后执行）
+#### 3. 给子网分配 IPv6 CIDR（AssignIpv6SubnetCidrBlock，子网创建后执行）
+
+```bash
 tccli vpc AssignIpv6SubnetCidrBlock --region <REGION> \
   --VpcId "<VPC_ID>" \
   --Ipv6SubnetCidrBlocks '[{"SubnetId":"<SUBNET_ID>","Ipv6SubnetCidrBlock":"2402:xxxx::/64"}]'
@@ -139,13 +148,17 @@ tccli vpc CreateSubnet --region <REGION> \
 
 > 新建安全组默认入站/出站全拒绝。写规则时 **`CreateSecurityGroupPolicies` 一次调用不能同时传 `Egress` 与 `Ingress`**，否则 `InvalidParameter.Coexist`（消息：请求中不支持同时传入参数 `Egress and Ingress`）。**分两次**调用：先 Egress，再 Ingress（或反过来）。
 
+#### 3a. 创建安全组
+
 ```bash
-# 3a. 创建安全组
 tccli vpc CreateSecurityGroup --region <REGION> \
   --GroupName "<SG_NAME>" --GroupDescription "tke nodes"
 # expected: SecurityGroup.SecurityGroupId
+```
 
-# 3b. 出站（单独一次）
+#### 3b. 出站（单独一次）
+
+```bash
 tccli vpc CreateSecurityGroupPolicies --region <REGION> \
   --SecurityGroupId "<SECURITY_GROUP_ID>" \
   --SecurityGroupPolicySet '{
@@ -154,8 +167,11 @@ tccli vpc CreateSecurityGroupPolicies --region <REGION> \
     ]
   }'
 # expected: RequestId
+```
 
-# 3c. 入站（单独一次；默认只放通 VPC 内通信）
+#### 3c. 入站（单独一次；默认只放通 VPC 内通信）
+
+```bash
 tccli vpc CreateSecurityGroupPolicies --region <REGION> \
   --SecurityGroupId "<SECURITY_GROUP_ID>" \
   --SecurityGroupPolicySet '{
@@ -246,10 +262,10 @@ tccli vpc DescribeSubnets --region <REGION> \
 
 # 下一步前置：VPC + 子网可进入创建集群（CreateCluster 必传 VpcId/SubnetId 均就绪）
 tccli tke DescribeRegions --filter "TotalCount" --output text
-# expected: 数字（如 19；随账号/产品开通变化）→ TKE 域可达，VPC+子网就绪可进入 [创建集群](../quickstart/tke-first-cluster.md)
+# expected: 数字（如 19；随账号/产品开通变化）→ TKE 域可达，VPC+子网就绪
 ```
 
-> VPC 存在 + 子网可用 IP ≥ 10 + 可用区支持 TKE = 网络底座三要素齐备，满足 `CreateCluster` 的 `VpcId`/`SubnetId` 前置要求，可进入创建集群。
+VPC 存在 + 子网可用 IP ≥ 10 + 可用区支持 TKE = 网络底座三要素齐备，满足 `CreateCluster` 的 `VpcId`/`SubnetId` 前置要求，可进入 [创建集群](../quickstart/tke-first-cluster.md)。
 
 ## 下一步
 

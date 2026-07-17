@@ -32,25 +32,38 @@ TKE 集群拉取 TCR 镜像的三种典型场景：
 > 本篇主路径两个 CLI：TCCLI（管 TCR 凭证/端点）+ kubectl（配 Secret、部署并验证拉取；K8s 原生，TCCLI 做不到 Pod 级拉取确认）。本地 `docker tag/push` 见 [推送拉取镜像](../tcr/images/push-pull.md)，不在本 Quickstart 主线。
 
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
+
+#### 1. tccli 可用
+
 ```bash
-# 1. tccli 可用
 tccli --version
 # expected: tccli 版本号
+```
 
-# 2. kubectl 可用且已配置 TKE 集群 kubeconfig
+#### 2. kubectl 可用且已配置 TKE 集群 kubeconfig
+
+```bash
 kubectl get nodes
 # expected: 节点列表返回
+```
 
-# 3. TCR 实例 Running
+#### 3. TCR 实例 Running
+
+```bash
 tccli tcr DescribeInstanceStatus --region ap-guangzhou --RegistryIds '["<REGISTRY_ID>"]' \
   --filter "RegistryStatusSet[0].Status"
 # expected: "Running"
+```
 
-# 4. TCR 内网端点已接入（VPC 内网拉取前提）
+#### 4. TCR 内网端点已接入（VPC 内网拉取前提）
+
+```bash
 tccli tcr DescribeInternalEndpoints --region ap-guangzhou --RegistryId "<REGISTRY_ID>" \
   --filter "TotalCount"
-# expected: ≥ 1（未接入见 [访问控制](../tcr/access/manage.md)）
+# expected: ≥ 1
 ```
+
+未接入 → [访问控制](../tcr/access/manage.md)
 
 ## 步骤 1：创建 TCR 访问凭证
 
@@ -159,19 +172,29 @@ kubectl delete deployment verify-app
 ## 清理
 
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
+
+#### 1. 删除业务部署（若仍存在）
+
 ```bash
-# 1. 删除业务部署（若仍存在）
 kubectl delete deployment my-app --ignore-not-found
 # expected: deployment.apps "my-app" deleted 或 not found
+```
 
-# 2. 删除 imagePullSecret
+#### 2. 删除 imagePullSecret
+
+```bash
 kubectl delete secret tcr-secret -n default --ignore-not-found
 # expected: secret "tcr-secret" deleted 或 not found
+```
 
-# 3. Token 清理：本篇步骤 1 用的是 TokenType=temp
-# temp 创建时常返回 TokenId:""，且通常不出现在 DescribeInstanceToken 列表，约 1 小时自动过期，无需 DeleteInstanceToken
-# 若改用 longterm：保存 Create 响应的 TokenId（或 DescribeInstanceToken → Tokens[].Id），再：
-# tccli tcr DeleteInstanceToken --region ap-guangzhou --RegistryId "<REGISTRY_ID>" --TokenId "<TOKEN_ID>"
+#### 3. Token 清理：本篇步骤 1 用的是 TokenType=temp
+
+temp 创建时常返回 TokenId:""，且通常不出现在 DescribeInstanceToken 列表，约 1 小时自动过期，无需 DeleteInstanceToken。
+
+若改用 longterm：保存 Create 响应的 TokenId（或 DescribeInstanceToken → Tokens[].Id），再：
+
+```bash
+tccli tcr DeleteInstanceToken --region ap-guangzhou --RegistryId "<REGISTRY_ID>" --TokenId "<TOKEN_ID>"
 # expected (longterm): exit 0
 ```
 

@@ -139,30 +139,43 @@ tccli tke SyncPrometheusTemp --region <REGION> \
 
 > Temp 装采集/记录规则，Template 装告警规则（AlertRules）。`Create` 返回 `TemplateId`、`Describe` 返回 `Templates[]`+`Total`。
 
+#### 1. 创建告警模板（全局，不绑实例，Template 含 Name/Level/AlertRules）
+
 ```bash
-# 1. 创建告警模板（全局，不绑实例，Template 含 Name/Level/AlertRules）
 tccli tke CreatePrometheusTemplate --region <REGION> \
   --Template '{"Name":"<TPL_NAME>","Level":"cluster","AlertRules":[{"Name":"<ALERT_NAME>","Rule":"up == 0","For":"5m"}]}'
 # expected: exit 0, 返回 TemplateId
+```
 
-# 2. 查询告警模板（Filters + Offset/Limit，不需 InstanceId）
+#### 2. 查询告警模板（Filters + Offset/Limit，不需 InstanceId）
+
+```bash
 tccli tke DescribePrometheusTemplates --region <REGION> \
   --Filters '[{"Name":"Name","Values":["<TPL_NAME>"]}]' --Offset 0 --Limit 20
 # expected: exit 0, 返回告警模板列表
+```
 
-# 3. 修改告警模板（TemplateId 寻址，Template 整体覆盖）
+#### 3. 修改告警模板（TemplateId 寻址，Template 整体覆盖）
+
+```bash
 tccli tke ModifyPrometheusTemplate --region <REGION> \
   --TemplateId <TEMPLATE_ID> \
   --Template '{"Name":"<TPL_NAME>","AlertRules":[{"Name":"<ALERT_NAME>","Rule":"up == 0","For":"10m"}]}'
 # expected: exit 0
+```
 
-# 4. 同步告警模板到目标实例（Targets 结构同 SyncPrometheusTemp）
+#### 4. 同步告警模板到目标实例（Targets 结构同 SyncPrometheusTemp）
+
+```bash
 tccli tke SyncPrometheusTemplate --region <REGION> \
   --TemplateId <TEMPLATE_ID> \
   --Targets '[{"Region":"<REGION>","InstanceId":"<PROM_INSTANCE_ID>","ClusterId":"<CLUSTER_ID>","ClusterType":"tke"}]'
 # expected: exit 0
+```
 
-# 5. 删除告警模板
+#### 5. 删除告警模板
+
+```bash
 tccli tke DeletePrometheusTemplate --region <REGION> --TemplateId <TEMPLATE_ID>
 # expected: exit 0
 ```
@@ -279,21 +292,30 @@ tccli tke DeletePrometheusTemp --region <REGION> --TemplateId <TEMPLATE_ID>
 
 ## 收尾确认
 
+汇总核对三项：采集配置存在 + 记录规则存在 + Temp 同步成功。
+
+#### 1. 在嵌套采集器数组中核对目标名称
+
+ServiceMonitor：
+
 ```bash
-# 汇总核对三项：采集配置存在 + 记录规则存在 + Temp 同步成功
-# 1. 在嵌套采集器数组中核对目标名称
-# ServiceMonitor：
 tccli tke DescribePrometheusConfig --region <REGION> \
   --InstanceId <PROM_INSTANCE_ID> --ClusterId <CLUSTER_ID> \
   --filter "ServiceMonitors[?Name=='<SERVICE_MONITOR_NAME>'].{name:Name,config:Config}"
 # expected: 返回目标 ServiceMonitor；PodMonitor/RawJob/Probe 分别在 PodMonitors/RawJobs/Probes 中按 Name 查询
+```
 
-# 2. 记录规则存在
+#### 2. 记录规则存在
+
+```bash
 tccli tke DescribePrometheusRecordRules --region <REGION> --InstanceId <PROM_INSTANCE_ID> \
   --filter "Records[].{name:Name}"
 # expected: 含创建的规则名
+```
 
-# 3. Temp 模板同步成功
+#### 3. Temp 模板同步成功
+
+```bash
 tccli tke DescribePrometheusTempSync --region <REGION> --TemplateId <TEMPLATE_ID> \
   --filter "Targets[].{instance:InstanceId,status:Status}"
 # expected: 目标实例同步状态符合接口返回的成功终态

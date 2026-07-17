@@ -57,38 +57,64 @@ tccli tke DescribeRegions
 
 ### 资源检查
 
+按序执行；任一步失败先补齐依赖再继续。命令在代码块内；失败跳转见各步块外链接。
+
+#### 1. 集群名未被占用
+
 ```bash
-# 1. 确认集群名未被占用
 tccli tke DescribeClusters --region ap-guangzhou \
   --Filters '[{"Name":"ClusterName","Values":["<CLUSTER_NAME>"]}]'
 # expected: { "TotalCount": 0 }  → 名称可用
+```
 
-# 2. 确认 VPC 存在（创建托管集群时 VpcId 必传）
+#### 2. VPC 存在（托管集群 `VpcId` 必传）
+
+```bash
 tccli vpc DescribeVpcs --region ap-guangzhou --VpcIds '["<VPC_ID>"]'
 # expected: { "VpcSet": [{ "VpcId": "<VPC_ID>" }] }  → VPC 可用
-# 无 VPC → 见 准备 VPC 与子网 (../../getting-started/prepare-vpc.md)
+```
 
-# 3. 确认子网存在（集群本身不强制要子网，但节点池要从子网分配节点 IP——提前备好）
+无 VPC → [准备 VPC 与子网](../../getting-started/prepare-vpc.md)
+
+#### 3. 子网存在（节点池要从子网分 IP，创建前备好）
+
+```bash
 tccli vpc DescribeSubnets --region ap-guangzhou \
   --Filters '[{"Name":"vpc-id","Values":["<VPC_ID>"]}]' \
   --filter "SubnetSet[].{id:SubnetId,avail:AvailableIpAddressCount}" --output text
 # expected: 至少 1 个子网，AvailableIpAddressCount ≥ 10
-# 无子网 → 见 准备 VPC 与子网 (../../getting-started/prepare-vpc.md) 的"创建子网"段
+```
 
-# 4. 确认集群配额未满
+无子网 → [准备 VPC 与子网 — 创建子网](../../getting-started/prepare-vpc.md#2-创建子网)
+
+#### 4. 集群配额未满
+
+```bash
 tccli tke DescribeClusters --region ap-guangzhou
-# expected: TotalCount < 配额上限（单地域默认 20，见 [配额](../reference/quotas.md)）
+# expected: TotalCount < 配额上限（单地域默认 20）
+```
 
-# 5. 服务角色：TKE 主角色（任意建集群）
+配额说明见 [配额](../reference/quotas.md)
+
+#### 5. 服务角色：`TKE_QCSRole`（任意建集群）
+
+```bash
 tccli cam DescribeRoleList --Page 1 --Rp 100 \
   --filter "List[?RoleName=='TKE_QCSRole'].RoleName" --output text
-# expected: TKE_QCSRole；空 → [配置凭证 — 补 TKE_QCSRole](../../getting-started/credentials.md#补-tke_qcsrole主服务角色)
+# expected: TKE_QCSRole
+```
 
-# 6. 服务角色：IPAMD（仅 NetworkType=VPC-CNI 时必查；快速入门默认 VPC-CNI）
+空 → [配置凭证 — 补 TKE_QCSRole](../../getting-started/credentials.md#补-tke_qcsrole主服务角色)
+
+#### 6. 服务角色：`IPAMDofTKE_QCSRole`（仅 `NetworkType=VPC-CNI` 时必查；快速入门默认 VPC-CNI）
+
+```bash
 tccli cam DescribeRoleList --Page 1 --Rp 100 \
   --filter "List[?RoleName=='IPAMDofTKE_QCSRole'].RoleName" --output text
-# expected: IPAMDofTKE_QCSRole；空 → [配置凭证 — 补 IPAMD](../../getting-started/credentials.md#补-ipamdoftke_qcsrolevpc-cni-前置) 或 [VPC-CNI](../networking/vpc-cni.md#ipamd-服务角色)
+# expected: IPAMDofTKE_QCSRole
 ```
+
+空 → [配置凭证 — 补 IPAMD](../../getting-started/credentials.md#补-ipamdoftke_qcsrolevpc-cni-前置) 或 [VPC-CNI — IPAMD 服务角色](../networking/vpc-cni.md#ipamd-服务角色)
 
 ### 创建前必读（创建后改不了）
 

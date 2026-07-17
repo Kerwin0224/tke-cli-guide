@@ -45,13 +45,17 @@ docker --version
 
 ### 资源检查
 
+#### 1. 实例 Running
+
 ```bash
-# 1. 实例 Running
 tccli tcr DescribeInstanceStatus --region <REGION> --RegistryIds '["<REGISTRY_ID>"]' \
   --filter "RegistryStatusSet[0].Status"
 # expected: "Running"
+```
 
-# 2. 访问端点已开：优先内网，本地/外网再公网（见 [访问管理](../instances/manage-access.md)）
+#### 2. 访问端点已开（优先内网，本地/外网再公网）
+
+```bash
 tccli tcr DescribeInternalEndpoints --region <REGION> --RegistryId "<REGISTRY_ID>" \
   --filter "AccessVpcSet[].{vpc:VpcId,status:Status}"
 # expected: VPC 内推拉时 AccessVpcSet 含目标 VPC
@@ -59,8 +63,13 @@ tccli tcr DescribeInternalEndpoints --region <REGION> --RegistryId "<REGISTRY_ID
 tccli tcr DescribeExternalEndpointStatus --region <REGION> --RegistryId "<REGISTRY_ID>" \
   --filter "Status"
 # expected: 公网路径时 "Opened"；仅内网时可为 Closed
+```
 
-# 3. 命名空间与仓库存在
+端点配置见 [访问管理](../instances/manage-access.md)
+
+#### 3. 命名空间与仓库存在
+
+```bash
 tccli tcr DescribeNamespaces --region <REGION> --RegistryId "<REGISTRY_ID>" \
   --filter "NamespaceList[].Name"
 # expected: 含目标命名空间
@@ -185,18 +194,26 @@ tccli tcr DescribeImages --region <REGION> \
 > **副作用警告**：`DeleteImage` 删除指定镜像版本，不可恢复。`docker rmi` 只删本地镜像，不影响 TCR 侧。
 
 > docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）
+
+#### 1. TCR 侧删除镜像版本
+
 ```bash
-# 1. TCR 侧删除镜像版本
 tccli tcr DeleteImage --region <REGION> \
   --RegistryId "<REGISTRY_ID>" --NamespaceName "<NAMESPACE_NAME>" \
   --RepositoryName "<REPOSITORY_NAME>" --ImageVersion "<TAG>"
 # expected: exit 0
+```
 
-# 2. 本地清理（docker CLI，非 tccli）
+#### 2. 本地清理（docker CLI，非 tccli）
+
+```bash
 docker rmi <REGISTRY_DOMAIN>/<NAMESPACE_NAME>/<REPOSITORY_NAME>:<TAG>
 # expected: Untagged + Deleted
+```
 
-# 3. 验证 TCR 侧已删
+#### 3. 验证 TCR 侧已删
+
+```bash
 tccli tcr DescribeImages --region <REGION> \
   --RegistryId "<REGISTRY_ID>" --NamespaceName "<NAMESPACE_NAME>" \
   --RepositoryName "<REPOSITORY_NAME>" --ImageVersion "<TAG>"

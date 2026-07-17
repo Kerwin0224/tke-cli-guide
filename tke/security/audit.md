@@ -55,12 +55,16 @@ fused: false
 
 ### 前置：创建 CLS 日志集与主题
 
+#### 1. 创建 CLS 日志集
+
 ```bash
-# 1. 创建 CLS 日志集
 tccli cls CreateLogset --region <REGION> --LogsetName "tke-audit-<CLUSTER_ID>"
 # expected: 返回 LogsetId
+```
 
-# 2. 创建日志主题（在日志集下）
+#### 2. 创建日志主题（在日志集下）
+
+```bash
 tccli cls CreateTopic --region <REGION> --LogsetId "<LOGSET_ID>" --TopicName "audit"
 # expected: 返回 TopicId
 ```
@@ -259,18 +263,27 @@ tccli tke ModifyOpenPolicyList --ClusterId "<CLUSTER_ID>" --region <REGION> \
 
 ## 收尾确认
 
+汇总核对三项：审计开关已开 + CLS 日志集/主题存在 + 投递可查。
+
+#### 1. 审计开关（TKE 侧）
+
 ```bash
-# 汇总核对三项：审计开关已开 + CLS 日志集/主题存在 + 投递可查
-# 1. 审计开关（TKE 侧）
 tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet[?ClusterId=='<CLUSTER_ID>'] | [0].ClusterAuditEnabled"
 # expected: true
+```
 
-# 2. CLS 日志集/主题存在（跨产品 cls）
+#### 2. CLS 日志集/主题存在（跨产品 cls）
+
+```bash
 tccli cls DescribeLogsets --region <REGION> --LogsetId "<LOGSET_ID>"
 # expected: 返回日志集，含 TopicId
+```
 
-# 3. 端到端：用唯一命名资源制造 kube-apiserver 审计事件，再到 CLS 检索
-# kubectl 操作目标集群的 Kubernetes API；TCCLI 仅负责审计开关与 CLS 配置
+#### 3. 端到端：用唯一命名资源制造 kube-apiserver 审计事件，再到 CLS 检索
+
+kubectl 操作目标集群的 Kubernetes API；TCCLI 仅负责审计开关与 CLS 配置。
+
+```bash
 AUDIT_NAME="audit-probe-check"
 kubectl create configmap "$AUDIT_NAME" --from-literal=probe=audit
 # expected: configmap/audit-probe-check created

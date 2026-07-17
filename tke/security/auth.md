@@ -127,17 +127,31 @@ tccli tke GrantUserPermissions --region <REGION> \
 ## 应用
 
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
+
+#### 1. 获取 kubeconfig（须先开访问端点）
+
 ```bash
-# 1. 获取 kubeconfig（须先开访问端点，见 [管理端点](../networking/endpoints.md)）
 tccli tke DescribeClusterKubeconfig --region ap-guangzhou --ClusterId "<CLUSTER_ID>" \
   --filter "Kubeconfig" --output text > ~/.kube/tke-config
 # expected: YAML 含 apiVersion/clusters；server 为公网或内网 VIP
-
-# 2. 若 Domain/server 为 cls-*.ccs.tencent-cloud.com 且 dig 失败：用 ClusterExternalEndpoint 改写 server（见 endpoints.md 步骤 5）
-# 3. 验证连通（本机须公网端点 Created + SecurityPolicies 含出口 IP；仅内网 VIP 时本机超时属网络路径，非证书问题）
-kubectl --kubeconfig ~/.kube/tke-config get nodes --request-timeout=15s
-# expected: 节点列表；超时/Unable to connect/no such host → 查端点、ACL、是否改写为 ClusterExternalEndpoint，见 [管理端点](../networking/endpoints.md)
 ```
+
+须先开访问端点 → [管理端点](../networking/endpoints.md)
+
+#### 2. 必要时改写 server
+
+若 Domain/server 为 `cls-*.ccs.tencent-cloud.com` 且 dig 失败：用 `ClusterExternalEndpoint` 改写 server（见 [管理端点](../networking/endpoints.md) 步骤 5）。
+
+#### 3. 验证连通
+
+本机须公网端点 Created + SecurityPolicies 含出口 IP；仅内网 VIP 时本机超时属网络路径，非证书问题。
+
+```bash
+kubectl --kubeconfig ~/.kube/tke-config get nodes --request-timeout=15s
+# expected: 节点列表；超时/Unable to connect/no such host → 查端点、ACL、是否改写为 ClusterExternalEndpoint
+```
+
+连通失败排查 → [管理端点](../networking/endpoints.md)
 
 ## 验证
 
@@ -229,18 +243,29 @@ tccli tke DeleteUserPermissions --TargetUin "<SUB_UIN>" --region <REGION> \
 ## 收尾确认
 
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
+
+汇总核对三项：kubeconfig 可用 + OIDC 配置生效 + RBAC 权限授予。
+
+#### 1. kubeconfig 端到端可用
+
+OIDC 配置核对后，再确认 kubeconfig 可连通集群。
+
 ```bash
-# 汇总核对三项：kubeconfig 可用 + OIDC 配置生效 + RBAC 权限授予
-# 1. kubeconfig 端到端可用（OIDC 配置核对后，再确认 kubeconfig 可连通集群）
 kubectl --kubeconfig kubeconfig.yaml get nodes
 # expected: 节点列表返回
+```
 
-# 2. OIDC 配置生效
+#### 2. OIDC 配置生效
+
+```bash
 tccli tke DescribeClusterAuthenticationOptions --region <REGION> --ClusterId "<CLUSTER_ID>" \
   --filter "{oidc:OIDCConfig}"
 # expected: OIDCConfig 与设置一致
+```
 
-# 3. RBAC 权限授予生效（子账号可连集群）
+#### 3. RBAC 权限授予生效（子账号可连集群）
+
+```bash
 tccli tke DescribeUserPermissions --TargetUin "<SUB_UIN>" --region <REGION> \
   --filter "Permissions[].{cluster:ClusterId,role:RoleName}"
 # expected: 含目标集群与角色 → 认证配置闭环完成

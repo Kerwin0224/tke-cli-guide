@@ -62,26 +62,40 @@ tccli cvm DescribeZoneInstanceConfigInfos --region ap-guangzhou \
 
 > 节点池（含旧版 `CreateClusterNodePool` 透传 AS、以及依赖弹性伸缩建 CVM 的路径）需要账号已授权服务角色 **`AS_QCSRole`**。未授权时 API 返回 `UnauthorizedOperation.AutoScalingRoleUnauthorized`（消息含「未授权服务角色 AS_QCSRole」）——**不是**节点池 JSON 写错，也**不是**改 `LaunchConfigurePara` 能修好。
 
+#### 1. 探测是否已有 AS_QCSRole
+
 ```bash
-# 1) 探测是否已有 AS_QCSRole
 tccli cam DescribeRoleList --Page 1 --Rp 100 \
   --filter "List[?RoleName=='AS_QCSRole'].{name:RoleName,id:RoleId}" --output text
 # expected: 有一行 name=AS_QCSRole → 已建；空输出 → 执行创建
+```
 
-# 2) 创建服务角色（Principal 必须是 as.cloud.tencent.com）
+#### 2. 创建服务角色
+
+Principal 必须是 `as.cloud.tencent.com`。
+
+```bash
 tccli cam CreateRole \
   --RoleName AS_QCSRole \
   --Description "Auto Scaling service role for TKE node pools" \
   --PolicyDocument '{"version":"2.0","statement":[{"action":"name/sts:AssumeRole","effect":"allow","principal":{"service":"as.cloud.tencent.com"}}]}'
 # expected: 返回 RoleId；若角色已存在则跳过本步
+```
 
-# 3) 挂策略（服务角色专用；精控场景可再挂 QcloudASFullAccess）
+#### 3. 挂策略
+
+服务角色专用；精控场景可再挂 `QcloudASFullAccess`。
+
+```bash
 tccli cam AttachRolePolicy \
   --AttachRoleName AS_QCSRole \
   --PolicyName QcloudAccessForASRole
 # expected: exit 0，返回 RequestId
+```
 
-# 4) 复验角色存在后再 CreateNodePool / CreateClusterNodePool
+#### 4. 复验角色存在后再 CreateNodePool / CreateClusterNodePool
+
+```bash
 tccli cam DescribeRoleList --Page 1 --Rp 100 \
   --filter "List[?RoleName=='AS_QCSRole'].RoleName" --output text
 # expected: AS_QCSRole
@@ -383,8 +397,10 @@ tccli tke DescribeClusterInstances --version 2018-05-25 --region ap-guangzhou \
 tccli tke DescribeNodePools --version 2022-05-01 --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" --Filters '[{"Name":"NodePoolsId","Values":["<NODE_POOL_ID>"]}]' \
   --filter "NodePools[0].{name:Name,state:LifeState,desired:Native.Replicas}"
-# expected: LifeState=Running；Native.Replicas 反映期望副本数（Replicas=0 时需 [扩缩容](nodepool-scale.md) 设值才建节点）
+# expected: LifeState=Running；Native.Replicas 反映期望副本数（Replicas=0 时需扩缩容设值才建节点）
 ```
+
+`Native.Replicas=0` 时须进 [扩缩容](nodepool-scale.md) 设期望副本才建节点。
 
 > 节点池 `LifeState=Running`（2022-05-01 Native）= 创建闭环完成。但 `Native.Replicas=0` 时无节点加入集群（能力边界），须进 [扩缩容](nodepool-scale.md) 设期望副本（`ScaleNodePool` / `ModifyNodePool`）触发建 CVM，待节点 InstanceState=running 后方可调度 Pod。
 

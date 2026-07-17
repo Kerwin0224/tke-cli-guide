@@ -103,13 +103,19 @@ tccli tke DescribeTKEEdgeScript --region <EDGE_REGION> \
 
 ### 升级边缘集群
 
+#### 1. 查询升级信息
+
+`EdgeVersion` 为 API 必填：目标 TKEEdge 版本。
+
 ```bash
-# 1. 查询升级信息（EdgeVersion 为 API 必填：目标 TKEEdge 版本）
 tccli tke DescribeEdgeClusterUpgradeInfo --region <EDGE_REGION> \
   --ClusterId "<CLUSTER_ID>" --EdgeVersion "<EDGE_VERSION>"
 # expected: 返回 EdgeVersionCurrent / ClusterUpgradeStatus 等
+```
 
-# 2. 执行升级
+#### 2. 执行升级
+
+```bash
 tccli tke UpdateEdgeClusterVersion --region <EDGE_REGION> \
   --ClusterId "<CLUSTER_ID>" \
   --Version "<TARGET_VERSION>"

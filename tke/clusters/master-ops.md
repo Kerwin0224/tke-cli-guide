@@ -51,18 +51,30 @@ tccli tke DescribeClusters --region <REGION> --ClusterIds '["<CLUSTER_ID>"]' \
 
 ### 资源检查
 
+按序执行；任一步失败先补齐依赖再继续。
+
+#### 1. 集群状态须 Running（MasterScaling 中不可再扩缩）
+
 ```bash
-# 1. 集群状态须 Running（MasterScaling 中不可再扩缩）
 tccli tke DescribeClusterStatus --region <REGION> --filter "ClusterStatusSet[?ClusterId=='<CLUSTER_ID>'] | [0].ClusterState" --output text
 # expected: Running
+```
 
-# 2. 查当前 Master 节点（独立集群 Master 用 --InstanceRole MASTER 查；
-#    ClusterRunningNodeNum 仅计工作节点，Master 计数看 DescribeClusters 的 ClusterMaterNodeNum）
+#### 2. 查当前 Master 节点
+
+独立集群 Master 用 `--InstanceRole MASTER` 查；`ClusterRunningNodeNum` 仅计工作节点，Master 计数看 `DescribeClusters` 的 `ClusterMaterNodeNum`。
+
+```bash
 tccli tke DescribeClusterInstances --region <REGION> --version 2018-05-25 --ClusterId "<CLUSTER_ID>" --InstanceRole MASTER \
   --filter "InstanceSet[].{id:InstanceId,role:InstanceRole,state:InstanceState}" --output text
 # expected: Master 节点列表（MASTER_ETCD 角色，含 InstanceId 供 ScaleIn 用）
+```
 
-# Master 数量计数（DescribeClusters 旧版 ClusterMaterNodeNum/ClusterEtcdNodeNum 字段）
+#### 3. Master 数量计数
+
+`DescribeClusters` 旧版 `ClusterMaterNodeNum`/`ClusterEtcdNodeNum` 字段：
+
+```bash
 tccli tke DescribeClusters --region <REGION> --ClusterIds '["<CLUSTER_ID>"]' --version 2018-05-25 \
   --filter "Clusters[0].{master:ClusterMaterNodeNum,etcd:ClusterEtcdNodeNum}" --output text
 # expected: master 数 + etcd 数

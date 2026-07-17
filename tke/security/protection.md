@@ -82,8 +82,10 @@ tccli tke EnableClusterDeletionProtection --region ap-guangzhou --ClusterId "<CL
 ```bash
 # 入参 Category 仅 baseline|priority|optional（≠ 响应 PolicyCategory）；省略则返回全量
 tccli tke DescribeOpenPolicyList --region ap-guangzhou --ClusterId "<CLUSTER_ID>" --Category "baseline"
-# expected: OpenPolicyInfoList[]（PolicyCategory/EnforcementAction/EnabledStatus=open|close）+ GatekeeperStatus；入参枚举详 [审计日志](audit.md)
+# expected: OpenPolicyInfoList[]（PolicyCategory/EnforcementAction/EnabledStatus=open|close）+ GatekeeperStatus
 ```
+
+入参枚举详 [审计日志](audit.md)
 
 ### 修改 OPA 准入策略
 

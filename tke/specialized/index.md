@@ -62,8 +62,9 @@ tccli tke DescribeEKSClusters --region ap-guangzhou --Limit 3 \
 # 查看边缘集群（须用 Edge 支持地域；ap-guangzhou 返回 UnsupportedRegion）
 tccli tke DescribeTKEEdgeClusters --region <EDGE_REGION> --Limit 1
 # expected: TotalCount + Clusters（无边缘集群则 0）；UnsupportedRegion → 换 Edge 地域（如 ap-beijing）
-# <EDGE_REGION> 定义见 [边缘集群](edge-cluster.md)
 ```
+
+`<EDGE_REGION>` 定义见 [边缘集群](edge-cluster.md)
 
 ## 文档
 

@@ -37,8 +37,10 @@ tccli --version
 # expected: 最新版本或更高
 
 tccli tke DescribeClusters --region <REGION> --filter "Clusters[0].ClusterId"
-# expected: 集群 ID（凭证有效，见 [配置凭证](../../getting-started/credentials.md)）
+# expected: 集群 ID（凭证有效）
 ```
+
+凭证配置见 [配置凭证](../../getting-started/credentials.md)
 
 | 占位符 | 含义 | 约束 | 获取方式 |
 |--------|------|------|---------|

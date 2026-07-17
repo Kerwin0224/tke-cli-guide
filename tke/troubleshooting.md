@@ -46,15 +46,22 @@ tccli tke DescribeTasks --region ap-guangzhou \
 
 **诊断与保全**：
 
+#### 1. 核对状态、删除保护和已纳管节点
+
+不要仅凭持续时间删除集群。
+
 ```bash
-# 1. 核对状态、删除保护和已纳管节点；不要仅凭持续时间删除集群
 tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]'
 tccli tke DescribeClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]'
 tccli tke DescribeClusterInstances --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
 # expected: 保留 ClusterState、ClusterDeletionProtection、节点及关联资源信息
+```
 
-# 2. 按最近执行的操作类型查询异步任务
-# TaskType 为必填；替换为实际操作类型，如 node_upgrade/add_cluster_cidr/node_upgrade_ctl
+#### 2. 按最近执行的操作类型查询异步任务
+
+`TaskType` 为必填；替换为实际操作类型，如 `node_upgrade`/`add_cluster_cidr`/`node_upgrade_ctl`。
+
+```bash
 tccli tke DescribeTasks --region ap-guangzhou \
   --Filter '[{"Name":"ClusterId","Values":["<CLUSTER_ID>"]},{"Name":"TaskType","Values":["<TASK_TYPE>"]}]' \
   --Latest true
@@ -92,12 +99,16 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<NEW_CLUST
 
 **诊断**：
 
+#### 1. 查看节点状态
+
 ```bash
-# 1. 查看节点状态
 tccli tke DescribeClusterInstances --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
 # expected: 找到 InstanceState 为 "initializing" 或 "failed" 的节点
+```
 
-# 2. 查看节点池详情
+#### 2. 查看节点池详情
+
+```bash
 tccli tke DescribeClusterNodePoolDetail --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" --NodePoolId "<NODEPOOL_ID>"
 # expected: 检查 LifeState 和伸缩配置
@@ -138,8 +149,11 @@ tccli tke DescribeClusterInstances --region ap-guangzhou --ClusterId "<CLUSTER_I
 
 **诊断**：
 
+#### 1. 分别检查公网与内网端点
+
+按客户端所在网络选择目标。
+
 ```bash
-# 1. 分别检查公网与内网端点；按客户端所在网络选择目标
 # 本机/公网 CI 检查公网端点
 tccli tke DescribeClusterEndpointStatus --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" --IsExtranet true
@@ -147,12 +161,20 @@ tccli tke DescribeClusterEndpointStatus --region ap-guangzhou \
 tccli tke DescribeClusterEndpointStatus --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" --IsExtranet false
 # expected: 目标端点 Status=Created；Creating 继续等待，CreateFailed 查看 ErrorMsg
+```
 
-# 2. 核对实际地址：公网看 ClusterExternalEndpoint/ACL，内网看 ClusterIntranetEndpoint
+#### 2. 核对实际地址
+
+公网看 `ClusterExternalEndpoint`/ACL，内网看 `ClusterIntranetEndpoint`。
+
+```bash
 tccli tke DescribeClusterEndpoints --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
 # expected: 所选网络对应的端点字段非空
+```
 
-# 3. 重新获取 kubeconfig
+#### 3. 重新获取 kubeconfig
+
+```bash
 tccli tke DescribeClusterKubeconfig --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
 # expected: 返回有效 kubeconfig (base64)
 ```
@@ -240,21 +262,31 @@ tccli tke DeleteCluster --region ap-guangzhou --ClusterId "<CLUSTER_ID>"
 
 如果以上步骤无法解决问题，收集以下信息提交工单:
 
+#### 1. 集群基本信息
+
 ```bash
-# 1. 集群基本信息
 tccli tke DescribeClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]' > cluster-info.json
 # expected: 文件写入成功，JSON 含 Clusters[]
+```
 
-# 2. 集群状态详情
+#### 2. 集群状态详情
+
+```bash
 tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]' > cluster-status.json
 # expected: 文件写入成功，含 ClusterStatusSet
-
-# 3. 最近操作日志（从控制台获取 CloudAudit 日志）
-# 或运行: tccli cloudaudit LookUpEvents --LookupAttributes '[{"AttributeKey":"ResourceName","AttributeValue":"<CLUSTER_ID>"}]'
-
-# 4. 错误 RequestId
-# 从之前失败的 API 响应中获取 RequestId
 ```
+
+#### 3. 最近操作日志
+
+从控制台获取 CloudAudit 日志，或：
+
+```bash
+tccli cloudaudit LookUpEvents --LookupAttributes '[{"AttributeKey":"ResourceName","AttributeValue":"<CLUSTER_ID>"}]'
+```
+
+#### 4. 错误 RequestId
+
+从之前失败的 API 响应中获取 `RequestId`。
 
 提交到: [腾讯云工单系统](https://console.cloud.tencent.com/workorder)，附带以上 JSON 文件和 RequestId。
 
