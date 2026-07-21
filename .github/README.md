@@ -1,55 +1,117 @@
-# tccli-on-tke-tcr
+# TKE · tccli 操作手册
 
-> 腾讯云容器服务 (TKE) 和容器镜像服务 (TCR) 的 `tccli` 命令行操作指南 —— 面向 AI Agent 和运维人员，每条命令可复制执行。
+**别让 Agent 对着 `tccli` 盲试。**  
+这里是可复制的 TKE 命令手册；文档站带只读 MCP，Agent 能先查页再执行。人也照样能打开手册逐步做。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](../LICENSE)
+[![Docs](https://img.shields.io/badge/docs-GitBook-blue)](https://tccli-agent.gitbook.io/tccli)
+[![MCP](https://img.shields.io/badge/MCP-ready-green)](https://tccli-agent.gitbook.io/tccli/~gitbook/mcp)
 
-这是文档源码仓库，通过 [GitBook Git Sync](https://gitbook.com/docs/getting-started/git-sync) 自动同步到在线文档站点。本文件是 **GitHub 仓库门面**；线上 GitBook 文档的首页是仓库根目录的 [`README.md`](../README.md)（两者刻意分离，互不干扰）。
+**打开手册** → [tccli-agent.gitbook.io/tccli](https://tccli-agent.gitbook.io/tccli)
 
-## 内容
+---
 
-覆盖 `tccli tke` 和 `tccli tcr` 的全部运维操作，按版本发布：
+## 你能用来做什么
 
-| 版本 | 状态 | 说明 |
-|------|------|------|
-| **v2**（当前线上） | 🟢 live | 扁平结构：`tke/` `tcr/` `quickstart/` `cross-product/` `appendix/` |
-| **v1** | 📦 存档 | 旧结构：`TKE/` `TCR/` 下嵌套「面向 Agent 的 CLI 操作指南」 |
+| 你要… | 这里给… |
+|--------|---------|
+| 复制粘贴就能跑的 `tccli tke` | [在线手册](https://tccli-agent.gitbook.io/tccli) 全文 |
+| 让 Agent 查文档再调命令 | 下方 **1 条命令接 MCP** |
+| 固定「先查手册 / 怎么调 tccli / 有问题回本仓」 | 两个可选 skill |
 
-## 版本管理
+不覆盖：控制台点选、Terraform、纯 kubectl。
 
-本仓库用 **分支 + 指针 + tag** 三层模型管理文档版本（免费版 GitBook 只同步 `master` 一个分支，所以版本切换 = 移动 `master` 指针）：
+### 接上之后，Agent 少盲试多少？
 
-- **版本分支** `v1` / `v2`：版本内容真相之源，append-only，可继续优化
-- **指针** `master`：GitBook 同步的分支，指向当前线上版本，用 `git reset --hard <版本分支> && git push -f origin master` 切换
-- **发布快照** tag `v1-final` / `v2.0`：不可变发布存档
+真实腾讯云上做过对照：同一模型、同一套 tccli skill、同一任务  
+（托管空集群 → 1 个节点 → 公网 kubectl → nginx Running），唯一差别是 **能不能查本手册**。
 
-```bash
-# 切换线上版本
-git checkout master && git reset --hard v1 && git push -f origin master   # 切到 v1
-git checkout master && git reset --hard v2 && git push -f origin master   # 切回 v2
+| 模型 | 能查本手册 | 不能查 | 完成任务 |
+|------|------------|--------|----------|
+| **GLM** | **92** 次命令 | 119 次 | 都能完成 |
+| **DeepSeek Flash** | **69** 次命令 | 114 次 | 都能完成 |
+| Grok 4.5 | 27 次 | 19 次 | 都能完成 |
 
-# 继续优化某版本（不影响线上）
-git checkout v1   # 编辑 → commit → push origin v1
+GLM、DeepSeek Flash 在能查手册时，完成同一件事用的命令更少。  
+Grok 本身就强，有时不查文档也会更快——手册的价值是**可查、可遵循**，不是万能加速器。
+
+---
+
+## 开始用（Agent）
+
+### 1. 接入手册 MCP
+
+只读文档：搜索、打开页面、问答、反馈文档问题。  
+**不会**用你的云账号调 API。
+
+```
+https://tccli-agent.gitbook.io/tccli/~gitbook/mcp
 ```
 
-## 环境准备
+**Claude Code**
 
-```bash
-pip install tccli
-tccli configure set secretId <SecretId> secretKey <SecretKey>
-tccli configure set region ap-guangzhou
+```sh
+claude mcp add --transport http tccli-agent-docs \
+  https://tccli-agent.gitbook.io/tccli/~gitbook/mcp
 ```
 
-## 仓库结构
+接入后执行 `/mcp` 确认，然后让 Agent 查 TKE 相关页再执行命令。
 
+**Cursor / VS Code**（`mcp.json`）：
+
+```json
+{
+  "mcpServers": {
+    "tccli-agent-docs": {
+      "url": "https://tccli-agent.gitbook.io/tccli/~gitbook/mcp"
+    }
+  }
+}
 ```
-.
-├── README.md              # GitBook 线上首页（v2 内容，勿改作门面）
-├── SUMMARY.md             # GitBook 目录
-├── .gitbook.yaml          # GitBook 配置（root: ./）
-├── tke/  tcr/  quickstart/  cross-product/  appendix/   # v2 文档
-└── .github/README.md      # ← 本文件，GitHub 仓库门面
+
+**Codex**
+
+```sh
+codex mcp add tccli-agent-docs \
+  https://tccli-agent.gitbook.io/tccli/~gitbook/mcp
 ```
+
+### 2. 安装 skill（推荐）
+
+```sh
+npx skills add Kerwin0224/tccli-agent-sop -g -y
+npx skills add Kerwin0224/tencentcloud-tccli-skill -g -y
+```
+
+| skill | 做什么 |
+|-------|--------|
+| [tccli-agent-sop](https://github.com/Kerwin0224/tccli-agent-sop) | 先查手册再执行；问题开到本仓 Issues |
+| [tencentcloud-tccli-skill](https://github.com/Kerwin0224/tencentcloud-tccli-skill) | tccli 怎么调（filter / skeleton / waiter 等） |
+
+### 3. 丢给 Agent 一句
+
+> 用手册 MCP 查清步骤，在 `ap-guangzhou` 创建一个空的托管 TKE 集群；每条命令要能对应到手册页。
+
+---
+
+## 安全
+
+- MCP 只读文档、可反馈文档问题，**改不了**你的云资源  
+- 真正调 `tccli` 时，用你本机自己的凭证  
+- 不要把 SecretId / SecretKey 贴进不可信对话  
+
+本机尚未安装 tccli 时：`uv tool install tccli` 或 `pip install tccli`，再 `tccli configure`。步骤见手册 [安装](https://tccli-agent.gitbook.io/tccli/getting-started/install) / [凭证](https://tccli-agent.gitbook.io/tccli/getting-started/credentials)。
+
+---
+
+## 人读手册
+
+导航、边界说明、全部命令正文：  
+**[tccli-agent.gitbook.io/tccli](https://tccli-agent.gitbook.io/tccli)**
+
+本仓库是上述手册的源码。
+
+---
 
 ## License
 
