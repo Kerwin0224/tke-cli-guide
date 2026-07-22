@@ -1,0 +1,77 @@
+name: 协作 / 流程建议（process）
+description: MCP、skill、脚本或协作流程缺口与改进建议。
+title: "[process] "
+labels: ["agent-feedback", "process"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        对应 skill type：`process`。
+
+        适用于手册 MCP 接入、skill 编排、`submit-issue.sh` / 脱敏脚本、标签与模板等协作链路问题。  
+        Agent 请用 `submit-issue.sh` 提交。
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: severity
+      options:
+        - low
+        - med
+        - high
+      default: 0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: reporter
+    attributes:
+      label: reporter
+      options:
+        - human
+        - agent
+      default: 0
+    validations:
+      required: true
+
+  - type: input
+    id: agent_model
+    attributes:
+      label: agent_model（可选）
+
+  - type: input
+    id: agent_session
+    attributes:
+      label: agent_session（可选）
+
+  - type: textarea
+    id: symptom
+    attributes:
+      label: 现象
+      description: 协作或流程上的阻塞 / 摩擦点。
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现 / 上下文
+      description: 客户端、skill 版本、相关命令或步骤（请脱敏）。
+    validations:
+      required: false
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望
+      description: 期望的流程或改进方向。
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 证据
+      description: 日志片段、截图说明、相关仓库链接（可选）。
+    validations:
+      required: false

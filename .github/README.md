@@ -116,3 +116,20 @@ npx skills add Kerwin0224/tencentcloud-tccli-skill -g -y
 ## License
 
 [MIT](../LICENSE) © 2026 Kerwin
+
+---
+
+## 反馈 Issue
+
+问题请开到 **本仓库** Issues。已按 skill `tccli-agent-sop` 的 [issue-schema](https://github.com/Kerwin0224/tccli-agent-sop/blob/master/references/issue-schema.md) 配置表单模板：
+
+| 模板 | type 标签 |
+|------|-----------|
+| 手册错误 / 缺失 | `doc-bug` |
+| 手册改进 | `enhancement` |
+| 工具 / API 异常 | `tool-bug` |
+| 协作 / 流程建议 | `process` |
+
+所有模板默认附加 `agent-feedback`。  
+**Agent** 请用 `submit-issue.sh` 提交（默认脱敏），不要绕过脚本，也不要使用 `--no-desensitize`。  
+**人类** 可在 GitHub「New issue」中选择对应模板；`doc-bug` / `enhancement` 必须填写手册出处 URL 与 `suggested_fix`。
