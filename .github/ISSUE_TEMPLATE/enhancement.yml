@@ -1,0 +1,94 @@
+name: 手册改进（enhancement）
+description: 手册可改进（结构、可发现性、补充示例等），非明确错误。
+title: "[enhancement] "
+labels: ["agent-feedback", "enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        对应 skill type：`enhancement`。
+
+        **必填**：相关手册 **page_url** 与 **suggested_fix**。  
+        Agent 请用 `submit-issue.sh` 提交；字段约定见 [issue-schema](https://github.com/Kerwin0224/tccli-agent-sop/blob/master/references/issue-schema.md)。
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: severity
+      description: 严重程度（low | med | high）
+      options:
+        - low
+        - med
+        - high
+      default: 0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: reporter
+    attributes:
+      label: reporter
+      options:
+        - human
+        - agent
+      default: 0
+    validations:
+      required: true
+
+  - type: input
+    id: page_url
+    attributes:
+      label: page_url（出处 URL）
+      description: 相关手册页完整 URL（https://tccli-agent.gitbook.io/ 下）。
+      placeholder: https://tccli-agent.gitbook.io/tccli/...
+    validations:
+      required: true
+
+  - type: input
+    id: page_section
+    attributes:
+      label: page_section（可选）
+      placeholder: 章节标题或锚点
+
+  - type: input
+    id: suggested_fix
+    attributes:
+      label: suggested_fix
+      description: 单行改进建议（必填）。
+      placeholder: 建议增加 FAQ 入口 / 补充 region 示例表……
+    validations:
+      required: true
+
+  - type: input
+    id: agent_model
+    attributes:
+      label: agent_model（可选）
+
+  - type: input
+    id: agent_session
+    attributes:
+      label: agent_session（可选）
+
+  - type: textarea
+    id: symptom
+    attributes:
+      label: 现象
+      description: 当前手册在可发现性、完整性或体验上的不足。
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望
+      description: 期望的手册形态或补充内容。
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 证据 / 参考
+      description: 相关原文、对比材料或使用场景（可选）。
+    validations:
+      required: false

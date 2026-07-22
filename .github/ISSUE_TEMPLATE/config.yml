@@ -1,0 +1,16 @@
+# Issue 模板配置 — 与 tccli-agent-sop references/issue-schema.md 对齐
+# 默认反馈仓库：Kerwin0224/tke-cli-guide
+blank_issues_enabled: false
+contact_links:
+  - name: 在线手册
+    url: https://tccli-agent.gitbook.io/tccli
+    about: 查阅 TKE · tccli 操作手册（优先于开 Issue 盲试）。
+  - name: Agent 反馈规范（issue-schema）
+    url: https://github.com/Kerwin0224/tccli-agent-sop/blob/master/references/issue-schema.md
+    about: Agent 请用 tccli-agent-sop 的 submit-issue.sh 提交（默认脱敏），字段约定见此页。
+  - name: 编排 skill（tccli-agent-sop）
+    url: https://github.com/Kerwin0224/tccli-agent-sop
+    about: 手册优先闭环：查阅 → 调用 → 反馈。
+  - name: 调用 skill（tencentcloud-tccli-skill）
+    url: https://github.com/Kerwin0224/tencentcloud-tccli-skill
+    about: tccli filter / skeleton / waiter 等调用细则。

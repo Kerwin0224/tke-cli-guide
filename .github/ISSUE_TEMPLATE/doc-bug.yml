@@ -1,0 +1,109 @@
+name: 手册错误 / 缺失（doc-bug）
+description: 手册内容错误、过期、关键步骤/参数/示例缺失，或示例命令无法运行。
+title: "[doc-bug] "
+labels: ["agent-feedback", "doc-bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        对应 skill type：`doc-bug`。
+
+        **必填**：手册**出处 URL**（须为 `https://tccli-agent.gitbook.io/` 下页面）与 **suggested_fix**。  
+        Agent 请优先使用 `tccli-agent-sop` 的 `submit-issue.sh`（默认脱敏），勿使用 MCP `sendFeedback` 替代本仓 Issue。  
+        请勿粘贴 SecretId / SecretKey / Token / 未脱敏资源 ID。
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: severity
+      description: 严重程度（issue-schema：low | med | high）
+      options:
+        - low
+        - med
+        - high
+      default: 1
+    validations:
+      required: true
+
+  - type: dropdown
+    id: reporter
+    attributes:
+      label: reporter
+      description: 反馈来源
+      options:
+        - human
+        - agent
+      default: 0
+    validations:
+      required: true
+
+  - type: input
+    id: page_url
+    attributes:
+      label: page_url（出处 URL）
+      description: 本轮手册 MCP 返回的完整页面 URL；禁止手写臆造。须以 https://tccli-agent.gitbook.io/ 开头。
+      placeholder: https://tccli-agent.gitbook.io/tccli/...
+    validations:
+      required: true
+
+  - type: input
+    id: page_section
+    attributes:
+      label: page_section（可选）
+      description: 章节标题或锚点
+      placeholder: 安装 / #credentials
+
+  - type: input
+    id: suggested_fix
+    attributes:
+      label: suggested_fix
+      description: 单行修改建议（必填）。复杂说明写在「期望」。
+      placeholder: 建议将 X 修改为 Y，原因是 Z
+    validations:
+      required: true
+
+  - type: input
+    id: agent_model
+    attributes:
+      label: agent_model（可选）
+      placeholder: tke/glm-latest
+
+  - type: input
+    id: agent_session
+    attributes:
+      label: agent_session（可选）
+      placeholder: session-id
+
+  - type: textarea
+    id: symptom
+    attributes:
+      label: 现象
+      description: 实际现象，以及与预期不符之处。
+      placeholder: 手册写的参数 / 步骤与 tccli help 或真实 API 响应不一致……
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现
+      description: 命令、参数、region（请自行脱敏）。
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望
+      description: 正确行为，或手册应补充的内容。
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 证据
+      description: 输出片段或手册原文（脱敏后）。
+    validations:
+      required: false

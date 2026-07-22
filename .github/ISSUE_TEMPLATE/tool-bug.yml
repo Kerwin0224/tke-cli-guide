@@ -1,0 +1,87 @@
+name: 工具 / API 异常（tool-bug）
+description: tccli 或云 API 行为异常、参数难用，且无法仅由账号权限解释。
+title: "[tool-bug] "
+labels: ["agent-feedback", "tool-bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        对应 skill type：`tool-bug`。
+
+        建议填写 **cmd**。请脱敏后粘贴输出；禁止 SecretId / SecretKey / Token 原文。  
+        Agent 请用 `tccli-agent-sop` 的 `submit-issue.sh`（默认脱敏）。
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: severity
+      options:
+        - low
+        - med
+        - high
+      default: 1
+    validations:
+      required: true
+
+  - type: dropdown
+    id: reporter
+    attributes:
+      label: reporter
+      options:
+        - human
+        - agent
+      default: 0
+    validations:
+      required: true
+
+  - type: input
+    id: cmd
+    attributes:
+      label: cmd
+      description: 触发问题的命令（建议填写，勿含密钥）。
+      placeholder: tccli tke DescribeClusters --region ap-guangzhou
+    validations:
+      required: false
+
+  - type: input
+    id: agent_model
+    attributes:
+      label: agent_model（可选）
+
+  - type: input
+    id: agent_session
+    attributes:
+      label: agent_session（可选）
+
+  - type: textarea
+    id: symptom
+    attributes:
+      label: 现象
+      description: 实际行为与预期不符之处（Error.Code、退出码等）。
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现
+      description: 命令、参数、region、环境（tccli 版本等）；请脱敏。
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望
+      description: 正确行为或期望的参数/输出。
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 证据
+      description: stderr / 响应片段（脱敏后）。
+    validations:
+      required: false
