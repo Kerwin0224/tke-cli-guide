@@ -11,8 +11,8 @@ fused: false
 
 ## 触发条件
 
-- `docker push <DOMAIN>/<NS>/<REPO>:latest` 覆盖已存在 Tag 未被拒绝，`latest` 被意外改写（生产环境需防覆盖）
-- `tccli tcr DescribeImmutableTagRules --RegistryId "<ID>"` 返回 `Rules: []`，命名空间下无不可变规则
+- `docker push <REGISTRY_DOMAIN>/<NAMESPACE_NAME>/<REPOSITORY_NAME>:latest` 覆盖已存在 Tag 未被拒绝，`latest` 被意外改写（生产环境需防覆盖）
+- `tccli tcr DescribeImmutableTagRules --RegistryId "<REGISTRY_ID>"` 返回 `Rules: []`，命名空间下无不可变规则
 - `docker push` 报 `denied` 但 `DescribeSecurityPolicies` 白名单含当前 IP（非权限原因，需确认是否不可变规则拦截）
 
 
@@ -77,12 +77,14 @@ tccli tcr CreateImmutableTagRules --region <REGION> \
 
 ### Enhanced: 版本号 Tag 不可变
 
+> 与 Minimal **二选一或改用 `ModifyImmutableTagRules`**：命名空间内仅支持一条不可变规则。若已创建 `latest` 规则，应 `Modify` 改 `TagPattern`，或先 `Delete` 再创建；不要第二次 `CreateImmutableTagRules`。
+
 ```bash
 # 所有 v 开头的 Tag（版本号）不可覆盖，防止发版后被篡改
 tccli tcr CreateImmutableTagRules --region <REGION> \
   --RegistryId "<REGISTRY_ID>" --NamespaceName "<NAMESPACE_NAME>" \
   --Rule '{"RepositoryPattern":"**","TagPattern":"v*","RepositoryDecoration":"repoMatches","TagDecoration":"matches"}'
-# expected: exit 0
+# expected: exit 0；同命名空间已有规则时改用 ModifyImmutableTagRules --RuleId <RULE_ID>
 ```
 
 ## 验证
@@ -95,7 +97,7 @@ tccli tcr DescribeImmutableTagRules --region <REGION> --RegistryId "<REGISTRY_ID
 # expected: Total 为规则数；EmptyNs 为尚无规则的命名空间；Rules 为已有规则
 
 # 验证不可变生效：尝试覆盖 latest 应被拒绝
-docker push <REGISTRY_DOMAIN>/<NAMESPACE_NAME>/<REPO>:latest
+docker push <REGISTRY_DOMAIN>/<NAMESPACE_NAME>/<REPOSITORY_NAME>:latest
 # expected: denied（规则生效）
 ```
 
@@ -104,8 +106,8 @@ docker push <REGISTRY_DOMAIN>/<NAMESPACE_NAME>/<REPO>:latest
 | 规则存在 | `DescribeImmutableTagRules` → `Rules` | 含目标规则 |
 | 规则启用 | `DescribeImmutableTagRules` → `Disabled` | `false` |
 | 无规则命名空间 | `DescribeImmutableTagRules` → `EmptyNs` | 含尚未配置规则的命名空间名 |
-| 覆盖被拒 | `docker push <existing-tag>` | `denied` |
-| 新 Tag 允许 | `docker push <new-tag>` | 成功 |
+| 覆盖被拒 | `docker push <REGISTRY_DOMAIN>/<NAMESPACE_NAME>/<REPOSITORY_NAME>:latest` | `denied` |
+| 新 Tag 允许 | `docker push <REGISTRY_DOMAIN>/<NAMESPACE_NAME>/<REPOSITORY_NAME>:<NEW_TAG>` | 成功 |
 
 ## 回滚
 
@@ -149,11 +151,11 @@ tccli tcr DeleteImmutableTagRules --region <REGION> \
 ```bash
 # 端到端：规则拦截已有 Tag 覆盖
 # 覆盖已存在 latest 应被拒（规则生效）
-docker push <REGISTRY_DOMAIN>/<NAMESPACE_NAME>/<REPO>:latest
+docker push <REGISTRY_DOMAIN>/<NAMESPACE_NAME>/<REPOSITORY_NAME>:latest
 # expected: denied（不可变规则拦截）
 
 # 推新 Tag 应成功（规则只拦覆盖，不拦截新 Tag）
-docker push <REGISTRY_DOMAIN>/<NAMESPACE_NAME>/<REPO>:new-<TIMESTAMP>
+docker push <REGISTRY_DOMAIN>/<NAMESPACE_NAME>/<REPOSITORY_NAME>:new-<TIMESTAMP>
 # expected: Push complete（新 Tag 不触发不可变规则）
 ```
 

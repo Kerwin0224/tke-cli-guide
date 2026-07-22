@@ -23,8 +23,7 @@ doc_type: Overview
 
 边缘集群（TKE-Edge）已下线，新建边缘场景改用[注册节点公网版](https://cloud.tencent.com/document/product/457/57916)。
 
-## 触发条件
-
+## 何时阅读
 - 你要把自建 IDC、其他云或边缘机器接入已有 TKE 标准集群（本地资源利旧、混合云）— 专线版见[创建注册节点（专线版）](dedicated-line.md)，公网版见[创建注册节点（公网版）](public-network.md)
 - 你要修改注册节点池的 Labels / Taints / 删除保护 — [编辑注册节点池](edit-pool.md)
 - 你要升级或移除已接入的注册节点 — [升级注册节点](upgrade.md) / [移除注册节点](remove.md)

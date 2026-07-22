@@ -78,6 +78,10 @@ tccli tke DescribeExternalNodeSupportConfig --ClusterId "<CLUSTER_ID>" --region 
 # expected: Status=Enabled, EnabledPublicConnect=true
 ```
 
+## 清理
+
+公网版创建的节点池/节点与专线版相同；下线见 [移除注册节点](remove.md)（先 Drain 再 Delete）。勿把公网版当成另一套删除 Action。
+
 ## 下一步
 
 - 专线版接入：[创建注册节点（专线版）](dedicated-line.md)

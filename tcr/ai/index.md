@@ -9,8 +9,7 @@ doc_type: Overview
 
 TCR 企业版将 AI 模型与 AI Skill 作为一类特殊制品托管：模型以模型仓库（含多版本与元数据）形式管理，Skill 以可下载的智能体工具包形式管理。二者均挂载在企业版实例下，通过 `RegistryId` 定位。TCR AI 无独立 Create Action，模型内容通过 `docker push` 推送创建（镜像层传输非 tccli；TCCLI 不提供 docker daemon 能力）。
 
-## 触发条件
-
+## 何时阅读
 - 你要查询企业版实例下的 AI 模型仓库或某模型的多版本与版本详情 — 用 `ListAIModels`/`ListAIModelVersions`/`DescribeAIModelVersionDetail`，见 [查询与删除 AI 模型](models.md)
 - 你要删除某个 AI 模型版本 — 用 `DeleteAIModel`，见 [查询与删除 AI 模型](models.md)
 - 你要查询 AI Skill 列表/版本/详情，或获取 Skill 预签名下载链接 — 用 `ListSkills`/`ListSkillVersions`/`DescribeSkillDetail`/`DescribeSkillDownloadInfo`，见 [查询与删除 AI Skill](skills.md)

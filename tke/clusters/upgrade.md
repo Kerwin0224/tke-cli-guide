@@ -58,7 +58,6 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_I
 ### 资源检查
 
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
-<!-- kubectl 管理 K8s 原生资源（TCCLI 无此能力） -->
 
 #### 1. 查可升级版本
 
@@ -111,7 +110,7 @@ tccli tke DescribeClusterKubeconfig --region ap-guangzhou --ClusterId "<CLUSTER_
 |:------|------|:--------:|------------|---------------|
 | ClusterId | string | 是 | `cls-xxxxxxxx` | `ResourceNotFound` |
 | DstVersion | string | 是 | 目标版本，如 `1.34.1`，须在 `DescribeAvailableClusterVersion` 返回列表中 | `InvalidParameterValue` / `FailedOperation` |
-| MaxNotReadyPercent | float | 否 | 升级容忍度，0-100，默认低值（保守） | `InvalidParameterValue` |
+| MaxNotReadyPercent | float | 否 | 升级容忍度，0-100，help 默认 `0`（最保守） | `InvalidParameterValue` |
 | SkipPreCheck | boolean | 否 | 跳过前置检查，**危险**，默认 false | 跳过后可能升级失败 |
 | ExtraArgs | object | 否 | Master 组件自定义参数（Etcd/KubeAPIServer/KubeControllerManager/KubeScheduler） | 各子字段校验 |
 
@@ -250,7 +249,6 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet
 # expected: 升级中 "Upgrading" → 完成后 "Running"
 ```
 
-<!-- kubectl get nodes 验证版本/状态（验证升级结果） -->
 | 维度 | 命令 | 预期 |
 |:-----|:-----|:-----|
 | 集群状态 | `DescribeClusterStatus` → `ClusterState` | `Upgrading` → `Running` |
@@ -287,7 +285,6 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --filter "ClusterStatusSet
 |:--------|:----------|:------------|:-----|
 | 长时间停在 `Upgrading` | `DescribeUpgradeTaskDetail --ID "<ID>"` → `UpgradePlans[].Status` + `GetUpgradeInstanceProgress --ClusterId "<ID>"` 查节点进度 | 某节点升级卡住 | `CancelUpgradePlan --ClusterID "<ID>" --PlanID "<PLAN_ID>"` 暂停，定位卡住节点 |
 | 升级后部分节点版本不一致 | `CheckInstancesUpgradeAble --ClusterId "<ID>" --UpgradeType reset` → `UpgradeAbleInstances[].Version`（`DescribeClusterInstances` 不返回节点版本） | 节点未跟随升级 | `UpgradeClusterInstances` 单独升级节点 |
-<!-- kubectl get nodes --v=6 诊断 API 弃用（TCCLI 无 K8s 资源诊断能力） -->
 | `Running` 但 kubectl 报 API 版本弃用 | `kubectl get nodes --v=6` | 工作负载用了已弃用 API | 更新工作负载 YAML，移除弃用 API |
 | 升级任务 `Failed` | `DescribeUpgradeTaskDetail` | 资源不足或组件冲突 | 查 TaskDetail，修复后重新 `UpdateClusterVersion` |
 

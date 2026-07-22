@@ -11,8 +11,8 @@ fused: true
 
 ## 触发条件
 
-- `tccli tcr DescribeInstances --Registryids '["<ID>"]'` 返回 `RegistryType: basic`，跨地域容灾/就近拉取需求，basic 不支持同步（`ManageReplication` 报 `UnsupportedOperation: only supports standard and premium instance`）
-- `DescribeReplicationInstances --RegistryId "<ID>"` 返回 `TotalCount: 0`，主实例无从实例，镜像无法跨地域复制
+- `tccli tcr DescribeInstances --Registryids '["<REGISTRY_ID>"]'` 返回 `RegistryType: basic`，跨地域容灾/就近拉取需求，basic 不支持同步（`ManageReplication` 报 `UnsupportedOperation: only supports standard and premium instance`）
+- `DescribeReplicationInstances --RegistryId "<REGISTRY_ID>"` 返回 `TotalCount: 0`，主实例无从实例，镜像无法跨地域复制
 - 跨地域 CI/CD 拉取超时，需在目标地域建从实例就近拉取（`docker pull` 延迟高）
 
 ## 准备工作
@@ -130,8 +130,8 @@ tccli tcr DescribeReplicationInstanceSyncStatus --region <SOURCE_REGION> \
 |:-----|:-----|:-----|
 | 从实例已创建 | `DescribeReplicationInstances --RegistryId <SOURCE_REGISTRY_ID>` | `TotalCount >= 1` |
 | 同步规则存在 | `DescribeReplicationPolicies --RegistryId <SOURCE_REGISTRY_ID>` | 返回规则 |
-| 同步完成 | `DescribeReplicationInstanceSyncStatus` | 状态=完成 |
-| 镜像可从从实例拉取 | 在从实例地域 `docker pull <DEST_ENDPOINT>/<DEST_NAMESPACE>/<IMAGE>` | 拉取成功 |
+| 同步完成 | `DescribeReplicationInstanceSyncStatus` | `ReplicationStatus=Succeed`（以实际响应为准） |
+| 镜像可从从实例拉取 | 在从实例地域 `docker pull <DEST_REGISTRY_DOMAIN>/<DEST_NAMESPACE>/<IMAGE_NAME>` | 拉取成功 |
 
 ```bash
 tccli tcr DescribeReplicationInstances --region <SOURCE_REGION> --RegistryId <SOURCE_REGISTRY_ID>
@@ -139,13 +139,18 @@ tccli tcr DescribeReplicationInstances --region <SOURCE_REGION> --RegistryId <SO
 ```
 ```json
 {
-    "TotalCount": 0,
-    "ReplicationRegistries": null,
+    "TotalCount": 1,
+    "ReplicationRegistries": [
+        {
+            "ReplicationRegistryId": "<REPLICATION_REGISTRY_ID>",
+            "ReplicationRegionId": 4
+        }
+    ],
     "RequestId": "..."
 }
 ```
 
-> 上例为空结果示例（未创建从实例时）。
+> 未创建从实例时常见 `TotalCount: 0`、`ReplicationRegistries: null`。
 
 | 占位符 | 含义 | 约束 | 获取方式 |
 |--------|------|------|---------|
@@ -224,10 +229,10 @@ tccli tcr DescribeReplicationInstanceSyncStatus --region <SOURCE_REGION> \
   --RegistryId "<SOURCE_REGISTRY_ID>" \
   --ReplicationRegistryId "<REPLICATION_REGISTRY_ID>" \
   --ReplicationRegionId <DEST_REGION_ID>
-# expected: 同步状态=完成（无 Pending/InProgress）
+# expected: ReplicationStatus=Succeed（以实际响应为准；进行中常见 Pending/InProgress）
 
 # 端到端：镜像可从从实例拉取
-docker pull <DEST_REGISTRY_DOMAIN>/<DEST_NAMESPACE>/<IMAGE>:<TAG>
+docker pull <DEST_REGISTRY_DOMAIN>/<DEST_NAMESPACE>/<IMAGE_NAME>:<TAG>
 # expected: Pull complete（从从实例公网端点拉取，DEST_REGISTRY_DOMAIN 从从实例 DescribeInstances 取 PublicDomain）
 ```
 

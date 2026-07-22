@@ -136,7 +136,7 @@ tccli tke DescribeLogSwitches --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>
 | 维度 | 命令 | 预期 |
 |:-----|:-----|:-----|
 | Agent 安装 | `kubectl get ds -n kube-system \| grep logagent` | CLS Agent DaemonSet Running |
-| 业务日志投递 | `tccli cls SearchLog --TopicId <ID>` | 有 Pod 日志记录 |
+| 业务日志投递 | `tccli cls SearchLog --TopicId <ID> --From <MS> --To <MS> --QueryString '*'` | 有 Pod 日志记录 |
 | 托管组件日志 | `DescribeControlPlaneLogs --ClusterType tke` + `tccli cls SearchLog` | Details 含目标组件；CLS 有对应日志 |
 
 > 日志投递有秒级延迟。开启后产生一次操作，再到 CLS 检索确认。
@@ -198,7 +198,7 @@ tccli tke DeleteLogConfigs --region ap-guangzhou \
 ```bash
 # 巡检结果概览 (按集群, GroupBy 分组)
 tccli tke DescribeClusterInspectionResultsOverview --ClusterIds '["<CLUSTER_ID>"]' --region <REGION>
-# expected: exit 0, Statistics[] 含 HealthyLevel(warn/serious/healthy)+Count
+# expected: exit 0, Statistics[] 含 HealthyLevel(good/warn/risk/serious/failed)+Count
 ```
 ```json
 {
@@ -220,7 +220,7 @@ tccli tke ListClusterInspectionResultsItems --ClusterId "<CLUSTER_ID>" --region 
 # expected: exit 0, 巡检项明细 InspectionResultsItems[]
 ```
 
-> `HealthyLevel` 状态：`healthy`/`warn`/`serious`/`risk`。三个巡检 Action 层级：`DescribeClusterInspectionResultsOverview` 按 Region/集群批量查概览，`ListClusterInspectionResults` 查指定集群最新一次巡检结果，`ListClusterInspectionResultsItems` 按时间范围查历史明细（`ClusterId` 必填）。集群巡检是集群级配置诊断，与 [节点级健康检查策略](../nodes/health-check.md)（2022-05-01 `HealthCheckPolicy`）层级与版本均不同，勿混。
+> `HealthyLevel` 取值：`good`（健康）/`warn`（低风险）/`risk`（中风险）/`serious`（高风险）/`failed`（诊断流程异常）。三个巡检 Action 层级：`DescribeClusterInspectionResultsOverview` 按 Region/集群批量查概览，`ListClusterInspectionResults` 查指定集群最新一次巡检结果，`ListClusterInspectionResultsItems` 按时间范围查历史明细（`ClusterId` 必填；`StartTime`/`EndTime` 为可选 Unix 时间戳）。集群巡检是集群级配置诊断，与 [节点级健康检查策略](../nodes/health-check.md)（2022-05-01 `HealthCheckPolicy`）层级与版本均不同，勿混。
 
 ### 控制面日志与日志配置
 
@@ -272,7 +272,11 @@ kubectl get ds -n kube-system | grep logagent
 #### 2. 业务日志端到端可查（开关开启后，再确认 CLS 中确有 Pod 日志）
 
 ```bash
-tccli cls SearchLog --region <REGION> --TopicId "<TOPIC_ID>" --Content '"nginx"'
+# From/To 为 Unix 毫秒时间戳（必填）；检索语句用 QueryString（Content/Query 已废弃）
+tccli cls SearchLog --region <REGION> \
+  --TopicId "<TOPIC_ID>" \
+  --From <FROM_MS> --To <TO_MS> \
+  --QueryString 'nginx'
 # expected: 命中含应用输出的日志记录
 ```
 

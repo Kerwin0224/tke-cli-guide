@@ -11,8 +11,8 @@ fused: true
 
 ## 触发条件
 
-- `tccli tcr DescribeImages --RegistryId "<ID>"` 返回的 `ImageInfoList` 版本数持续增长，旧镜像堆积占用存储（需定时清理）
-- `tccli tcr DescribeTagRetentionRules --RegistryId "<ID>"` 返回 `TotalCount: 0`，命名空间下无保留规则，旧版本无人清理
+- `tccli tcr DescribeImages --RegistryId "<REGISTRY_ID>"` 返回的 `ImageInfoList` 版本数持续增长，旧镜像堆积占用存储（需定时清理）
+- `tccli tcr DescribeTagRetentionRules --RegistryId "<REGISTRY_ID>"` 返回 `TotalCount: 0`，命名空间下无保留规则，旧版本无人清理
 - 镜像存储用量接近配额，`DescribeInstanceStatus` 返回的存储用量告警，需删旧留新
 
 
@@ -137,12 +137,11 @@ tccli tcr CreateTagRetentionRule --region <REGION> \
 tccli tcr CreateTagRetentionRule --region <REGION> \
   --RegistryId "<REGISTRY_ID>" --NamespaceId <NAMESPACE_ID> \
   --CronSetting daily \
-  --RetentionRule '{"Key":"latestPushedK","Value":5}' \
-  --AdvancedRuleItems '[{"RepositoryFilter":{"Decoration":"repoMatches","Pattern":"prod-*"}}]'
+  --AdvancedRuleItems '[{"RetentionPolicy":{"Key":"latestPushedK","Value":5},"RepositoryFilter":{"Decoration":"repoMatches","Pattern":"prod-*"}}]'
 # expected: exit 0
 ```
 
-> `AdvancedRuleItems` 按 `RepositoryFilter`/`TagFilter` 细化规则作用范围。仓库过滤 `Decoration` 为 `repoMatches` / `repoExcludes`；Tag 过滤为 `matches` / `excludes`。
+> `AdvancedRuleItems` 每项可含 `RetentionPolicy`（`Key`/`Value`）与 `RepositoryFilter`/`TagFilter`。仓库过滤 `Decoration` 为 `repoMatches` / `repoExcludes`；Tag 过滤为 `matches` / `excludes`。高级项与顶层 `RetentionRule` 同传时，高级策略优先。
 
 ### 步骤 3：手动触发执行（测试规则）
 
@@ -223,30 +222,30 @@ tccli tcr DescribeTagRetentionRules --region <REGION> --RegistryId "<REGISTRY_ID
 
 ```bash
 # 查询触发器列表 (按命名空间)
-tccli tcr DescribeWebhookTrigger --RegistryId "<REGISTRY_ID>" --Namespace "<NAMESPACE>" --Limit 10 --region <REGION>
+tccli tcr DescribeWebhookTrigger --RegistryId "<REGISTRY_ID>" --Namespace "<NAMESPACE_NAME>" --Limit 10 --region <REGION>
 # expected: exit 0, Triggers[] + TotalCount (无触发器则空)
 ```
 
 ```bash
 # 创建触发器 (RegistryId + Namespace + 嵌套 Trigger 对象，5 个必填字段: Name/Targets/EventTypes/Condition/Enabled)
-tccli tcr CreateWebhookTrigger --RegistryId "<REGISTRY_ID>" --Namespace "<NAMESPACE>" --region <REGION> \
-  --Trigger '{"Name":"<TRIGGER_NAME>","EventTypes":["pushImage"],"Condition":".*","Enabled":true,"Targets":[{"Type":"webhook","Address":"<URL>"}]}'
+tccli tcr CreateWebhookTrigger --RegistryId "<REGISTRY_ID>" --Namespace "<NAMESPACE_NAME>" --region <REGION> \
+  --Trigger '{"Name":"<TRIGGER_NAME>","EventTypes":["pushImage"],"Condition":".*","Enabled":true,"Targets":[{"Address":"<WEBHOOK_URL>"}]}'
 # expected: exit 0 返回 Trigger（含 Id）; 缺 EventTypes/Condition/Enabled 报 InvalidParameter.ErrorTcrInvalidParameter: non zero value required
 ```
 
-> `CreateWebhookTrigger` 的 `Trigger` 嵌套对象有 5 个必填字段：`Name`/`Targets[]`/`EventTypes[]`（触发动作如 `pushImage`）/`Condition`（正则触发规则）/`Enabled`。缺任一报 `InvalidParameter.ErrorTcrInvalidParameter: non zero value required`。创建后用 `DescribeWebhookTrigger` 查列表，执行日志查 `DescribeWebhookTriggerLog`。
+> `CreateWebhookTrigger` 的 `Trigger` 嵌套对象有 5 个必填字段：`Name`/`Targets[]`（每项仅 `Address` 必填，`Headers` 可选；无 `Type` 字段）/`EventTypes[]`（触发动作如 `pushImage`）/`Condition`（正则触发规则）/`Enabled`。缺任一报 `InvalidParameter.ErrorTcrInvalidParameter: non zero value required`。创建后用 `DescribeWebhookTrigger` 查列表，执行日志查 `DescribeWebhookTriggerLog`。
 ```json
 {"TotalCount": 0, "Triggers": [], "RequestId": "..."}
 ```
 
 ```bash
 # 修改触发器（RegistryId + Namespace 必填 + 嵌套 Trigger；Trigger 须含 Id 定位目标）
-tccli tcr ModifyWebhookTrigger --RegistryId "<REGISTRY_ID>" --Namespace "<NAMESPACE>" --region <REGION> \
-  --Trigger '{"Id":<TRIGGER_ID>,"Name":"<TRIGGER_NAME>","EventTypes":["pushImage"],"Condition":".*","Enabled":true,"Targets":[{"Address":"<URL>"}]}'
+tccli tcr ModifyWebhookTrigger --RegistryId "<REGISTRY_ID>" --Namespace "<NAMESPACE_NAME>" --region <REGION> \
+  --Trigger '{"Id":<TRIGGER_ID>,"Name":"<TRIGGER_NAME>","EventTypes":["pushImage"],"Condition":".*","Enabled":true,"Targets":[{"Address":"<WEBHOOK_URL>"}]}'
 # expected: exit 0；缺 --Namespace 报 the following arguments are required: --Namespace
 
 # 删除触发器 (按 Namespace + Id)
-tccli tcr DeleteWebhookTrigger --RegistryId "<REGISTRY_ID>" --Namespace "<NAMESPACE>" --Id <TRIGGER_ID> --region <REGION>
+tccli tcr DeleteWebhookTrigger --RegistryId "<REGISTRY_ID>" --Namespace "<NAMESPACE_NAME>" --Id <TRIGGER_ID> --region <REGION>
 # expected: exit 0
 ```
 
@@ -254,7 +253,7 @@ tccli tcr DeleteWebhookTrigger --RegistryId "<REGISTRY_ID>" --Namespace "<NAMESP
 
 ```bash
 # 查询触发器执行日志（RegistryId + Namespace + Id 定位触发器，分页取日志）
-tccli tcr DescribeWebhookTriggerLog --RegistryId "<REGISTRY_ID>" --Namespace "<NAMESPACE>" \
+tccli tcr DescribeWebhookTriggerLog --RegistryId "<REGISTRY_ID>" --Namespace "<NAMESPACE_NAME>" \
   --Id <TRIGGER_ID> --Offset 0 --Limit 20 --region <REGION>
 # expected: 返回 TotalCount+Logs[]; Namespace 不存在报 ResourceNotFound.TcrResourceNotFound: namespace not found
 ```
@@ -312,7 +311,7 @@ tccli tcr DescribeTagRetentionExecution --region <REGION> --RegistryId "<REGISTR
 
 # 镜像数已收敛到保留数量（latestPushedK=Value 的效果）
 tccli tcr DescribeImages --region <REGION> --RegistryId "<REGISTRY_ID>" \
-  --NamespaceName "<NS>" --RepositoryName "<REPO>" \
+  --NamespaceName "<NAMESPACE_NAME>" --RepositoryName "<REPOSITORY_NAME>" \
   --filter "length(ImageInfoList)"
 # expected: ≤ RetentionRule.Value（保留数量上限）
 ```

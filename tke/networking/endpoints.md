@@ -23,7 +23,7 @@ fused: true
 
 - 需要从公网或集群 VPC 内访问 API Server
 - `DescribeClusterEndpointStatus` 返回 `Status=NotFound`，需要开启相应类型的端点
-- `kubectl get nodes` <!-- kubectl验证端点连通性，非tccli边界 --> 报连接错误，需要核对端点类型、客户端网络位置及访问控制
+- `kubectl get nodes` 报连接错误，需要核对端点类型、客户端网络位置及访问控制
 
 ## 概述
 
@@ -70,7 +70,7 @@ tccli tke DescribeClusterEndpointStatus --region <REGION> \
 | 字段 | 类型 | 必填 | 约束 |
 |:-----|:-----|:----:|:-----|
 | `ClusterId` | string | 是 | `cls-xxxxxxxx` |
-| `IsExtranet` | boolean | 是 | `true` 为公网，`false` 为内网；须遵守集群模式边界 |
+| `IsExtranet` | boolean | 否 | `true` 为公网，`false` 为内网；**help 标 Optional，默认 `false`（内网）**；公网须显式传 `true`，并遵守集群模式边界 |
 | `SubnetId` | string | 内网必填 | 必须属于集群 VPC |
 | `SecurityGroup` | string | 否 | 不复用已有 CLB 时，可为内网或公网端点指定安全组 |
 | `ExtensiveParameters` | string | 否 | 仅用于公网设置的 JSON 字符串 |

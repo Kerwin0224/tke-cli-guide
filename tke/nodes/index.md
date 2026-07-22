@@ -9,8 +9,7 @@ doc_type: Overview
 
 Worker 节点是容器集群的基本元素（虚拟机或物理机），含运行 Pod 所需的 Kubelet、Kube-proxy 等。TKE 标准集群支持 4 种节点类型；节点通常经节点池批量创建与扩缩容。
 
-## 触发条件
-
+## 何时阅读
 - 你要给集群添加工作节点、选普通/原生/超级/注册节点类型 — [创建节点池](nodepool-create.md)（原生节点须 `--version 2022-05-01`）
 - 你要调整节点池期望容量、安全缩容不丢 Pod — [扩缩容节点池](nodepool-scale.md)（`ModifyClusterNodePool`）
 - 你要查询单节点状态、启停/驱逐/删除某台 CVM — [节点实例运维](instance-ops.md)（跨 TKE 双版本 Action）

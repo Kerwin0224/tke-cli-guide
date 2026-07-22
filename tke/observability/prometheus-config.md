@@ -83,9 +83,9 @@ tccli tke DescribeClusters --region <REGION> --filter "Clusters[*].ClusterId" --
 | 字段 | 类型 | 必填 | 约束 | 填错的影响 |
 |:-----|:-----|:----:|:-----|:-----------|
 | `Template.Name` | String | 是 | 模板名 | — |
-| `Template.Level` | String | 是（Create，Modify 无） | 模板层级 | Create 缺被拒 |
-| `Template.RecordRules[]` | Object | 否（Temp） | Temp 专用，采集/记录规则 | — |
-| `Template.AlertRules[]` | Object | 否（Template） | Template 专用，含 Rule/For/Labels/Annotations | — |
+| `Template.Level` | String | 是（Create，Modify 无） | `instance`（可配 RecordRules/AlertRules 等实例级）/ `cluster`（可配 ServiceMonitors/PodMonitors/RawJobs） | Create 缺被拒；Level 与内容字段错配则对应字段无效 |
+| `Template.RecordRules[]` | Object | 否（Temp；**仅 Level=instance 有效**） | Temp 的聚合/记录规则 | Level=cluster 时传了也不生效 |
+| `Template.AlertRules[]` | Object | 否（Template；**仅 Level=instance 有效**） | Template 的告警规则；项字段含 Name/Rule/Labels/Template/For（help 标 Required） | Level=cluster 时无效 |
 | `TemplateId` | String | 是（Modify/Delete/Sync） | 模板 ID | 操作错目标 |
 | `Targets[]` | Array | 是（Sync） | 同步目标 Region/InstanceId/ClusterId | 同步错实例 |
 
@@ -122,9 +122,12 @@ tccli tke CreatePrometheusRecordRuleYaml --region <REGION> \
 
 ```bash
 # 创建聚合模板（全局，不绑实例）
+# Level=instance 时用 RecordRules；Level=cluster 时用 ServiceMonitors/PodMonitors/RawJobs（不可混用）
 tccli tke CreatePrometheusTemp --region <REGION> \
-  --Template '{"Name":"<TEMP_NAME>","Level":"cluster","RecordRules":[{"Name":"rr1","Config":"<YAML>"}]}'
+  --Template '{"Name":"<TEMP_NAME>","Level":"instance","RecordRules":[{"Name":"rr1","Config":"<YAML>"}]}'
 # expected: exit 0, 返回 TemplateId
+# 集群级采集模板示例：
+# --Template '{"Name":"<TEMP_NAME>","Level":"cluster","ServiceMonitors":[{"Name":"<SM_NAME>","Config":"<SM_YAML>"}]}'
 
 # 同步模板到目标实例
 tccli tke SyncPrometheusTemp --region <REGION> \
@@ -133,18 +136,19 @@ tccli tke SyncPrometheusTemp --region <REGION> \
 # expected: exit 0, 返回 RequestId
 ```
 
-模板是复用配置的载体：先建模板，再 `Sync` 推送到多个实例，避免逐实例重复配。Template（告警模板）流程相同，把 `*PrometheusTemp` 换成 `*PrometheusTemplate`、`RecordRules` 换成 `AlertRules`。
+模板是复用配置的载体：先建模板，再 `Sync` 推送到多个实例，避免逐实例重复配。Template（告警模板）流程相同，把 `*PrometheusTemp` 换成 `*PrometheusTemplate`；`AlertRules` **仅 Level=instance 有效**（勿写 `Level=cluster` + `AlertRules`）。
 
 ### 步骤 3b：告警模板 Template 全流程（与 Temp 平行）
 
-> Temp 装采集/记录规则，Template 装告警规则（AlertRules）。`Create` 返回 `TemplateId`、`Describe` 返回 `Templates[]`+`Total`。
+> Temp 装采集/记录规则，Template 装告警规则（AlertRules，**仅 Level=instance**）。`Create` 返回 `TemplateId`、`Describe` 返回 `Templates[]`+`Total`。
 
-#### 1. 创建告警模板（全局，不绑实例，Template 含 Name/Level/AlertRules）
+#### 1. 创建告警模板（全局，不绑实例；AlertRules 仅 Level=instance）
 
 ```bash
 tccli tke CreatePrometheusTemplate --region <REGION> \
-  --Template '{"Name":"<TPL_NAME>","Level":"cluster","AlertRules":[{"Name":"<ALERT_NAME>","Rule":"up == 0","For":"5m"}]}'
+  --Template '{"Name":"<TPL_NAME>","Level":"instance","AlertRules":[{"Name":"<ALERT_NAME>","Rule":"up == 0","For":"5m","Labels":[{"Name":"severity","Value":"critical"}],"Template":""}]}'
 # expected: exit 0, 返回 TemplateId
+# AlertRules 每项 help 标 Required：Name/Rule/Labels/Template/For
 ```
 
 #### 2. 查询告警模板（Filters + Offset/Limit，不需 InstanceId）
@@ -155,12 +159,12 @@ tccli tke DescribePrometheusTemplates --region <REGION> \
 # expected: exit 0, 返回告警模板列表
 ```
 
-#### 3. 修改告警模板（TemplateId 寻址，Template 整体覆盖）
+#### 3. 修改告警模板（TemplateId 寻址，Template 整体覆盖；Modify 无 Level）
 
 ```bash
 tccli tke ModifyPrometheusTemplate --region <REGION> \
   --TemplateId <TEMPLATE_ID> \
-  --Template '{"Name":"<TPL_NAME>","AlertRules":[{"Name":"<ALERT_NAME>","Rule":"up == 0","For":"10m"}]}'
+  --Template '{"Name":"<TPL_NAME>","AlertRules":[{"Name":"<ALERT_NAME>","Rule":"up == 0","For":"10m","Labels":[{"Name":"severity","Value":"critical"}],"Template":""}]}'
 # expected: exit 0
 ```
 
@@ -239,7 +243,7 @@ tccli tke ModifyPrometheusRecordRuleYaml --region <REGION> \
 
 | 维度 | 命令 | 期望 |
 |:-----|:-----|:-----|
-| 采集配置生效 | `DescribePrometheusConfig --InstanceId <PROM_INSTANCE_ID> --ClusterId <CLUSTER_ID>` | 含创建的 ServiceMonitor |
+| 采集配置生效 | `DescribePrometheusConfig --InstanceId <PROM_INSTANCE_ID> --ClusterType tke --ClusterId <CLUSTER_ID>` | 含创建的 ServiceMonitor |
 | 记录规则存在 | `DescribePrometheusRecordRules --InstanceId <PROM_INSTANCE_ID>` | 含创建的规则 |
 | 模板存在 | `DescribePrometheusTemp` | 含创建的 TemplateId |
 | 模板同步状态 | `DescribePrometheusTempSync` / `DescribePrometheusTemplateSync` | 目标实例同步成功 |
@@ -300,9 +304,9 @@ ServiceMonitor：
 
 ```bash
 tccli tke DescribePrometheusConfig --region <REGION> \
-  --InstanceId <PROM_INSTANCE_ID> --ClusterId <CLUSTER_ID> \
+  --InstanceId <PROM_INSTANCE_ID> --ClusterType tke --ClusterId <CLUSTER_ID> \
   --filter "ServiceMonitors[?Name=='<SERVICE_MONITOR_NAME>'].{name:Name,config:Config}"
-# expected: 返回目标 ServiceMonitor；PodMonitor/RawJob/Probe 分别在 PodMonitors/RawJobs/Probes 中按 Name 查询
+# expected: 返回目标 ServiceMonitor；PodMonitor/RawJob/Probe 分别在 PodMonitors/RawJobs/Probes 中按 Name 查询；ClusterType 必填
 ```
 
 #### 2. 记录规则存在

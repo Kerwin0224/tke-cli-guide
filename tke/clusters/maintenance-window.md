@@ -107,6 +107,7 @@ tccli tke CreateGlobalMaintenanceWindowAndExclusions --region <REGION> \
 # 集群级：覆盖式更新（ClusterID + 新参数）
 tccli tke ModifyClusterMaintenanceWindowAndExclusions --region <REGION> \
   --ClusterID <CLUSTER_ID> --MaintenanceTime "03:00:00" --Duration 3 --DayOfWeek '["SU"]'
+# expected: exit 0, 返回 RequestId
 
 # 全局级：用 ID 寻址
 tccli tke ModifyGlobalMaintenanceWindowAndExclusions --region <REGION> \
@@ -222,18 +223,24 @@ tccli tke DescribeClusterMaintenanceWindowAndExclusions --region <REGION> --Limi
 
 ## 收尾确认
 
+跨步骤汇总：把「集群级窗口 / 全局窗口 / 排除项 / 优先级」四项合一核对，并确认可进入下一步计划升级。
+
 ```bash
-# 集群级窗口 + 全局窗口 + 排除项一并核对（确认三层配置均符合预期）
+# 四项合一：集群级窗口 + 全局窗口 + 排除项 + 目标集群当前是否仍 Running（衔接下一步升级前置）
 tccli tke DescribeClusterMaintenanceWindowAndExclusions --region <REGION> --Limit 20 \
   --filter "MaintenanceWindowAndExclusions[?ClusterID=='<CLUSTER_ID>'].{time:MaintenanceTime,dur:Duration,days:DayOfWeek,excl:Exclusions}"
-# expected: 集群级时段（如 time=22:00:00, dur=2, days=["TU","TH","FR"]）+ Exclusions 含配置的排除项
+# expected: 集群级时段与 DayOfWeek 符合预期；Exclusions 含配置的排除项（或为空数组/null 表示未配排除）
 
 tccli tke DescribeGlobalMaintenanceWindowAndExclusions --region <REGION> --Limit 20 \
-  --filter "MaintenanceWindowAndExclusions[0].{time:MaintenanceTime,dur:Duration,days:DayOfWeek,regions:TargetRegions,excl:Exclusions}"
-# expected: 全局窗口时段 + TargetRegions 含目标地域 → 集群级与全局窗口均已配置生效
+  --filter "MaintenanceWindowAndExclusions[].{id:ID,time:MaintenanceTime,dur:Duration,days:DayOfWeek,regions:TargetRegions,excl:Exclusions}"
+# expected: 列表含 id=<GLOBAL_WINDOW_ID>；time/dur/days 符合预期；regions 覆盖目标地域或含 "*"；excl 与创建一致
+
+tccli tke DescribeClusterStatus --region <REGION> --ClusterIds '["<CLUSTER_ID>"]' \
+  --filter "ClusterStatusSet[0].{state:ClusterState,instance:ClusterInstanceState}"
+# expected: state=Running（维护窗口配置不改变集群可用性；可进入下一步计划升级前置就绪）
 ```
 
-> 集群级窗口优先于全局窗口——同集群有两层时以集群级为准。核对时须确认目标集群的窗口来自预期层级（集群级未配时才回落到全局），且排除项 `StartAt`/`EndAt` 落在窗口时段内才会真正跳过本次自动升级（排除项能否跳过取决于与窗口时段的交集；无交集则不生效，见 [§故障恢复](#故障恢复)）。
+> **优先级汇总**：同集群同时存在集群级与全局窗口时，以集群级为准；排除项取集群 ∪ 全局合集。排除项 `StartAt`/`EndAt` 须与窗口时段有交集才真正禁止该时段升级（无交集则不生效，见 [§故障恢复](#故障恢复)）。四项均符合预期 = 维护窗口任务闭合，可进入 [升级集群版本](upgrade.md)。
 
 ## 下一步
 

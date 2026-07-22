@@ -17,7 +17,7 @@ fused: false
 ## 触发条件
 
 - `DescribePrometheusClusterAgents` 不含目标 `ClusterId`，需为本集群安装 Agent 上报指标
-- `DescribePrometheusTargets` → 采集目标 `lastError` 非空，Agent 已装但采集失败
+- `DescribePrometheusTargets` → 采集目标 `Error` 非空，Agent 已装但采集失败
 - 多集群指标无法区分来源，`DescribePrometheusClusterAgents` → `ExternalLabels` 缺 `cluster` 标签 — 看 [故障恢复](#故障恢复)
 
 
@@ -25,7 +25,7 @@ fused: false
 
 Prometheus 集群采集 Agent（ClusterAgent）部署在被监控集群内，抓取集群指标（kubelet、kube-state-metrics、节点/容器指标等）并远端写到 TKE Prometheus 实例。一个 Prometheus 实例可对接多个集群的 Agent。
 
-Agent 与 Prometheus 实例的关系：实例是存储与查询后端，Agent 是各集群内的采集器。先有实例（`RunPrometheusInstance` 创建，见 [Prometheus 入门](prometheus.md)），再为本集群装 Agent。
+Agent 与 Prometheus 实例的关系：实例是存储与查询后端，Agent 是各集群内的采集器。先有实例并完成初始化（`RunPrometheusInstance` 仅初始化已有 `prom-` 实例，见 [Prometheus 入门](prometheus.md)），再为本集群装 Agent。
 
 外部标签（ExternalLabels）是 Agent 上报时附加在所有指标上的静态标签，用于在多集群实例中区分指标来源集群。
 
@@ -35,8 +35,8 @@ Agent 与 Prometheus 实例的关系：实例是存储与查询后端，Agent �
 
 | 选项 | 适用 | 代价 |
 |:-----|:-----|:-----|
-| `EnableExternal: false`（默认） | Agent 仅在集群内采集，通过 VPC 内网上报 | 需实例与集群网络互通 |
-| `EnableExternal: true` | Agent 通过公网端点上报 | 公网带宽与暴露面 |
+| `EnableExternal: false`（须显式传；推荐内网） | Agent 仅在集群内采集，通过 VPC 内网上报 | 需实例与集群网络互通 |
+| `EnableExternal: true`（须显式传） | Agent 通过公网端点上报 | 公网带宽与暴露面 |
 
 ### 是否启用基础采集
 
@@ -55,7 +55,7 @@ Agent 与 Prometheus 实例的关系：实例是存储与查询后端，Agent �
 | `Agents[].Region` | String | 是 | — | 集群地域，如 `ap-guangzhou` | 与集群不符被拒 |
 | `Agents[].ClusterType` | String | 是 | — | `tke` / `eks`（非 CreateCluster 的 MANAGED/INDEPENDENT） | 类型错被拒 |
 | `Agents[].ClusterId` | String | 是 | — | 已存在的集群 ID | 集群不存在被拒 |
-| `Agents[].EnableExternal` | Boolean | 否 | false | true/false | 公网/内网上报选错 |
+| `Agents[].EnableExternal` | Boolean | 是 | — | true/false（须显式传入；无默认省略） | 公网/内网上报选错或缺参被拒 |
 | `Agents[].NotInstallBasicScrape` | Boolean | 否 | false | true/false | 缺失基础指标 |
 | `Agents[].NotScrape` | Boolean | 否 | false | true/false | Agent 不采集 |
 | `Agents[].ExternalLabels[].Name` | String | 否 | — | 标签名 | 标签不上报 |
@@ -128,14 +128,14 @@ tccli tke DescribePrometheusClusterAgents --region <REGION> --InstanceId <PROM_I
 ```bash
 tccli tke DescribePrometheusTargets --region <REGION> \
   --InstanceId <PROM_INSTANCE_ID> --ClusterType tke --ClusterId <CLUSTER_ID>
-# expected: exit 0, 返回采集目标列表，所有 target lastError 为空
+# expected: exit 0, 返回采集目标列表，所有 target Error 为空（字段名是 Error，不是 lastError）
 ```
 
 | 维度 | 命令 | 期望 |
 |:-----|:-----|:-----|
 | Agent 已安装 | `DescribePrometheusClusterAgents --InstanceId <PROM_INSTANCE_ID>` | 列表含目标 `ClusterId` |
 | 外部标签生效 | 同上，查 `ExternalLabels` | 含配置的标签 |
-| 采集目标 up | `DescribePrometheusTargets --InstanceId <PROM_INSTANCE_ID> --ClusterId <CLUSTER_ID>` | 所有 target `lastError` 为空 |
+| 采集目标 up | `DescribePrometheusTargets --InstanceId <PROM_INSTANCE_ID> --ClusterType tke --ClusterId <CLUSTER_ID>` | 所有 target `Error` 为空且 `State=up` |
 | 实例关联 | `DescribePrometheusAgentInstances --ClusterId <CLUSTER_ID>` | 返回该集群关联的实例 |
 
 ```bash
@@ -187,7 +187,7 @@ tccli tke DescribePrometheusClusterAgents --region <REGION> --InstanceId <PROM_I
 | 现象 | 诊断 | 根因 | 修复 |
 |:-----|:-----|:-----|:-----|
 | Agent 已装但无指标 | `DescribePrometheusTargets --ClusterId <CLUSTER_ID>` | `NotScrape: true` 或网络不通 | 改 `NotScrape: false`，检查实例与集群 VPC 互通 |
-| 采集目标 lastError 非空 | `DescribePrometheusTargets` | 目标 Service/ServiceMonitor 不存在或端口不符 | 修正 scrape 目标配置 |
+| 采集目标 `Error` 非空 | `DescribePrometheusTargets` | 目标 Service/ServiceMonitor 不存在或端口不符 | 修正 scrape 目标配置 |
 | 多集群指标无法区分 | `DescribePrometheusClusterAgents` 查 `ExternalLabels` | 未配 `cluster` 外部标签 | `ModifyPrometheusAgentExternalLabels` 补标签 |
 
 ## 收尾确认
@@ -196,7 +196,7 @@ tccli tke DescribePrometheusClusterAgents --region <REGION> --InstanceId <PROM_I
 # Agent 已接入集群
 tccli tke DescribePrometheusClusterAgents --region <REGION> --InstanceId <PROM_INSTANCE_ID> \
   --filter "Agents[].{cluster:ClusterId,region:Region,status:Status}"
-# expected: 目标集群 Status=Running
+# expected: 目标集群 Status=normal（正常；abnormal=异常）
 
 # 检查全部采集目标：先确认非空，再确认没有 Error 非空的目标
 tccli tke DescribePrometheusTargets --region <REGION> \

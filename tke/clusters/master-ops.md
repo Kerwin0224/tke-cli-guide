@@ -207,14 +207,14 @@ tccli tke DescribeClusterStatus --region <REGION> --filter "ClusterStatusSet[?Cl
 # expected: "MasterScaling" → "Running"
 ```
 
-> 下方 kubectl 验证需先获取 kubeconfig（注意 `--output text` 剥引号，无它则文件带引号 kubectl 无法解析）：
-> ```bash
-> tccli tke DescribeClusterKubeconfig --region <REGION> --ClusterId "<CLUSTER_ID>" \
->   --filter "Kubeconfig" --output text > kubeconfig.yaml
-> # expected: kubeconfig 文件生成，可 KUBECONFIG=kubeconfig.yaml kubectl get nodes
-> ```
+下方 kubectl 验证需先获取 kubeconfig（注意 `--output text` 剥引号，无它则文件带引号 kubectl 无法解析）：
 
-<!-- kubectl get nodes 验证 Master 节点状态；kubectl get pods/healthz 查 K8s 层观测 -->
+```bash
+tccli tke DescribeClusterKubeconfig --region <REGION> --ClusterId "<CLUSTER_ID>" \
+  --filter "Kubeconfig" --output text > kubeconfig.yaml
+# expected: kubeconfig 文件写入成功；随后可 KUBECONFIG=kubeconfig.yaml kubectl get nodes
+```
+
 | 维度 | 命令 | 预期 |
 |:-----|:-----|:-----|
 | 集群状态 | `DescribeClusterStatus` → `ClusterState` | `MasterScaling` → `Running` |
@@ -244,7 +244,6 @@ tccli tke DescribeClusterStatus --region <REGION> --filter "ClusterStatusSet[?Cl
 
 ### 命令成功但状态不对 (exit = 0)
 
-<!-- kubectl get nodes 验证 Master 缩容后节点状态 -->
 | 现象 | 诊断 | 根因 | 修复 |
 |:--------|:----------|:------------|:-----|
 | 长时间停在 `MasterScaling` | `tccli tke DescribeClusterStatus` + `kubectl get nodes` | 新 Master 加入 etcd 集群卡住 / CVM 初始化失败 | 查新节点 CVM 状态，必要时 `ScaleIn` 回滚新增节点 |

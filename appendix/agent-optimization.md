@@ -35,7 +35,7 @@ graph LR
 - 尚未确认字段时：先 short help 顶层 OUTPUT，再按需 `help --detail` 或 `--Limit 1 --output json`（只读），勿臆造投影字段。
 - 具体业务步骤、配额、状态机以产品 How-to 为准；本页只给 flag 组合。
 
-### 调用成功怎么判
+### 调用成功怎么判 {#调用成功怎么判}
 
 与 skill 一致。先看 **退出码**，再分流 stdout / stderr：
 

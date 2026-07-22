@@ -28,11 +28,11 @@ TKE Prometheus 告警是三层模型：
 
 | 层 | Action 前缀 | 作用 | 寻址键 |
 |:---|:-----------|:-----|:-------|
-| 告警策略 AlertPolicy | `*PrometheusAlertPolicy` | 告警规则的管理单元（一个 policy 含多条 rule） | `AlertIds[]` 或 `Names[]` |
+| 告警策略 AlertPolicy | `*PrometheusAlertPolicy` | 告警规则的管理单元（一个 policy 含多条 rule） | 删除须 `AlertIds[]`（Required）；`Names[]` 可选附加 |
 | 告警规则 AlertRule | `*PrometheusAlertRule` | 单条告警规则（PromQL + 阈值 + 持续时间） | `AlertIds[]` |
 | 全局通知 GlobalNotification | `*PrometheusGlobalNotification` | 告警触发后的通知渠道（WebHook/AlertManager/电话/接收组） | `InstanceId` |
 
-**AlertPolicy ≠ AlertRule**：两套独立 Action，入参结构几乎相同（都含 `AlertRule.{Name, Rules[], Id, TemplateId}`），但删除寻址不同——Policy 支持 `AlertIds[]` 或 `Names[]` 双寻址，Rule 仅 `AlertIds[]`。命名易混，调用前用 `--generate-cli-skeleton` 确认。
+**AlertPolicy ≠ AlertRule**：两套独立 Action，入参结构几乎相同（都含 `AlertRule.{Name, Rules[], Id, TemplateId}`），但删除寻址不同——Policy 删除 **必传** `AlertIds[]`，`Names[]` 为 Optional；Rule 仅 `AlertIds[]`。命名易混，调用前用 `--generate-cli-skeleton` 确认。
 
 通知层（GlobalNotification）是实例级单例配置：一个 Prometheus 实例配一条全局通知，所有告警规则触发后都走这条通知渠道。
 
@@ -61,12 +61,13 @@ tccli tke DescribePrometheusInstancesOverview --region <REGION>
 | `AlertRule.Name` | String | 是 | 策略/规则名 | — |
 | `AlertRule.Rules[].Name` | String | 是 | 单条规则名 | — |
 | `AlertRule.Rules[].Rule` | String | 是 | PromQL 表达式 | 规则不触发或报错 |
-| `AlertRule.Rules[].For` | String | 否 | 持续时间，如 `5m` | 阈值抖动误报 |
-| `AlertRule.Rules[].Labels[]` | Array | 否 | 标签{Name,Value} | 路由失效 |
+| `AlertRule.Rules[].Labels[]` | Array | 是 | 额外标签列表（可为空数组 `[]`）；项为 `{Name,Value}` | 缺参或项结构不符被拒 |
+| `AlertRule.Rules[].Template` | String | 是 | 告警发送模板 | 缺参被拒 |
+| `AlertRule.Rules[].For` | String | 是 | 持续时间，如 `5m` | 缺参被拒；过长则阈值抖动漏报 |
 | `AlertRule.Rules[].Annotations[]` | Array | 否 | 注解{Name,Value} | 告警信息不全 |
 | `AlertRule.Rules[].RuleState` | Integer | 否 | 规则状态 | — |
-| `AlertIds[]` | Array | 是（Delete） | 删除用 ID 列表 | 删错目标 |
-| `Names[]` | Array | 是（DeletePolicy 可选） | 删除用名列表（仅 Policy） | — |
+| `AlertIds[]` | Array | 是（Delete Policy/Rule） | 删除用 ID 列表（Policy/Rule 均 Required） | 删错目标或缺参 exit 252 |
+| `Names[]` | Array | 否（仅 DeletePolicy） | 可选策略名列表；**不能**代替 `AlertIds` | 仅作附加筛选，不可单独删除 |
 
 ### 全局通知 GlobalNotification
 
@@ -89,8 +90,9 @@ tccli tke DescribePrometheusInstancesOverview --region <REGION>
 ```bash
 tccli tke CreatePrometheusAlertPolicy --region <REGION> \
   --InstanceId <PROM_INSTANCE_ID> \
-  --AlertRule '{"Name":"<POLICY_NAME>","Rules":[{"Name":"<RULE_NAME>","Rule":"up == 0","For":"5m"}]}'
+  --AlertRule '{"Name":"<POLICY_NAME>","Rules":[{"Name":"<RULE_NAME>","Rule":"up == 0","For":"5m","Labels":[{"Name":"severity","Value":"critical"}],"Template":""}]}'
 # expected: exit 0，返回业务告警 ID `Id` 与请求追踪 ID `RequestId`；保存 `Id` 供后续修改/删除
+# Rules[] 每项必填 Name/Rule/Labels/Template/For（Labels 可 []；Template 可空串，以 help --detail 为准）
 ```
 
 | 占位符 | 含义 | 约束 | 获取方式 |
@@ -117,7 +119,7 @@ tccli tke CreatePrometheusGlobalNotification --region <REGION> \
 ```bash
 tccli tke ModifyPrometheusAlertPolicy --region <REGION> \
   --InstanceId <PROM_INSTANCE_ID> \
-  --AlertRule '{"Name":"<POLICY_NAME>","Id":"<ALERT_ID>","Rules":[{"Name":"<RULE_NAME>","Rule":"up == 0","For":"10m"}]}'
+  --AlertRule '{"Name":"<POLICY_NAME>","Id":"<ALERT_ID>","Rules":[{"Name":"<RULE_NAME>","Rule":"up == 0","For":"10m","Labels":[{"Name":"severity","Value":"critical"}],"Template":""}]}'
 # expected: exit 0, 返回 RequestId
 ```
 
@@ -134,8 +136,9 @@ Modify 为覆盖式：`AlertRule.Id` 指定改哪条，`Rules[]` 整体替换。
 ```bash
 tccli tke CreatePrometheusAlertRule --region <REGION> \
   --InstanceId <PROM_INSTANCE_ID> \
-  --AlertRule '{"Name":"<RULE_NAME>","Rules":[{"Name":"<RULE_NAME>","Rule":"up == 0","For":"5m"}]}'
+  --AlertRule '{"Name":"<RULE_NAME>","Rules":[{"Name":"<RULE_NAME>","Rule":"up == 0","For":"5m","Labels":[{"Name":"severity","Value":"critical"}],"Template":""}]}'
 # expected: CAM 拦截 AuthFailure.UnauthorizedOperation；授权后返回 Id
+# Rules[] 每项必填 Name/Rule/Labels/Template/For
 ```
 
 #### 2. 查询告警规则（InstanceId + Filters/Offset/Limit）
@@ -152,11 +155,11 @@ tccli tke DescribePrometheusAlertRule --region <REGION> \
 ```bash
 tccli tke ModifyPrometheusAlertRule --region <REGION> \
   --InstanceId <PROM_INSTANCE_ID> \
-  --AlertRule '{"Name":"<RULE_NAME>","Id":"<ALERT_ID>","Rules":[{"Name":"<RULE_NAME>","Rule":"up == 0","For":"10m"}]}'
+  --AlertRule '{"Name":"<RULE_NAME>","Id":"<ALERT_ID>","Rules":[{"Name":"<RULE_NAME>","Rule":"up == 0","For":"10m","Labels":[{"Name":"severity","Value":"critical"}],"Template":""}]}'
 # expected: CAM 拦截 AuthFailure.UnauthorizedOperation；授权后 exit 0
 ```
 
-> AlertPolicy vs AlertRule 命令一一对应：`Create/Describe/Modify/Delete` × `PrometheusAlertPolicy|PrometheusAlertRule`。删除寻址不同——Policy 支持 `Names[]`/`AlertIds[]` 双寻址，Rule 仅 `AlertIds[]`（删规则须先从 `DescribePrometheusAlertRule` 取 AlertId）。混淆会报 `Unknown options`。
+> AlertPolicy vs AlertRule 命令一一对应：`Create/Describe/Modify/Delete` × `PrometheusAlertPolicy|PrometheusAlertRule`。删除寻址不同——Policy 删除 **必传** `AlertIds[]`（`Names[]` 可选附加），Rule 仅 `AlertIds[]`（须先从 Describe 取 ID）。混淆或漏 `AlertIds` 会参数校验失败。
 
 ### 步骤 3c：修改全局通知
 
@@ -197,7 +200,7 @@ tccli tke DescribePrometheusGlobalNotification --region <REGION> --InstanceId <P
 | 告警已触发 | `DescribePrometheusAlertHistory --InstanceId <PROM_INSTANCE_ID> --RuleName <RULE_NAME>` | 含触发记录 |
 | 通知已送达 | 查对应渠道（SMS/EMAIL/接收组）日志 | 收到通知 |
 
-> `DescribePrometheusAlertHistory` 的 `StartTime`/`EndTime` 为 ISO8601 格式。
+> `DescribePrometheusAlertHistory` 的 `StartTime`/`EndTime` 为字符串时间；help 出参样例形如 `2021-02-19 16:51:44`（非严格 ISO8601）。
 
 ## 清理
 
@@ -206,10 +209,10 @@ tccli tke DescribePrometheusGlobalNotification --region <REGION> --InstanceId <P
 > ⚠️ **高危操作**：告警策略 PromQL 误配（如永假表达式）会导致漏报；通知渠道配置错误或全局通知关闭会导致告警无法送达。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
 
 ```bash
-# 删除告警策略（AlertIds 或 Names 二选一）
+# 删除告警策略（AlertIds 必填；Names 可选附加）
 tccli tke DeletePrometheusAlertPolicy --region <REGION> \
-  --InstanceId <PROM_INSTANCE_ID> --Names '["<POLICY_NAME>"]'
-# expected: exit 0
+  --InstanceId <PROM_INSTANCE_ID> --AlertIds '["<ALERT_ID>"]'
+# expected: exit 0；仅传 Names 不传 AlertIds → 参数校验失败
 
 # 删除告警规则（仅 AlertIds）
 tccli tke DeletePrometheusAlertRule --region <REGION> \
@@ -217,7 +220,7 @@ tccli tke DeletePrometheusAlertRule --region <REGION> \
 # expected: exit 0
 ```
 
-> 注意 `DeletePrometheusAlertPolicy` 支持 `Names[]` 或 `AlertIds[]`，而 `DeletePrometheusAlertRule` 仅支持 `AlertIds[]`——删除规则必须先有 AlertId（从 Describe 取）。
+> `DeletePrometheusAlertPolicy`：`AlertIds[]` **Required**，`Names[]` Optional（help 口径）；`DeletePrometheusAlertRule` 仅 `AlertIds[]`。删除前从 `DescribePrometheusAlertPolicy` / `DescribePrometheusAlertRule` 取 ID。
 
 ## 故障恢复 {#故障恢复}
 
@@ -227,7 +230,7 @@ tccli tke DeletePrometheusAlertRule --region <REGION> \
 |:-----|:-----|:-----|:-----|
 | `AuthFailure.UnauthorizedOperation` (tke:CreatePrometheusAlertPolicy 等) | 查账号 CAM | 写告警配置需 `tke:ActionName` 权限 | 申请写权限。此为环境限制 |
 | `UnauthorizedOperation` 您未授权访问该接口 (DescribePrometheus*) | 同上 | 读操作在云 API 网关层被拦 | 申请 `tke:DescribePrometheus*` 读权限 |
-| `Unknown options` | `tccli tke <Action> --generate-cli-skeleton` | 混用 AlertPolicy/AlertRule（删除寻址不同） | Policy 用 Names/AlertIds，Rule 仅 AlertIds |
+| `Unknown options` | `tccli tke <Action> --generate-cli-skeleton` | 混用 AlertPolicy/AlertRule 或删 Policy 漏 `AlertIds` | Policy 删须 `AlertIds`（`Names` 可选）；Rule 仅 `AlertIds` |
 | WebHook 通知失败 | `DescribePrometheusGlobalNotification` 查 WebHook | URL 不通或返回非 2xx | 校验 WebHook 端点 |
 
 ### 命令成功但状态不对（exit = 0）

@@ -37,6 +37,7 @@ doc_type: FAQ
 
 ```bash
 ./add2tkectl-cls-<CLUSTER_ID>-np-<NODEPOOL_ID> clear
+# expected: exit 0，清理本机 docker/containerd 残留后可重新 install
 ```
 
 ### 注册节点脚本安装过程中报错中断如何处理？
@@ -49,7 +50,10 @@ doc_type: FAQ
 
 ```bash
 ./add2tkectl-cls-<CLUSTER_ID>-np-<NODEPOOL_ID> clear
+# expected: exit 0，清理失败残留环境
+
 ./add2tkectl-cls-<CLUSTER_ID>-np-<NODEPOOL_ID> install
+# expected: exit 0，节点重新注册；kubectl get nodes 可见该节点 Ready
 ```
 
 ## 网络、流量接入类

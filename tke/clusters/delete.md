@@ -136,14 +136,23 @@ tccli tke DescribeClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]'
 即使用了 Enhanced 模式，也建议检查残留:
 
 ```bash
-# 检查 CBS 盘（按标签或创建时间过滤）
-tccli cbs DescribeDisks --region ap-guangzhou
+# 检查 CBS 盘（按集群标签、名称前缀或创建时间过滤，只清本任务相关）
+tccli cbs DescribeDisks --region ap-guangzhou \
+  --filter "DiskSet[?contains(DiskName, '<CLUSTER_NAME_PREFIX>')].{id:DiskId,name:DiskName,state:DiskState}" \
+  --output json
+# expected: 仅列出本任务相关盘；无残留时可为空数组
 
 # 检查 EIP
-tccli vpc DescribeAddresses --region ap-guangzhou
+tccli vpc DescribeAddresses --region ap-guangzhou \
+  --filter "AddressSet[?contains(AddressName, '<CLUSTER_NAME_PREFIX>')].{id:AddressId,name:AddressName,ip:AddressIp}" \
+  --output json
+# expected: 无本任务 EIP 时为空
 
 # 检查 CLB（Service 类型 LoadBalancer 自动创建的 CLB）
-tccli clb DescribeLoadBalancers --region ap-guangzhou --Forward 1
+tccli clb DescribeLoadBalancers --region ap-guangzhou --Forward 1 \
+  --filter "LoadBalancerSet[?contains(LoadBalancerName, '<CLUSTER_NAME_PREFIX>')].{id:LoadBalancerId,name:LoadBalancerName}" \
+  --output json
+# expected: 无本任务 CLB 时为空
 ```
 
 > 删集群不会自动清理 CBS/EIP/CLB/VPC 子网，残留资源持续计费。逐个确认后删除：

@@ -20,7 +20,7 @@ fused: true
 
 - **新建边缘场景** → **禁止用本文创建**：改走标准集群 + [注册节点](../nodes/registered-nodes/overview.md)（注册节点公网版）
 - 存量：`DescribeTKEEdgeClusters` 已有边缘集群，需查询状态/凭证/注册脚本/升级 — 用本文运维段
-- `DescribeTKEEdgeClusterStatus` → `ClusterState` 非 `Running`，或节点未注册 — 看 [故障恢复](#故障恢复)
+- `DescribeTKEEdgeClusterStatus` → `Phase` 非 `Running`，或节点未注册 — 看 [故障恢复](#故障恢复)
 - 迁移存量边缘集群到注册节点公网版 — 先读官方迁移前置，再按注册节点流程接入
 
 ## 准备工作
@@ -73,11 +73,11 @@ tccli tke DescribeTKEEdgeClusters --region <EDGE_REGION>
 
 # 查询状态
 tccli tke DescribeTKEEdgeClusterStatus --region <EDGE_REGION> --ClusterId "<CLUSTER_ID>"
-# expected: ClusterState: "Running"
+# expected: Phase: "Running"（字段名是 Phase，不是 ClusterState）
 
-# 获取凭证
+# 获取凭证（本 Action 返回 Addresses + Credential.CACert/Token 等，无顶层 Kubeconfig 字符串）
 tccli tke DescribeTKEEdgeClusterCredential --region <EDGE_REGION> --ClusterId "<CLUSTER_ID>"
-# expected: 返回 kubeconfig
+# expected: Addresses[] + Credential{CACert,Token}；若需完整 kubeconfig 文本用 DescribeTKEEdgeExternalKubeconfig
 ```
 
 | 占位符 | 含义 | 约束 | 获取方式 |
@@ -118,13 +118,13 @@ tccli tke DescribeEdgeClusterUpgradeInfo --region <EDGE_REGION> \
 ```bash
 tccli tke UpdateEdgeClusterVersion --region <EDGE_REGION> \
   --ClusterId "<CLUSTER_ID>" \
-  --Version "<TARGET_VERSION>"
+  --EdgeVersion "<EDGE_VERSION>"
 # expected: exit 0
 ```
 
 | 占位符 | 含义 | 约束 | 获取方式 |
 |--------|------|------|---------|
-| `<EDGE_VERSION>` | 目标 TKEEdge 版本 | `DescribeEdgeClusterUpgradeInfo` 必填 | `DescribeAvailableTKEEdgeVersion` / 运维指定版本号 |
+| `<EDGE_VERSION>` | 目标 TKEEdge 版本 | `DescribeEdgeClusterUpgradeInfo` / `UpdateEdgeClusterVersion` 均必填 `--EdgeVersion`（非 `--Version`） | `DescribeAvailableTKEEdgeVersion` / 运维指定版本号 |
 
 ### 边缘集群日志
 
@@ -150,25 +150,25 @@ tccli tke InstallEdgeLogAgent --region <EDGE_REGION> --ClusterId "<CLUSTER_ID>"
 ```bash
 # 验证存量边缘集群可用（须用 DescribeTKEEdgeClusters，非 DescribeClusters）
 tccli tke DescribeTKEEdgeClusters --region <EDGE_REGION> --ClusterIds '["<CLUSTER_ID>"]' \
-  --filter "Clusters[0].{id:ClusterId,state:ClusterStatus,name:ClusterName}"
-# expected: state=Running, id/name 与存量集群一致
+  --filter "Clusters[0].{id:ClusterId,state:Status,name:ClusterName}"
+# expected: state=Running, id/name 与存量集群一致（列表字段是 Status，不是 ClusterStatus）
 ```
 
-> 边缘集群 state=Running = 存量集群可用, 可进入 [关键操作](#关键操作) 运维。
+> 边缘集群 Status=Running = 存量集群可用, 可进入 [关键操作](#关键操作) 运维。
 
 ## 故障恢复 {#故障恢复}
 
 | 症状 | 先查 | 处理 |
 |:-----|:-----|:-----|
-| `DescribeTKEEdgeClusterStatus` → `ClusterState` 非 `Running` | `DescribeTKEEdgeClusters` + `DescribeTKEEdgeClusterStatus` | 等过渡态结束；长期非 Running 按官方迁移/工单，**不要**新建 Edge 集群顶替 |
+| `DescribeTKEEdgeClusterStatus` → `Phase` 非 `Running` | `DescribeTKEEdgeClusters` + `DescribeTKEEdgeClusterStatus` | 等过渡态结束；长期非 Running 按官方迁移/工单，**不要**新建 Edge 集群顶替 |
 | 边缘节点未出现 / 注册失败 | `DescribeTKEEdgeScript` 重取脚本；`DescribeEdgeClusterInstances` 看节点 | 核对 `<INTERFACE>` 网卡名与节点出网；弱网重跑注册脚本 |
 | `UnsupportedRegion` | 当前 `--region` 是否 Edge 可达 | 换 `<EDGE_REGION>`（如 `ap-beijing`）；`ap-guangzhou` 对多数 Edge Action 不支持 |
 | 需下线/迁走业务 | 官方 [迁移至标准集群](https://cloud.tencent.com/document/product/457/110447) | 标准集群 + [注册节点公网版](https://cloud.tencent.com/document/product/457/57916)；迁完再 `DeleteTKEEdgeCluster` |
 
 ```bash
-# 状态非 Running 时先看 ClusterState
+# 状态非 Running 时先看 Phase
 tccli tke DescribeTKEEdgeClusterStatus --region <EDGE_REGION> --ClusterId "<CLUSTER_ID>"
-# expected: ClusterState 字段；非 Running 勿当新建成功
+# expected: Phase 字段；非 Running 勿当新建成功
 
 # 节点是否已注册（须 Edge 地域）
 tccli tke DescribeEdgeClusterInstances --ClusterID "<CLUSTER_ID>" --region <EDGE_REGION> \
@@ -274,10 +274,10 @@ tccli tke DescribeEdgeClusterInstances --ClusterID "<CLUSTER_ID>" --region <REGI
 ### 查询与清理存量 Edge CVM 实例
 
 ```bash
-# 查询存量 Edge CVM 实例 (Filters 过滤)
+# 查询存量 Edge CVM 实例（Filters 仅支持 cvm-id，不支持 zone）
 tccli tke DescribeEdgeCVMInstances --ClusterID "<CLUSTER_ID>" --region <REGION> \
-  --Filters '[{"Name":"zone","Values":["<ZONE>"]}]'
-# expected: 返回存量实例列表，用于迁移盘点
+  --Filters '[{"Name":"cvm-id","Values":["<CVM_ID>"]}]'
+# expected: 返回存量实例列表，用于迁移盘点；不传 Filters 则列该集群下全部
 
 # 仅在实例承载的工作负载、流量和数据已迁移并验证后删除
 tccli tke DeleteEdgeCVMInstances --ClusterID "<CLUSTER_ID>" --region <REGION> --CvmIdSet '["<CVM_ID>"]'
@@ -291,10 +291,10 @@ tccli tke DeleteEdgeClusterInstances --ClusterId "<CLUSTER_ID>" --region <REGION
 ### 查询与清理存量 ECM 实例（边缘计算模块）
 
 ```bash
-# 查询存量 ECM 实例 (Filters 过滤)
+# 查询存量 ECM 实例（Filters 仅支持 ecm-id，不支持 zone）
 tccli tke DescribeECMInstances --ClusterID "<CLUSTER_ID>" --region <REGION> \
-  --Filters '[{"Name":"zone","Values":["<ZONE>"]}]'
-# expected: 返回存量实例列表，用于迁移盘点
+  --Filters '[{"Name":"ecm-id","Values":["<ECM_ID>"]}]'
+# expected: 返回存量实例列表，用于迁移盘点；不传 Filters 则列该集群下全部
 
 # 仅在实例承载的工作负载、流量和数据已迁移并验证后删除
 tccli tke DeleteECMInstances --ClusterID "<CLUSTER_ID>" --region <REGION> --EcmIdSet '["<ECM_ID>"]'
@@ -306,9 +306,9 @@ tccli tke DeleteECMInstances --ClusterID "<CLUSTER_ID>" --region <REGION> --EcmI
 ## 收尾确认
 
 ```bash
-# 集群已 Running（状态核对后，再端到端核节点注册 + kubeconfig 可拉取）
+# 集群已 Running（状态核对后，再端到端核节点注册 + 凭证可拉取）
 tccli tke DescribeTKEEdgeClusters --region <EDGE_REGION> --ClusterIds '["<CLUSTER_ID>"]' \
-  --filter "Clusters[0].{state:ClusterStatus,name:ClusterName}"
+  --filter "Clusters[0].{state:Status,name:ClusterName}"
 # expected: state=Running
 
 # 端到端：边缘节点注册成功（集群状态核对后，再确认节点在线）
@@ -317,13 +317,18 @@ tccli tke DescribeEdgeClusterInstances --ClusterID "<CLUSTER_ID>" --region <EDGE
   --Offset 0 --Limit 20
 # expected: TotalCount ≥1，InstanceInfoSet 含已注册边缘节点
 
-# 下一步前置：kubeconfig 可拉取（进部署应用前须能连通集群）
+# 下一步前置：凭证可拉取（进部署应用前须能连通集群）
+# DescribeTKEEdgeClusterCredential 返回 Addresses + Credential，无顶层 Kubeconfig；完整 kubeconfig 用 External 接口
 tccli tke DescribeTKEEdgeClusterCredential --region <EDGE_REGION> --ClusterId "<CLUSTER_ID>" \
+  --filter "Addresses,Credential" --output json
+# expected: Addresses 非空且 Credential.CACert/Token 存在
+
+tccli tke DescribeTKEEdgeExternalKubeconfig --region <EDGE_REGION> --ClusterId "<CLUSTER_ID>" \
   --filter "Kubeconfig" --output text | head -1
 # expected: apiVersion: v1 → 边缘集群闭环完成
 ```
 
-> 集群 Running + 边缘节点注册在线 + kubeconfig 可拉取 = 端到端闭环。除集群状态外，还须确认边缘节点已注册在线（业务可用性，Edge 地域须实际核实）+ kubeconfig 可连通集群，是进下一阶段（部署应用）的前置。
+> 集群 Running + 边缘节点注册在线 + 凭证/kubeconfig 可拉取 = 端到端闭环。除集群状态外，还须确认边缘节点已注册在线（业务可用性，Edge 地域须实际核实）+ 可连通集群，是进下一阶段（部署应用）的前置。
 
 ---
 

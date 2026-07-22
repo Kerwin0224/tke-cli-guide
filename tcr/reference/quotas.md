@@ -24,14 +24,14 @@ subtype: 8C
 
 个人版无独立企业版实例，限额由 `DescribeUserQuotaPersonal` 返回（账号级）。`DescribeUserQuotaPersonal` 返回字段 `Data.LimitInfo[].Type` / `Value`：
 
-| Type | 含义 | 示例账号 Value（以 `DescribeUserQuotaPersonal` 实时返回为准） |
-|:-----|:-----|:---------------------:|
-| `namespace` | 命名空间上限 | 10 |
-| `repo` | 仓库上限 | 500（**广州地域**；官方 FAQ：其他地域默认 100） |
-| `tag` | 版本上限 | 100 |
-| `trigger` | 触发器上限 | 10 |
+| Type | 含义 | 官方 FAQ 默认口径 | 以 API 返回为准 |
+|:-----|:-----|:-----------------:|:---------------|
+| `namespace` | 命名空间上限 | 10 | `DescribeUserQuotaPersonal` 的 `Value` |
+| `repo` | 仓库上限 | 广州 500 / 其他地域 100 | 同上；账号侧可高于 FAQ |
+| `tag` | 版本上限 | 100 | 同上 |
+| `trigger` | 触发器上限 | 10 | 同上 |
 
-> 个人版适合临时测试；生产与独立存储/SLA 选企业版。控制台入口已与企业版合并，API 面仍用 `*Personal` Action。官方 FAQ 口径：单地域命名空间 **10**；镜像仓库 **广州 500 / 其他地域 100**；单镜像 Tag **100**；**不支持调额**。API `DescribeUserQuotaPersonal` 返回的是账号级限额表，`repo` 在广州账号常见为 500。
+> 个人版适合临时测试；生产与独立存储/SLA 选企业版。控制台入口已与企业版合并，API 面仍用 `*Personal` Action。官方 FAQ 口径：单地域命名空间 **10**；镜像仓库 **广州 500 / 其他地域 100**；单镜像 Tag **100**；**不支持调额**。`DescribeUserQuotaPersonal` 返回的是账号级限额表，`Value` 可能高于 FAQ 默认（例如测试账号可见 namespace/repo 更高），**以实时返回为准**，勿把 FAQ 数字写死进脚本。
 
 ## 查询配额用量
 

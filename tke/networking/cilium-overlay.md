@@ -141,7 +141,7 @@ tccli tke DescribeClusterKubeconfig --region ap-guangzhou --ClusterId "<CLUSTER_
 # expected: apiVersion: v1
 ```
 
-> 集群 Running + NetworkType=CiliumOverlay 定型 + kubeconfig 可拉取 = 创建闭环完成。但空集群(0 节点)无法运行 Pod（业务可用性边界），须创建节点池；CiliumOverlay 的 Pod 跨节点通信依赖 Cilium Overlay 隧道，节点池就绪后用 `kubectl get pods -o wide` <!-- kubectl验证CiliumOverlay Pod IP在独立网段，非tccli边界 --> 核 Pod IP 不在 VPC 子网段（Overlay 独立网段）端到端验证。
+> 集群 Running + NetworkType=CiliumOverlay 定型 + kubeconfig 可拉取 = 创建闭环完成。但空集群(0 节点)无法运行 Pod（业务可用性边界），须创建节点池；CiliumOverlay 的 Pod 跨节点通信依赖 Cilium Overlay 隧道，节点池就绪后用 `kubectl get pods -o wide` 核 Pod IP 不在 VPC 子网段（Overlay 独立网段）端到端验证。
 
 ---
 

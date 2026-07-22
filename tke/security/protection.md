@@ -47,7 +47,7 @@ fused: false
 ### 删除保护 / OPA 准入 / 事件持久化
 
 - 删除保护 Action 仅需 `ClusterId`。
-- `DescribeOpenPolicyList` 需 `ClusterId`，`Category` 可选；`ModifyOpenPolicyList` 要实际修改策略时必须提供 `OpenPolicyInfoList`，先从 Describe 返回中取得规则 `Name`，再回传要修改的 `EnforcementAction`。`help --detail` 将该列表标为 Optional，但不传便没有待修改策略，不能据此概括为“OPA 仅需 ClusterId”。
+- `DescribeOpenPolicyList` 需 `ClusterId`，`Category` 可选；`ModifyOpenPolicyList` 要实际修改策略时必须提供 `OpenPolicyInfoList`，先从 Describe 返回中取得规则 `Name` 与 `Kind`，再回传要修改的 `EnforcementAction`（每项 `Name`/`Kind`/`EnforcementAction` 均为 Required）。`help --detail` 将该列表标为 Optional，但不传便没有待修改策略，不能据此概括为“OPA 仅需 ClusterId”。
 - 事件持久化除 `ClusterId` 外，还需 `LogsetId`/`TopicId`/`TopicRegion`（CLS 日志集/主题）。
 
 ## 应用
@@ -90,19 +90,19 @@ tccli tke DescribeOpenPolicyList --region ap-guangzhou --ClusterId "<CLUSTER_ID>
 ### 修改 OPA 准入策略
 
 ```bash
-# 先查询并取得真实规则 Name
+# 先查询并取得真实规则 Name 与 Kind
 tccli tke DescribeOpenPolicyList --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" --Category "baseline" \
-  --filter "OpenPolicyInfoList[].{name:Name,action:EnforcementAction}"
+  --filter "OpenPolicyInfoList[].{name:Name,kind:Kind,action:EnforcementAction}"
 
-# 将选定规则的 EnforcementAction 修改后回传
+# 将选定规则的 EnforcementAction 修改后回传（OpenPolicyInfoList 每项 Kind 与 Name 均为 Required）
 tccli tke ModifyOpenPolicyList --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" --Category "baseline" \
-  --OpenPolicyInfoList '[{"Name":"<POLICY_NAME>","EnforcementAction":"dryrun"}]'
+  --OpenPolicyInfoList '[{"Name":"<POLICY_NAME>","Kind":"<POLICY_KIND>","EnforcementAction":"dryrun"}]'
 # expected: exit 0, 返回 RequestId；再 DescribeOpenPolicyList 回读该 Name 的 EnforcementAction
 ```
 
-> `tccli tke ModifyOpenPolicyList help --detail` 说明目前仅支持修改 `EnforcementAction`。`OpenPolicyInfoList` 在入参中虽标为 Optional，但执行实际修改时必须传入待修改规则；不要凭空猜规则名。
+> `tccli tke ModifyOpenPolicyList help --detail` 说明目前仅支持修改 `EnforcementAction`。`OpenPolicyInfoList` 在入参中虽标为 Optional，但执行实际修改时必须传入待修改规则；每项的 `Name`/`Kind`/`EnforcementAction` 均为 Required——`Kind` 从 `DescribeOpenPolicyList` 返回的同名字段取（如 `blocknamespacedeletion`），不要只传 Name。
 
 ### 开启事件持久化
 

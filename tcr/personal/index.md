@@ -14,8 +14,7 @@ TCR 个人版是腾讯云容器镜像服务的免费版本，提供基础的镜�
 
 > ⚠️ 个人版 API 形态与企业版完全不同：所有 Action 带 `Personal` 后缀（如 `CreateNamespacePersonal` 而非 `CreateNamespace`），且个人版是全局服务（无 `--region` 概念，不传地域参数）。两版不能混用接口。
 
-## 触发条件
-
+## 何时阅读
 - 你要免费托管镜像且无需先建实例（直接用命名空间组织仓库）— 本域是入口，操作见 [个人版全功能](manage.md)
 - 你要用 `docker login` 推送/拉取镜像到 `ccr.ccs.tencentyun.com` — 先 `CreateUserPersonal` 建登录账号，再 [创建命名空间与仓库](manage.md)
 - 你遇到个人版 Action 带 `*Personal` 后缀、全局服务不传 `--region` 与企业版接口不兼容 — 看 [个人版 vs 企业版](#个人版-vs-企业版)
@@ -60,6 +59,7 @@ TCR 个人版是腾讯云容器镜像服务的免费版本，提供基础的镜�
 
 ```bash
 docker pull <PERSONAL_DOMAIN>/<NAMESPACE>/<REPO>:<TAG>
+# expected: Status: Downloaded newer image for ... 或 Image is up to date
 ```
 
 #### 2. 重新打标为企业版域名
@@ -68,6 +68,7 @@ docker pull <PERSONAL_DOMAIN>/<NAMESPACE>/<REPO>:<TAG>
 
 ```bash
 docker tag <PERSONAL_DOMAIN>/<NAMESPACE>/<REPO>:<TAG> <ENTERPRISE_DOMAIN>/<NAMESPACE>/<REPO>:<TAG>
+# expected: exit 0（无输出）
 ```
 
 #### 3. 推送到企业版
@@ -76,8 +77,8 @@ docker tag <PERSONAL_DOMAIN>/<NAMESPACE>/<REPO>:<TAG> <ENTERPRISE_DOMAIN>/<NAMES
 
 ```bash
 docker push <ENTERPRISE_DOMAIN>/<NAMESPACE>/<REPO>:<TAG>
+# expected: digest: sha256:... 推送成功
 ```
-
 | 占位符 | 含义 | 获取方式 |
 |--------|------|---------|
 | `<PERSONAL_DOMAIN>` | 个人版域名 | `ccr.ccs.tencentyun.com`（固定） |

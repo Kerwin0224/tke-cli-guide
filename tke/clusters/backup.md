@@ -140,7 +140,8 @@ tccli tke DescribeBackupStorageLocations --region <REGION>
 
 TCCLI 负责备份存储位置 CRUD。创建存储位置后，在 TKE 控制台进入“运维中心 > 备份中心”，使用 TKE 备份组件创建备份或恢复。TKE 备份组件位于 `tke-backup` namespace，其中 Deployment 和 Service 名称均为 `tke-backup`。
 
-<!-- kubectl 检查 TKE 备份组件（TCCLI 无 K8s 工作负载管理能力） -->
+> kubectl（K8s 原生命令，非 tccli；TCCLI 不提供 K8s 工作负载管理能力）
+
 ```bash
 kubectl get deployment,service -n tke-backup tke-backup
 # expected: Deployment 与 Service 均存在；Deployment AVAILABLE 为 1 或更大
@@ -170,7 +171,8 @@ tccli tke DeleteBackupStorageLocation --region <REGION> --Name <LOCATION_NAME>
 
 ## 收尾确认
 
-<!-- kubectl 检查 TKE 备份组件（TCCLI 无 K8s 工作负载管理能力） -->
+> kubectl（K8s 原生命令，非 tccli；TCCLI 不提供 K8s 工作负载管理能力）
+
 ```bash
 # 核对 TKE 备份组件对象
 kubectl get deployment,service -n tke-backup tke-backup

@@ -183,7 +183,8 @@ tccli vpc DescribeSecurityGroups --region ap-guangzhou \
 ```bash
 # Native 对象整段传 JSON（非 --cli-unfold-argument 点号展开：点号展开对嵌套对象会报 ambiguous option）
 # CreatePolicy 为可选，合法枚举仅 ZoneEquality（多可用区打散）/ ZonePriority（首选可用区优先）；传 "manual"/"ZoneEven" 等非法值报 CreatePolicy xxx is not supported，省略即可
-# 标签字段为 --Tags（非 --TagSpecification）；Native.SecurityGroupIds 必填（非空），否则报 SecurityGroupIds is empty
+# 标签字段为 --Tags（非 --TagSpecification）；Tags[].ResourceType 对节点池接口须传 machine（不是 nodepool/cluster）
+# Native.SecurityGroupIds 业务上建议必填（help 标 Optional；空列表可能被服务端拒）
 tccli tke CreateNodePool \
   --version 2022-05-01 \
   --region ap-guangzhou \
@@ -191,19 +192,19 @@ tccli tke CreateNodePool \
   --Name "<POOL_NAME>" \
   --Type Native \
   --Native '{"SubnetIds":["<SUBNET_ID>"],"InstanceTypes":["S5.MEDIUM4"],"InstanceChargeType":"POSTPAID_BY_HOUR","SystemDisk":{"DiskType":"CLOUD_PREMIUM","DiskSize":50},"Scaling":{"MinReplicas":1,"MaxReplicas":1},"SecurityGroupIds":["<SECURITY_GROUP_ID>"]}' \
-  --Tags '[{"ResourceType":"nodepool","Tags":[{"Key":"billing","Value":"<TAG_VALUE>"}]}]' \
+  --Tags '[{"ResourceType":"machine","Tags":[{"Key":"billing","Value":"<TAG_VALUE>"}]}]' \
   --DeletionProtection true
 # expected: { "NodePoolId": "np-xxxxxxxx", "RequestId": "..." }
 ```
 
-> ⚠️ **参数层级**: v2022 `CreateNodePool` 的 `SubnetIds`/`InstanceTypes`/`InstanceChargeType`/`SystemDisk`/`Scaling`/`MachineType` 等**都在 `Native` 对象内，非顶层**。用 `--Native '<JSON>'` 整段传（推荐），避免 `--cli-unfold-argument` 点号展开对 `SystemDisk` 这类嵌套对象报 `ambiguous option`。顶层只有 `ClusterId`/`Name`/`Type`/`Labels`/`Taints`/`Tags`/`DeletionProtection`/`Unschedulable`/`Native`/`Annotations`。标签字段是 `--Tags`（不是 `--TagSpecification`）。完整入参以 `tccli tke CreateNodePool --version 2022-05-01 help --detail` 为准。
+> ⚠️ **参数层级**: v2022 `CreateNodePool` 的 `SubnetIds`/`InstanceTypes`/`InstanceChargeType`/`SystemDisk`/`Scaling`/`MachineType` 等**都在 `Native` 对象内，非顶层**。用 `--Native '<JSON>'` 整段传（推荐），避免 `--cli-unfold-argument` 点号展开对 `SystemDisk` 这类嵌套对象报 `ambiguous option`。顶层只有 `ClusterId`/`Name`/`Type`/`Labels`/`Taints`/`Tags`/`DeletionProtection`/`Unschedulable`/`Native`/`Annotations`。标签字段是 `--Tags`（不是 `--TagSpecification`）；`Tags[].ResourceType` 对节点池相关接口须为 **`machine`**（help 写明：cluster 用于集群接口，machine 用于 CreateNodePool/DescribeNodePools 等）。完整入参以 `tccli tke CreateNodePool --version 2022-05-01 help --detail` 为准。
 
 | 占位符 | 含义 | 约束 | 如何获取 |
 |------------|------|------|---------|
 | `<CLUSTER_ID>` | 目标集群 ID | `cls-` 开头 | `tccli tke DescribeClusters` → `Clusters[].ClusterId` |
 | `<POOL_NAME>` | 节点池名称 | ≤60 字符 | 自己定义，如 `prod-pool` |
 | `<SUBNET_ID>` | VPC 子网 ID | 必须在集群 VPC 内 | `tccli vpc DescribeSubnets` |
-| `<SECURITY_GROUP_ID>` | 节点安全组 ID | 必须非空（`Native.SecurityGroupIds` 必填）；在集群 VPC 内 | `tccli vpc DescribeSecurityGroups --region <REGION>` |
+| `<SECURITY_GROUP_ID>` | 节点安全组 ID | help 标 Optional，生产建议非空；在集群 VPC 内 | `tccli vpc DescribeSecurityGroups --region <REGION>` |
 
 #### 选项 B：增强（生产，多副本+Labels+Taints+机型）
 
@@ -272,18 +273,27 @@ tccli tke DescribeNodePools \
 
 ### 步骤 3.5：节点池弹性健康度诊断（2022-05-01）
 
-`DescribeNodePoolsElasticityStrength` 返回集群下各节点池的弹性健康度评分（容量水位 / 副本调度余量），是节点池弹性伸缩调优的辅助观测接口，仅 `--version 2022-05-01` 提供。
+`DescribeNodePoolsElasticityStrength` 在 API 层用于查询集群下各节点池的弹性健康度评分（容量水位 / 副本调度余量），仅 `2022-05-01` 版本提供。
+
+> **TCCLI 能力边界**：该 Action 在 SDK 侧需要 `ClusterId`，但当前 `tccli` **未注册 `--ClusterId` 入参**。执行：
+>
+> ```bash
+> tccli tke DescribeNodePoolsElasticityStrength \
+>   --version 2022-05-01 \
+>   --ClusterId "<CLUSTER_ID>"
+> # expected: stderr 含 Unknown options: --ClusterId（CLI 参数层拒绝，非业务成功）
+> ```
+>
+> 因此**不可经 TCCLI 成功取到弹性评分**。容量余量请改用：
 
 ```bash
-# 查询集群节点池弹性健康度（需 ClusterId）
-tccli tke DescribeNodePoolsElasticityStrength \
-  --version 2022-05-01 \
-  --ClusterId "<CLUSTER_ID>"
-# expected: 返回各节点池弹性健康度（字段随版本演进，以实际响应为准）
+tccli tke DescribeNodePools --version 2022-05-01 \
+  --ClusterId "<CLUSTER_ID>" \
+  --filter "NodePools[].{id:NodePoolId,name:Name,replicas:Native.Replicas,ready:Native.ReadyReplicas,scaling:Native.Scaling}"
+# expected: 各池 Replicas/ReadyReplicas/Scaling(Min/Max) 可读；勿依赖 ElasticityStrength 做容量决策
 ```
 
-> **能力边界**：`DescribeNodePoolsElasticityStrength` 需要 `ClusterId`，但当前 `tccli` **未注册该 Action 的 CLI 入参**；执行会返回 `Unknown options: --ClusterId, <id>`（SDK 要求 `ClusterId`，CLI 参数层却拒绝接收）。因此当前**不可经 `tccli` 成功调用**。弹性健康度/容量余量请改用 `DescribeNodePools --version 2022-05-01` → `Native.Replicas` / `Native.ReadyReplicas` / `Native.Scaling`（Min/Max）；**不要依赖该 Action 做容量决策**。若必须取弹性评分，走控制台，或待 `tccli` 支持该入参后再调用。
-
+若必须取控制台中的弹性评分，走控制台观测，或待 `tccli` 注册该入参后再调用对应 Action。
 ## 旧版路径：CreateClusterNodePool (2018-05-25) {#旧版路径createclusternodepool-2018-05-25}
 
 > 需要 AS 弹性伸缩组级精细控制时回退旧版。旧版透传 AS 原始 JSON 字符串，调用方自己拼 AS 参数；新版 `CreateNodePool` (2022-05-01) 用 `Native` 强类型对象，生产环境用新版。参数名以 `tccli tke CreateClusterNodePool --version 2018-05-25 help --detail` 为准。

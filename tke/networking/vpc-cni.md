@@ -11,7 +11,7 @@ fused: false
 ## 触发条件
 
 - `DescribeClusters` → `NetworkType` 含 `GR`（Global Router）但需 Pod 固定 IP 或安全组直通，要开启 VPC-CNI
-- `DescribeEnableVpcCniProgress` 返回 `Status` 非 `Succeed`（枚举为 `Running`/`Succeed`/`Failed`），或 Pod 卡在 `ContainerCreating` 且 `kubectl describe pod` <!-- tccli管VPC-CNI配置，kubectl describe查Pod详情诊断IP分配，非tccli边界 --> 显示 IP 分配失败
+- `DescribeEnableVpcCniProgress` 返回 `Status` 非 `Succeed`（枚举为 `Running`/`Succeed`/`Failed`），或 Pod 卡在 `ContainerCreating` 且 `kubectl describe pod` 显示 IP 分配失败
 - `DescribeIPAMD` → `EnableIPAMD=false`，需开启 VPC-CNI 让 Pod 从 VPC 子网获 IP — 看 [故障恢复](#故障恢复)
 
 
@@ -21,8 +21,8 @@ VPC-CNI 是 TKE 的三种 Pod 网络模型之一（另两种：Global Router / C
 
 | 模型 | Pod IP 来源 | 固定 IP | 安全组直通 | IP 消耗 | 后期扩网段 |
 |:-----|:-----------|:------:|:----------|:--------|:----------:|
-| Global Router（默认） | 容器网段 | ❌ | ❌ | 少 | ✅ `AddClusterCIDR` |
-| VPC-CNI | VPC 子网 | ✅ | ✅ | 多（每 Pod 一个 VPC IP） | ❌ |
+| Global Router（默认） | 容器网段 | ❌ | ❌ | 少 | ✅ `AddClusterCIDR`（需开白） |
+| VPC-CNI | VPC 子网 | ✅ | ✅ | 多（每 Pod 一个 VPC IP） | ✅ `AddVpcCniSubnets`（追加 ENI 子网） |
 | CiliumOverlay | Overlay 隧道 | ❌ | ❌ | 少（不占 VPC IP） | ❌ |
 
 > VPC-CNI 可与 Global Router 共存：Global Router 为主，VPC-CNI 子网补充。开启 VPC-CNI 不影响已有 Global Router Pod。CiliumOverlay 与两者互斥（创建时定型，不可切换），见 [配置 CiliumOverlay](cilium-overlay.md)。
@@ -36,10 +36,10 @@ VPC-CNI 是 TKE 的三种 Pod 网络模型之一（另两种：Global Router / C
 > **服务角色** `IPAMDofTKE_QCSRole` 与集群内 **eniipamd 组件** 是两层：前者是 CAM 授权 TKE IPAMD 访问 CVM/VPC/ENI；后者是集群里跑的 DaemonSet/Deploy。缺角色时控制台/API 侧无法正常完成 VPC-CNI 授权路径，与 `DescribeIPAMD` 的 `EnableIPAMD=false`（组件未开）不同。官方： [43416 — IPAMDofTKE_QCSRole](https://cloud.tencent.com/document/product/457/43416)。
 
 ```bash
-# 探测
-tccli cam DescribeRoleList --Page 1 --Rp 100 \
-  --filter "List[?RoleName=='IPAMDofTKE_QCSRole'].RoleName" --output text
-# expected: IPAMDofTKE_QCSRole；空 → 补齐
+# 探测（按角色名 GetRole；勿用 DescribeRoleList 分页扫名，角色多时易漏）
+tccli cam GetRole --RoleName IPAMDofTKE_QCSRole \
+  --filter "RoleInfo.RoleName" --output text
+# expected: IPAMDofTKE_QCSRole；不存在则 exit 255，stderr 含 code:InvalidParameter.RoleNotExist → 补齐
 
 # 补齐（Principal = ccs.qcloud.com；策略名以 ListPolicies 为准）
 tccli cam CreateRole \
@@ -66,7 +66,6 @@ tccli cam AttachRolePolicy \
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
 ```bash
 # 核对 eniipamd 相关组件镜像 Tag（版本）
-<!-- tccli管VPC-CNI开启/关闭/子网配置，kubectl查K8s层组件镜像版本，非tccli边界 -->
 kubectl -n kube-system get ds tke-eni-agent -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
 kubectl -n kube-system get deploy tke-eni-ipamd -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
 kubectl -n kube-system get deploy tke-eni-ip-scheduler -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
@@ -90,12 +89,12 @@ kubectl -n kube-system get deploy tke-eni-ip-scheduler -o jsonpath='{.spec.templ
 | VpcCniType | string | 是 | — | `tke-route-eni` / `tke-direct-eni` | IP 分配方式不对 |
 | EnableStaticIp | boolean | 是 | — | `true`/`false` | 固定 IP 不生效 |
 | Subnets | list | 是 | — | VPC 子网 ID 列表 | `ResourceNotFound.SubnetId` |
-| ExpiredSeconds | int | 条件 | 0 | 固定 IP 回收秒数；`EnableStaticIp=true` 时必填且须 >300，不传默认 IP 永不销毁 | IP 回收时机不对 |
+| ExpiredSeconds | int | 否 | 不传=永不销毁 | 固定 IP 模式下 Pod 销毁后退还 IP 的秒数；**传则须 >300**；不传时默认 IP 永不销毁 | IP 回收时机不对 |
 | SkipAddingNonMasqueradeCIDRs | boolean | 否 | false | `true`/`false` | 路由配置影响 |
 
-> `VpcCniType`: `tke-route-eni`（策略路由/共享网卡多 IP，常用）/ `tke-direct-eni`（独立网卡）。**不是** `tke-direct-route-eni`。`EnableStaticIp=true` 开启固定 IP，配合 `ExpiredSeconds` 设回收时间（须 >300 秒）。
+> `VpcCniType`: `tke-route-eni`（策略路由/共享网卡多 IP，常用）/ `tke-direct-eni`（独立网卡）。**不是** `tke-direct-route-eni`。`EnableStaticIp=true` 开启固定 IP，配合 `ExpiredSeconds` 设回收时间（传则须 >300 秒）。
 >
-> ⚠️ **必填以 Action 入参为准**：`EnableStaticIp` 在 `EnableVpcCniNetworkType` 入参中为必填（非可选）——开启 VPC-CNI 时必须显式传 `true`/`false` 声明是否固定 IP；`ExpiredSeconds` 是条件必填（`EnableStaticIp=true` 时必填且 >300）。完整入参以 `tccli tke EnableVpcCniNetworkType help --detail` 为准。
+> ⚠️ **必填以 Action 入参为准**：`EnableStaticIp` 在 `EnableVpcCniNetworkType` 入参中为必填（非可选）——开启 VPC-CNI 时必须显式传 `true`/`false` 声明是否固定 IP；`ExpiredSeconds` 为 Optional——仅在固定 IP 模式下有意义，**传参则须 >300**，不传则 IP 永不销毁（非「EnableStaticIp=true 时必填」）。完整入参以 `tccli tke EnableVpcCniNetworkType help --detail` 为准。
 
 ## 应用
 
@@ -221,7 +220,7 @@ tccli tke DescribeIPAMD --region ap-guangzhou --ClusterId "<CLUSTER_ID>" \
 | IPAMD | `DescribeIPAMD` → `EnableIPAMD` | `true`（开启后） |
 | 开启进度 | `DescribeEnableVpcCniProgress` → `Status` | `Succeed`（`Running`/`Succeed`/`Failed`；非 VPC-CNI 集群不要调用，会 FailedOperation） |
 | 网络类型 | `DescribeClusters` → `NetworkType` | 含 `VPC-CNI` |
-| Pod 获 IP | `kubectl get pod -o wide` <!-- tccli管VPC-CNI网络配置，kubectl查Pod IP状态验证IP分配，非tccli边界 --> | Pod IP 在 VPC 子网段内 |
+| Pod 获 IP | `kubectl get pod -o wide` | Pod IP 在 VPC 子网段内 |
 
 ## 回滚
 
@@ -242,7 +241,7 @@ tccli tke DisableVpcCniNetworkType --region ap-guangzhou --ClusterId "<CLUSTER_I
 | `ResourceNotFound.SubnetId` | `tccli vpc DescribeSubnets` | 子网不在集群 VPC | 用集群 VPC 内子网 |
 | `InvalidParameterValue.VpcCniType` | 查枚举 | VpcCniType 拼错 | 用 `tke-route-eni` 或 `tke-direct-eni` |
 | `UnsupportedOperation` | `DescribeClusters` → `NetworkType` | 已开启 VPC-CNI 或集群非 Running | 先 Disable 或等 Running |
-| 创建/开启 VPC-CNI 失败且消息含授权/IPAMD/ENI | `tccli cam DescribeRoleList --Page 1 --Rp 100 --filter "List[?RoleName=='IPAMDofTKE_QCSRole'].RoleName" --output text` | 缺 `IPAMDofTKE_QCSRole` 或未挂 `QcloudAccessForIPAMDofTKERole` | 见 [IPAMD 服务角色](#ipamd-服务角色)；总表 [配置凭证](../../getting-started/credentials.md#补-ipamdoftke_qcsrolevpc-cni-前置) |
+| 创建/开启 VPC-CNI 失败且消息含授权/IPAMD/ENI | `tccli cam GetRole --RoleName IPAMDofTKE_QCSRole --filter "RoleInfo.RoleName" --output text` | 缺 `IPAMDofTKE_QCSRole` 或未挂 `QcloudAccessForIPAMDofTKERole` | 见 [IPAMD 服务角色](#ipamd-服务角色)；总表 [配置凭证](../../getting-started/credentials.md#补-ipamdoftke_qcsrolevpc-cni-前置) |
 | `UnauthorizedOperation` / CAM 拒绝（用户侧） | 查子账号策略 | 用户无 `tke:EnableVpcCniNetworkType` | 给用户挂 TKE 策略，与服务角色无关 |
 
 ### 命令成功但状态不对 (exit = 0)
@@ -250,7 +249,7 @@ tccli tke DisableVpcCniNetworkType --region ap-guangzhou --ClusterId "<CLUSTER_I
 | 现象 | 诊断 | 根因 | 修复 |
 |:--------|:----------|:------------|:-----|
 | 开启卡住进度不动 | `DescribeEnableVpcCniProgress` | 子网 IP 不足或路由冲突 | 加子网（`AddVpcCniSubnets`）或换子网 |
-| Pod 卡在 ContainerCreating | `kubectl describe pod` <!-- tccli管VPC-CNI子网配置，kubectl describe查Pod详情诊断IP耗尽，非tccli边界 --> | 子网 IP 耗尽 | `AddVpcCniSubnets` 增加子网 |
+| Pod 卡在 ContainerCreating | `kubectl describe pod` | 子网 IP 耗尽 | `AddVpcCniSubnets` 增加子网 |
 | 固定 IP 不生效 | `EnableStaticIp` 值 | 未设 true 或 StatefulSet 未配 | `EnableStaticIp=true`，StatefulSet 注解 `tke.cloud.tencent.com/vpc-ips` |
 
 ### 子网 IP 不足时增加子网
@@ -283,7 +282,6 @@ tccli tke DescribeEnableVpcCniProgress --region ap-guangzhou --ClusterId "<CLUST
 # expected: status=Succeed
 
 # 端到端：部署测试 Pod，核 Pod IP 在指定子网段内（上文仅列维度未端到端验证）
-<!-- tccli管VPC-CNI网络能力配置，kubectl管Pod生命周期验证IP分配，非tccli边界 -->
 kubectl run vpc-cni-test --image=nginx --restart=Never
 kubectl get pod vpc-cni-test -o wide --no-headers | awk '{print $6}'
 # expected: Pod IP 在 <SUBNET_ID> 子网 CidrBlock 段内 → VPC-CNI 配置闭环完成

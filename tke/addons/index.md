@@ -14,8 +14,7 @@ doc_type: Overview
 - **应用市场**：基于 Helm 3.0 发布和管理应用。
 - **云原生服务**：例如 Prometheus 监控服务，从对应服务入口配置。
 
-## 触发条件
-
+## 何时阅读
 - 你要查询当前集群已安装的 addon — 用 `DescribeAddon`；不传 `AddonName` 时返回该集群的全部 addon，见 [快速检查](#快速检查)
 - 你已从集群详情的组件管理页取得 `AddonName`，需要安装、更新或删除增强组件 — 去 [组件管理](manage.md)（`InstallAddon`/`UpdateAddon`/`DeleteAddon`）
 - 你要查询某个已知 addon 的当前参数和 chart 默认参数 — 用 `DescribeAddonValues`

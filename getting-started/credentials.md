@@ -134,7 +134,7 @@ tccli tke DescribeRegions
 ```
 ```json
 {
-    "TotalCount": 19,
+    "TotalCount": 42,
     "RegionInstanceSet": [
         {
             "RegionName": "ap-guangzhou",
@@ -145,7 +145,7 @@ tccli tke DescribeRegions
 }
 ```
 
-> `TotalCount` 为当前账号可见的 TKE 地域数（随产品开通变化，勿写死）。字段名是 `RegionInstanceSet`（不是 `RegionSet`）。
+> `TotalCount` 为当前账号可见的 TKE 地域数（随产品开通变化，勿写死；示例 `42` 仅示意数量级）。字段名是 `RegionInstanceSet`（不是 `RegionSet`）。TCR 的 `DescribeRegions` 顶层列表字段是 `Regions`（不是 `RegionInstanceSet`），见 `tccli tcr DescribeRegions`。
 
 > ⚠️ **不要用 `tccli auth verify`**——该子命令**不存在**（`tccli auth` 仅有 login/logout/help，执行 verify 返回 exit 252 Invalid choice）。凭证验证用 `tccli tke DescribeRegions` 这类轻量只读调用。
 
@@ -178,26 +178,39 @@ tccli tke DescribeRegions
 
 ### 统一探测
 
-```bash
-# 列出 TKE / IPAMD / AS / TCR / Prometheus 相关角色
-tccli cam DescribeRoleList --Page 1 --Rp 100 \
-  --filter "List[?contains(RoleName,'TKE') || contains(RoleName,'IPAMD') || RoleName=='AS_QCSRole' || contains(RoleName,'TCR') || contains(RoleName,'Prometheus')].RoleName" \
-  --output text
-# expected: 已用过 TKE 时常含 TKE_QCSRole；VPC-CNI 前须含 IPAMDofTKE_QCSRole；节点池前须含 AS_QCSRole
+> `DescribeRoleList` 每页最多 **200** 条（`--Rp` 上限 200），角色多的账号一页扫不全，JMESPath 过滤也容易漏目标角色。**按角色名探测请用 `GetRole`**（存在则返回 `RoleInfo.RoleName`；不存在则 `InvalidParameter.RoleNotExist`）。
 
-# 查某角色已挂策略（例：TKE 主角色）
-tccli cam ListAttachedRolePolicies --Page 1 --Rp 50 --RoleName TKE_QCSRole \
+```bash
+# 按名探测：存在则打印角色名；不存在则 exit 255，stderr 含 code:InvalidParameter.RoleNotExist
+tccli cam GetRole --RoleName TKE_QCSRole \
+  --filter "RoleInfo.RoleName" --output text
+# expected: TKE_QCSRole
+
+tccli cam GetRole --RoleName IPAMDofTKE_QCSRole \
+  --filter "RoleInfo.RoleName" --output text
+# expected: IPAMDofTKE_QCSRole（VPC-CNI 建集群前）
+
+tccli cam GetRole --RoleName AS_QCSRole \
+  --filter "RoleInfo.RoleName" --output text
+# expected: AS_QCSRole（节点池前）
+
+tccli cam GetRole --RoleName TCR_QCSRole \
+  --filter "RoleInfo.RoleName" --output text
+# expected: TCR_QCSRole（镜像签名等需 KMS 的场景）
+
+# 查某角色已挂策略（例：TKE 主角色；Rp 上限 200）
+tccli cam ListAttachedRolePolicies --Page 1 --Rp 200 --RoleName TKE_QCSRole \
   --filter "List[].PolicyName" --output text
 # expected: 至少含 QcloudAccessForTKERole（名称以实际返回为准）
 ```
 
-| 任务 | 探测期望（角色名须在列表中） |
+| 任务 | 探测期望（`GetRole` 返回角色名，无 `RoleNotExist`） |
 |:-----|:---------------------------|
 | 任意建集群 | `TKE_QCSRole` |
 | VPC-CNI / quickstart 默认网络 | `TKE_QCSRole` + `IPAMDofTKE_QCSRole` |
 | 节点池 | 上列 + `AS_QCSRole` |
 | 镜像签名 | `TCR_QCSRole` 且已挂 KMS 策略 |
-| Prometheus | `TKE_QCSLinkedRoleInPrometheusService` 或官方当前 Linked 角色名 |
+| Prometheus | `TKE_QCSLinkedRoleInPrometheusService` 或官方当前 Linked 角色名（`GetRole` 按实际名探测） |
 
 ### 补 TKE_QCSRole（主服务角色） {#补-tke_qcsrole主服务角色}
 
@@ -278,10 +291,10 @@ tccli cam AttachRolePolicy \
 tccli cam CreateServiceLinkedRole help --detail
 # expected: 入参含 QCSServiceName[]
 
-# 探测是否已有 Prometheus 相关 Linked 角色
-tccli cam DescribeRoleList --Page 1 --Rp 100 \
-  --filter "List[?contains(RoleName,'Prometheus')].RoleName" --output text
-# expected: 含 TKE_QCSLinkedRoleInPrometheusService 或官方当前名；空则走控制台 Prometheus 首次授权或 CreateServiceLinkedRole
+# 探测是否已有 Prometheus 相关 Linked 角色（按名；不存在则 RoleNotExist）
+tccli cam GetRole --RoleName TKE_QCSLinkedRoleInPrometheusService \
+  --filter "RoleInfo.RoleName" --output text
+# expected: 角色名；若 RoleNotExist，换官方当前名或走控制台 Prometheus 首次授权 / CreateServiceLinkedRole
 ```
 
 > `CreateServiceLinkedRole` 的 `QCSServiceName` 必须与 [角色载体](https://cloud.tencent.com/document/product/598/85165) 一致；不确定时用控制台该功能首次「服务授权」更稳。
@@ -322,9 +335,9 @@ tccli tke DescribeRegions --profile <PROFILE_NAME> --filter "TotalCount" --outpu
 | `AuthFailure.SecretIdNotFound` | 对目标 profile 运行 `tccli tke DescribeRegions --profile <PROFILE_NAME>` | 凭证未配置、已过期或 profile 选择错误 | 对目标 profile 重新运行 `tccli configure --profile <PROFILE_NAME>`，再用同一只读 API 验证 |
 | `AuthFailure.SignatureFailure` | 检查 SecretKey 是否复制完整（含首尾空格） | SecretKey 错误 | 重新从 CAM 复制 SecretKey |
 | `UnauthorizedOperation.CamNoAuth` | 查子账号授权策略 | 子账号无 TKE/TCR 权限 | CAM 控制台授权 `QcloudTKEFullAccess`/`QcloudTCRFullAccess` |
-| `UnauthorizedOperation.AutoScalingRoleUnauthorized` | `DescribeRoleList` 查 `AS_QCSRole` | 缺弹性伸缩服务角色 | [补 AS](#补-as_qcsrole节点池前置) → [创建节点池](../tke/nodes/nodepool-create.md#as-服务角色节点池创建前) |
-| 创建集群中途失败（服务未授权） | `DescribeRoleList` 查 `TKE_QCSRole` | 缺 TKE 服务角色 | [补 TKE_QCSRole](#补-tke_qcsrole主服务角色) 或控制台服务授权 |
-| VPC-CNI 创建/ENI 失败 | `DescribeRoleList` 查 `IPAMDofTKE_QCSRole` | 缺 IPAMD 服务角色 | [补 IPAMD](#补-ipamdoftke_qcsrolevpc-cni-前置) → [VPC-CNI](../tke/networking/vpc-cni.md#ipamd-服务角色) |
+| `UnauthorizedOperation.AutoScalingRoleUnauthorized` | `GetRole --RoleName AS_QCSRole` | 缺弹性伸缩服务角色 | [补 AS](#补-as_qcsrole节点池前置) → [创建节点池](../tke/nodes/nodepool-create.md#as-服务角色节点池创建前) |
+| 创建集群中途失败（服务未授权） | `GetRole --RoleName TKE_QCSRole` | 缺 TKE 服务角色 | [补 TKE_QCSRole](#补-tke_qcsrole主服务角色) 或控制台服务授权 |
+| VPC-CNI 创建/ENI 失败 | `GetRole --RoleName IPAMDofTKE_QCSRole` | 缺 IPAMD 服务角色 | [补 IPAMD](#补-ipamdoftke_qcsrolevpc-cni-前置) → [VPC-CNI](../tke/networking/vpc-cni.md#ipamd-服务角色) |
 | `cam CreateRole` / `AttachRolePolicy` 被拒 | 查子账号 CAM | 无角色管理权限 | 主账号控制台授权，或给子账号 `cam:CreateRole`/`cam:AttachRolePolicy` |
 | 地域相关报错（如 `UnsupportedRegion`/`InvalidRegion`） | `tccli tke DescribeRegions` 看地域状态 | region 不支持该产品 | 换 `ap-guangzhou`/`ap-shanghai` 等主地域 |
 | 命令卡住无响应 | 检查网络/代理 | 防火墙拦截腾讯云 API | 配置 `--https-proxy` 或开放 `*.tencentcloudapi.com` |
@@ -350,7 +363,7 @@ tccli configure remove --profile <PROFILE_NAME>
 ```bash
 # 跨产品端到端：凭证对 TKE 和 TCR 两个产品域均生效（验证段仅验证 TKE 域）
 tccli tcr DescribeRegions --filter "TotalCount" --output text
-# expected: 非零数字（如 19；随账号/产品开通变化）→ 凭证对 TCR 域同样可达，跨产品配置闭环完成
+# expected: 非零数字（随账号/产品开通变化；示例量级约 20+）→ 凭证对 TCR 域同样可达，跨产品配置闭环完成
 
 # profile 核查：对目标 profile 发起只读调用，避免打印本地凭证
 # 将 <PROFILE_NAME> 替换为要验证的 profile；默认 profile 可省略 --profile

@@ -114,7 +114,7 @@ tccli tke DescribeHealthCheckTemplate --version 2022-05-01 --region <SUPPORTED_R
 tccli tke CreateHealthCheckPolicy --version 2022-05-01 --region <REGION> \
   --ClusterId <CLUSTER_ID> \
   --HealthCheckPolicy '{"Name":"<POLICY_NAME>","Rules":[{"Name":"KubeletUnhealthy","Enabled":true,"AutoRepairEnabled":true},{"Name":"ReadonlyFilesystem","Enabled":true,"AutoRepairEnabled":false}]}'
-# expected: exit 0, 返回 RequestId
+# expected: exit 0；返回 HealthCheckPolicyName 与 RequestId（名称与入参 Name 一致）
 ```
 
 ### 步骤 3：绑定策略到 Native 节点池
@@ -177,10 +177,10 @@ tccli tke DeleteHealthCheckPolicy --version 2022-05-01 --region <REGION> \
 tccli tke ModifyHealthCheckPolicy --version 2022-05-01 --region <REGION> \
   --ClusterId <CLUSTER_ID> \
   --HealthCheckPolicy '{"Name":"<POLICY_NAME>","Rules":[{"Name":"KubeletUnhealthy","Enabled":true,"AutoRepairEnabled":true}]}'
-# expected: CAM 拦截 AuthFailure.UnauthorizedOperation；授权后 exit 0
+# expected: exit 0，返回 RequestId；随后 DescribeHealthCheckPolicies 中目标策略 Rules 与回传一致
 ```
 
-> `tccli tke ModifyHealthCheckPolicy help --detail` 与 API 入参说明未声明该更新是 replace 还是 merge，因此不作“覆盖式”断言。保守流程是先用 `DescribeHealthCheckPolicies` 读取当前完整 `Rules`，只修改目标字段后回传完整策略，再次 Describe 对比修改前后差异，避免因省略规则产生不确定结果。
+> `tccli tke ModifyHealthCheckPolicy --version 2022-05-01 help --detail` 与 API 入参说明未声明该更新是 replace 还是 merge，因此不作“覆盖式”断言。保守流程是先用 `DescribeHealthCheckPolicies` 读取当前完整 `Rules`，只修改目标字段后回传完整策略，再次 Describe 对比修改前后差异，避免因省略规则产生不确定结果。若返回 `AuthFailure.UnauthorizedOperation`，按 [故障恢复](#故障恢复) 补 CAM 或资源标签后再重试。
 
 ## 故障恢复 {#故障恢复}
 

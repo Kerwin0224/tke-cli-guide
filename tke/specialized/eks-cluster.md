@@ -117,7 +117,7 @@ tccli tke DescribeEKSContainerInstanceRegions --region ap-guangzhou
 
 #### 选项 A：CPU 实例（控制台「CPU 实例」）
 
-顶层 `--Cpu` / `--Memory` 为 API 必填（单位：核 / GiB）。不传 `GpuType`/`GpuCount`。拉公网镜像时加 `--AutoCreateEip true`（可与 `--AutoCreateEipAttribute` 同传带宽/计费；与 `ExistedEipIds` 互斥）。
+顶层 `--Cpu` / `--Memory` 为 API 必填（单位：核 / GiB）。不传 `GpuType`/`GpuCount`。拉公网镜像时加 `--AutoCreateEip true`（可与 `--AutoCreateEipAttribute` 同传；Attribute 仅 `DeletePolicy`/`InternetServiceProvider`/`InternetMaxBandwidthOut`，无 `InternetChargeType`；与 `ExistedEipIds` 互斥）。
 
 ```bash
 tccli tke CreateEKSContainerInstances \
@@ -131,7 +131,7 @@ tccli tke CreateEKSContainerInstances \
   --CpuType "intel" \
   --RestartPolicy Always \
   --AutoCreateEip true \
-  --AutoCreateEipAttribute '{"InternetMaxBandwidthOut":1,"InternetChargeType":"TRAFFIC_POSTPAID_BY_HOUR"}' \
+  --AutoCreateEipAttribute '{"DeletePolicy":"Immediate","InternetServiceProvider":"BGP","InternetMaxBandwidthOut":1}' \
   --Containers '[
     {
       "Name": "nginx",
@@ -198,28 +198,27 @@ tccli tke CreateEKSContainerInstances \
 
 | 参数 | 触发条件 | 说明 |
 |------|---------|------|
-| `EksCiVolume` | 容器需要持久存储 | CBS 云盘或 NFS 挂载 |
+| `EksCiVolume` | 容器需要持久存储 | 绑定已有 CBS（`CbsDiskId`+`Name`）或 NFS 挂载 |
 | `InitContainers` | 主容器启动前执行初始化 | 结构同 `Containers`（可含 `GpuLimit`） |
-| `AutoCreateEip` / `AutoCreateEipAttribute` | 容器需要公网 EIP（拉公网镜像等） | `AutoCreateEip=true` 自动建绑 EIP；带宽/计费用 Attribute；与 `ExistedEipIds` 互斥 |
+| `AutoCreateEip` / `AutoCreateEipAttribute` | 容器需要公网 EIP（拉公网镜像等） | `AutoCreateEip=true` 自动建绑 EIP；Attribute 仅 `DeletePolicy`（必填：`Never` 或其它释放策略如 `Immediate`）/`InternetServiceProvider`/`InternetMaxBandwidthOut`，**无** `InternetChargeType`；与 `ExistedEipIds` 互斥 |
 | `DnsConfig` | 自定义 DNS | nameserver/search/options |
 
 ##### 持久存储（EksCiVolume）
 
 ```bash
 --EksCiVolume '{
-  "CbsVolumes":[{"Name":"data","DiskType":"CLOUD_PREMIUM","DiskSize":50}],
-  "NfsVolumes":[{"Path":"/mnt/nfs","Server":"<NFS_SERVER>","ReadOnly":false}]
+  "CbsVolumes":[{"Name":"data","CbsDiskId":"<CBS_DISK_ID>"}],
+  "NfsVolumes":[{"Name":"nfs-data","Path":"/mnt/nfs","Server":"<NFS_SERVER>","ReadOnly":false}]
 }'
 ```
 
-> CBS 云盘随实例生命周期创建销毁；NFS 是外部共享存储。
-
+> `CbsVolumes` 绑定**已有** CBS 盘（必填 `CbsDiskId` + `Name`，无 `DiskType`/`DiskSize` 建盘字段）；`NfsVolumes` 必填 `Name`/`Path`/`Server`，`ReadOnly` 可选。NFS 是外部共享存储。
 ## 跨字段约束
 
 | `ExistedEipIds` | `AutoCreateEip` | `AutoCreateEipAttribute` | `Replicas` | 关系 |
 |:----------------|:----------------|:-------------------------|:-----------|:-----|
 | 传已有 EIP 列表 | `false` 或不传 | 不传 | 必须等于 EIP 数量 | 绑定已有 EIP |
-| 不传 | `true` | 可选，用于带宽与计费参数 | 任意合法副本数 | 自动创建 EIP |
+| 不传 | `true` | 可选；仅 `DeletePolicy`/`InternetServiceProvider`/`InternetMaxBandwidthOut` | 任意合法副本数 | 自动创建 EIP |
 | 不传 | `false` 或不传 | 不传 | 任意合法副本数 | 不绑定 EIP |
 
 `ExistedEipIds` 与自动创建 EIP 的两项参数互斥；不能一边绑定已有 EIP，一边要求自动创建。
@@ -228,7 +227,7 @@ tccli tke CreateEKSContainerInstances \
 
 ```bash
 --AutoCreateEip true \
---AutoCreateEipAttribute '{"InternetMaxBandwidthOut":1,"InternetChargeType":"TRAFFIC_POSTPAID_BY_HOUR"}'
+--AutoCreateEipAttribute '{"DeletePolicy":"Immediate","InternetServiceProvider":"BGP","InternetMaxBandwidthOut":1}'
 ```
 
 > 容器需要公网访问（拉公网镜像、对外服务）时配。`AutoCreateEip=true` 与 `ExistedEipIds` 互斥。EIP 计费独立。
@@ -236,8 +235,8 @@ tccli tke CreateEKSContainerInstances \
 ##### 初始化容器（InitContainers）与 DNS（DnsConfig）
 
 ```bash
---InitContainers '[{"Name":"init","Image":"busybox:latest","Command":["sh","-c","echo init"]}]'
---DnsConfig '{"DnsServers":[{"Name":"183.60.83.19"}]}'
+--InitContainers '[{"Name":"init","Image":"busybox:latest","Commands":["sh","-c","echo init"]}]'
+--DnsConfig '{"Nameservers":["183.60.83.19"]}'
 ```
 
 > `InitContainers` 结构与 `Containers` 相同。`Containers`/`InitContainers` 内的 `LivenessProbe`/`ReadinessProbe`/`SecurityContext`/`Capabilities`/`VolumeMounts`/`Resources` 等是 **K8s 标准字段**，传参格式见 [Kubernetes 官方文档](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/)；TCCLI 文档不展开这些字段，只讲 EKS 独有层（EksCiVolume/AutoCreateEipAttribute 等）。
@@ -404,6 +403,41 @@ tccli tke DescribeEKSClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>
 ```
 
 任一迁移或业务保全条件未满足时，不执行分支 B。
+
+## 故障恢复
+
+| 现象 | 诊断 | 根因 | 修复 |
+|:-----|:-----|:-----|:-----|
+| 新建免 CVM 仍调用 `CreateEKSCluster` | `CreateEKSCluster` 失败或控制台无新建入口 | EKS 集群新建入口已关闭 | 改走 [创建标准集群](../clusters/create.md) → [虚拟节点](../nodes/virtual-nodes.md) |
+| 容器实例 `ImagePullBackOff` / `CreatePodSandboxFailed` | `DescribeEKSContainerInstanceEvent` / `DescribeEksContainerInstanceLog` | 镜像权限、规格/配额、子网或运行时错误 | 按事件文案修镜像凭证/规格/`SubnetIds`；规格见 [资源规格](https://cloud.tencent.com/document/product/457/39808) |
+| 拿不到 kubeconfig | `DescribeEKSClusterCredential` 空或报错 | 集群非 Running 或无权限 | 先 `DescribeEKSClusters` 确认 `Status=Running` 与 CAM |
+| 退役集群误删容器实例 | 删除入参混用 `ClusterId` / `EksCiIds` | 对象边界混淆 | 清理容器实例只走分支 A；退役 EKS 只走分支 B |
+
+## 收尾确认
+
+按当前任务勾选对应终态（二选一或并存）：
+
+```bash
+# A. 容器实例运维完成：实例列表含目标 ID 且状态符合预期（或已按分支 A 删除）
+tccli tke DescribeEKSContainerInstances --region ap-guangzhou \
+  --filter "EksCis[?EksCiId=='<EKSCI_ID>'].{id:EksCiId,state:Status}" --output json
+# expected: 保留任务时 state 为 Running/Succeeded 等目标态；已清理时列表无该 ID
+
+# B. 存量 EKS 集群仍保留：控制面可运维
+tccli tke DescribeEKSClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]' \
+  --filter "Clusters[0].{id:ClusterId,state:Status}" --output json
+# expected: state=Running
+
+tccli tke DescribeEKSClusterCredential --region ap-guangzhou --ClusterId "<CLUSTER_ID>" \
+  --filter "Kubeconfig" --output text | head -c 40
+# expected: 非空 kubeconfig 片段
+
+# C. 已退役：Describe 不再返回该 ClusterId（仅分支 B 后）
+tccli tke DescribeEKSClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]'
+# expected: Clusters 为空或无目标 ID
+```
+
+> 容器实例或存量 EKS 的目标终态与上表一致，且未误走已关闭的 `CreateEKSCluster` 新建路径 = 本篇任务闭合。
 
 ---
 

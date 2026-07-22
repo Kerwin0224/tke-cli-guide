@@ -39,12 +39,11 @@ fused: true
 - 已创建 TKE 集群 (见 [创建集群](create.md)) 且状态 Running
 - 已配置 tccli 凭证 (见 [配置凭证](../../getting-started/credentials.md))
 
-
 ## 决策依据
 
 ### 改集群等级前先查价
 
-等级变更（L5→L20）会提高配额上限（节点/Pod/CRD）但也提高计费。决策前先查可用等级与价格。真实等级枚举（`DescribeClusterLevelAttribute` 返回）：`L5`/`L20`/`L50`/`L100`/`L200`/`L500`/`L1000`/`L3000`/`L5000`——**无 L10**，`Enable=false` 的 L1000 及以上需工单开通：
+等级变更（L5→L20）会提高配额上限（节点/Pod/CRD）但也提高计费。决策前先查可用等级与价格。真实等级枚举（`DescribeClusterLevelAttribute` 返回）：`L5`/`L20`/`L50`/`L100`/`L200`/`L500`/`L1000`/`L3000`/`L5000`——**无 L10**；是否可选用以返回项的 `Enable` 为准（部分账号高等级可能 `Enable=false` 需工单，勿写死「L1000+ 一律不可用」）：
 
 ```bash
 # 查可用等级 (含节点/Pod/CRD 上限)
@@ -118,7 +117,7 @@ tccli tke DescribeClusterAvailableExtraArgs --ClusterVersion "<VERSION>" --Clust
 | 参数 | 所属 Action | 必填 | 说明 |
 |:-----|:-----------|:----:|:-----|
 | `ClusterId` | 多数 | 是 | 集群 ID（注意 Level 系列用 `ClusterID` 大写） |
-| `ClusterLevel` | ModifyClusterAttribute | 否 | 真实枚举 L5/L20/L50/L100/L200/L500（无 L10），影响计费 |
+| `ClusterLevel` | ModifyClusterAttribute | 否 | 真实枚举 L5/L20/L50/L100/L200/L500/L1000/L3000/L5000（无 L10；以 `Enable=true` 项为准），影响计费 |
 | `Tags[]` | ModifyClusterTags | 是 | Key/Value 对（API 层选填，业务必需——覆盖式更新，不传会清空标签） |
 | `SyncSubresource` | ModifyClusterTags | 否 | true 同步标签到子资源 |
 | `SyncNodePoolTags` | ModifyClusterTags | 否 | true 同步标签到节点池，仅当 `SyncSubresource=true` 时生效 |
@@ -220,7 +219,6 @@ tccli tke AddClusterCIDR --ClusterId "<CLUSTER_ID>" --region <REGION> \
 
 ### 步骤 6：获取集群 admin 角色（RBAC 授权前置）
 
-<!-- kubectl 管理 K8s 原生资源（TCCLI 无此能力） -->
 ```bash
 tccli tke AcquireClusterAdminRole --ClusterId "<CLUSTER_ID>" --region <REGION>
 # expected: exit 0, RequestId

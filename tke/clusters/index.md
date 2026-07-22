@@ -11,8 +11,7 @@ doc_type: Overview
 
 集群是容器运行所需云资源的集合（含 CVM、负载均衡等）。**标准集群（Master 托管）**：Master/Etcd 由腾讯云集中维护，你购置并管理工作节点；同一集群可混用普通/原生/超级/注册节点。**Master 自维护（独立）模式已停止新建**，存量独立集群仍可运维。
 
-## 触发条件
-
+## 何时阅读
 - 你要创建首个 TKE 集群（`CreateCluster` 建空控制面，再单独加节点）— 去 [创建集群](create.md)
 - 你要查询集群列表或单集群健康全貌（`DescribeClusters` + JMESPath 投影）— 去 [查询和过滤集群](query.md)
 - 你要升级集群 K8s 版本或改运行时/控制面参数（`UpdateClusterVersion`/`ModifyClusterExtraArgs`）— 去 [升级集群版本](upgrade.md) 或 [配置集群属性与运行时](configure.md)

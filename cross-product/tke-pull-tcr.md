@@ -146,6 +146,17 @@ kubectl describe pod -l app=my-app | /usr/bin/grep -A2 "Events:"
 
 > Pod Running + Events 含 "Successfully pulled image" = TKE→TCR 镜像拉取链路通。
 
+## 故障恢复
+
+| 现象 | 诊断 | 根因 | 修复 |
+|:-----|:-----|:-----|:-----|
+| `ImagePullBackOff` / `ErrImagePull` | `kubectl describe pod` → Events；核对 Secret 名与 `imagePullSecrets` | Secret 缺失/错名、Token 无效、域名写错 | 重做步骤 1–2；`--docker-server` 用 `PublicDomain`（公网）或实例镜像域名（内网勿把 `InternalEndpoint` 当 server） |
+| 内网拉取超时 | `DescribeInternalEndpoints` / 安全组 / 路由 | 内网端点未接入或网络不通 | 先完成 TCR 内网接入与安全组放通，再部署 |
+| Token 无效 / unauthorized | `DescribeInstanceToken`（longterm）或重建 temp Token | Token 过期、权限不足 | temp 约 1h 过期则重建；longterm 检查权限后轮换 |
+| Pod 已 Running 但二次部署失败 | `kubectl get secret tcr-secret` | Secret 被提前删除 | 收尾确认完成前勿删 Secret；见下方清理顺序 |
+
+更广的镜像拉取排障见 [TKE 故障排查](../tke/troubleshooting.md) 与 [TCR 故障排查](../tcr/troubleshooting.md)。
+
 ---
 
 ## 收尾确认

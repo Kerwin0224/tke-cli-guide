@@ -51,7 +51,7 @@ AI 模型以模型仓库形式挂在企业版实例下，一个仓库含多个�
 
 ```bash
 tccli tcr ListAIModels --region <REGION> --RegistryId <REGISTRY_ID> --Limit 20
-# expected: exit 0, { "TotalCount": <N>, "ModelList": [...], "RequestId": "..." }
+# expected: exit 0, { "TotalCount": <TOTAL_COUNT>, "ModelList": [...], "RequestId": "..." }
 ```
 
 `ModelList[]` 每项含：`ModelName` / `NamespaceName` / `LatestVersion` / `Kind` / `ImageSize` / `UpdateTime` / `Digest`。无模型时返回 `TotalCount: 0, ModelList: []`。
@@ -60,7 +60,7 @@ tccli tcr ListAIModels --region <REGION> --RegistryId <REGISTRY_ID> --Limit 20
 
 ```bash
 tccli tcr ListAIModels --region <REGION> --RegistryId <REGISTRY_ID> \
-  --Namespace <NAMESPACE> --SearchKey <KEY>
+  --Namespace <NAMESPACE> --SearchKey <SEARCH_KEY>
 # expected: TotalCount 与 ModelList 仅含匹配项
 ```
 
@@ -69,7 +69,7 @@ tccli tcr ListAIModels --region <REGION> --RegistryId <REGISTRY_ID> \
 ```bash
 tccli tcr ListAIModelVersions --region <REGION> --RegistryId <REGISTRY_ID> \
   --NamespaceName <NAMESPACE> --RepositoryName <MODEL_NAME> --Limit 20
-# expected: exit 0, { "TotalCount": <N>, "VersionList": [...], "RequestId": "..." }
+# expected: exit 0, { "TotalCount": <TOTAL_COUNT>, "VersionList": [...], "RequestId": "..." }
 ```
 
 `VersionList[]` 每项含：`Version` / `Size` / `IsRecommended`（bool，推荐版本标记）/ `PushTime`。**推荐版本由 `IsRecommended=true` 判断**，非按时间猜。

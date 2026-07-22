@@ -52,7 +52,7 @@ AI Skill 是可被智能体调用的工具包，挂在企业版实例下。每�
 
 ```bash
 tccli tcr ListSkills --region <REGION> --RegistryId <REGISTRY_ID> --Limit 20
-# expected: exit 0, { "TotalCount": <N>, "SkillList": [...], "RequestId": "..." }
+# expected: exit 0, { "TotalCount": <TOTAL_COUNT>, "SkillList": [...], "RequestId": "..." }
 ```
 
 `SkillList[]` 每项含：`SkillName` / `Description` / `SkillType` / `Tags` / `LatestVersion` / `Status` / `UpdateTime`。无 Skill 时返回 `TotalCount: 0, SkillList: []`。
@@ -70,7 +70,7 @@ tccli tcr ListSkills --region <REGION> --RegistryId <REGISTRY_ID> \
 ```bash
 tccli tcr ListSkillVersions --region <REGION> --RegistryId <REGISTRY_ID> \
   --SkillName <SKILL_NAME> --Limit 20
-# expected: exit 0, { "TotalCount": <N>, "VersionList": [...], "RequestId": "..." }
+# expected: exit 0, { "TotalCount": <TOTAL_COUNT>, "VersionList": [...], "RequestId": "..." }
 ```
 
 `VersionList[]` 每项含：`Version` / `Size` / `PushTime`（注意：Skill 版本无 `IsRecommended` 字段，与 AI 模型版本不同）。

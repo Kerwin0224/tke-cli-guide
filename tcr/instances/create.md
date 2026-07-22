@@ -171,7 +171,11 @@ tccli tcr DescribeInstances \
 ```bash
 # 确认子资源（命名空间/仓库）+ 查删除保护状态
 tccli tcr DescribeNamespaces --region ap-guangzhou --RegistryId "<REGISTRY_ID>"
+# expected: NamespaceList 可空；有残留命名空间时先清理再删实例
+
 tccli tcr DescribeRepositories --region ap-guangzhou --RegistryId "<REGISTRY_ID>"
+# expected: RepositoryList 可空；有残留仓库时先清理再删实例
+
 tccli tcr DescribeInstances --region ap-guangzhou --Registryids '["<REGISTRY_ID>"]' --filter "Registries[0].DeletionProtection"
 # expected: 子资源列表 + DeletionProtection 值（true 时需先关）
 

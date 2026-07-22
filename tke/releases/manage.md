@@ -66,7 +66,7 @@ gatekeeper	kube-system	4	deployed	gatekeeper	1.3.0
 # GetTkeAppChartList 的 ClusterType 仅 tke / eks（非 CreateCluster 的 MANAGED_CLUSTER）
 tccli tke GetTkeAppChartList --region ap-guangzhou \
   --Kind "<CHART_KIND>" --ClusterType tke
-# expected: exit 0, 返回 AppCharts[]（含内置 Chart 名/版本/架构；匹配为空时 AppCharts=[]）
+# expected: exit 0, 返回 AppCharts[]（项字段 Name/Label/LatestVersion；匹配为空时 AppCharts=[]）
 ```
 
 ## 关键字段
@@ -82,7 +82,7 @@ tccli tke GetTkeAppChartList --region ap-guangzhou \
 | ChartVersion | string | 否 | Chart 版本 | `InvalidParameterValue` |
 | ChartFrom | string | 否 | Chart 来源：`tke-market`（默认）/ `other` | `InvalidParameterValue` |
 | ChartRepoURL | string | 否 | Chart 仓库 URL（`ChartFrom=other` 时） | `InvalidParameterValue` |
-| Values | string | 否 | 自定义 Values（JSON） | `InvalidParameterValue` |
+| Values | object | 否 | `ReleaseValues`：`{RawOriginal, ValuesType}`；`ValuesType` 示例为 `yaml`（非裸 JSON 字符串） | `InvalidParameterValue` |
 | Username | string | 否 | 私有仓库用户名 | `UnauthorizedOperation` |
 | Password | string | 否 | 私有仓库密码 | `UnauthorizedOperation` |
 | ClusterType | string | 否 | 集群类型：`tke` / `eks` / `tkeedge` / `external` | — |
@@ -112,7 +112,7 @@ tccli tke GetTkeAppChartList --region ap-guangzhou \
 tccli tke CreateClusterRelease --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" --Name "<RELEASE_NAME>" --Namespace "<NAMESPACE>" \
   --Chart "<CHART_NAME>" --ChartFrom tke-market --ChartNamespace "<CHART_NS>"
-# expected: exit 0, 返回 RequestId
+# expected: exit 0, 返回 Release{ID,Name,Namespace,Status=pending-install,...}；保存 Release.ID 供 Cancel 等
 ```
 
 | 占位符 | 含义 | 约束 | 如何获取 |
@@ -131,17 +131,20 @@ tccli tke CreateClusterRelease --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" --Name "<RELEASE_NAME>" --Namespace "<NAMESPACE>" \
   --Chart "<CHART_NAME>" --ChartFrom other \
   --ChartRepoURL "https://charts.example.com" --ChartVersion "1.2.0" \
-  --Values '{"replicaCount":3}' \
+  --Values '{"RawOriginal":"replicaCount: 3","ValuesType":"yaml"}' \
   --Username "<REPO_USER>" --Password "<REPO_PASS>"
 # expected: exit 0
 ```
 
+> `Values` 是 `ReleaseValues` 对象，不是裸 JSON 字符串：`RawOriginal` 为参数原文，`ValuesType` 为原文类型（help 示例为 `yaml`）。
+
 ### 步骤 3：升级 — 升级版本 {#步骤-3升级-升级版本}
 
 ```bash
+# Chart 为 Required；仅改版本时仍须传 Chart（与创建时 Chart 名一致）
 tccli tke UpgradeClusterRelease --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" --Name "<RELEASE_NAME>" --Namespace "<NAMESPACE>" \
-  --ChartVersion "<NEW_VERSION>"
+  --Chart "<CHART_NAME>" --ChartVersion "<NEW_VERSION>"
 # expected: exit 0
 ```
 
@@ -176,7 +179,7 @@ tccli tke DescribeClusterReleases --region ap-guangzhou --ClusterId "<CLUSTER_ID
 | 资源就绪 | `kubectl get all -n <NAMESPACE>` | Release 管理的资源 Ready |
 | 回滚生效 | `DescribeClusterReleases` / `DescribeClusterReleaseHistory` | 当前 Release 的目标 Chart/Values 内容与所选历史修订一致；回滚会形成新的当前修订，不要求当前 `Revision` 等于历史目标 |
 
-> `Status` 枚举：`deployed`/`failed`/`pending-upgrade`/`pending-rollback`。`deployed` 为终态成功。
+> `Status` 枚举：`deployed`/`failed`/`pending-install`/`pending-upgrade`/`pending-rollback`。`deployed` 为终态成功。
 
 ## 清理
 
@@ -228,17 +231,17 @@ tccli tke DescribeClusterReleases --region ap-guangzhou --ClusterId "<CLUSTER_ID
 ### Release 查询
 
 ```bash
-# 查询 Release 详情
+# 查询 Release 详情（Name + Namespace 寻址，非 --ID）
 tccli tke DescribeClusterReleaseDetails --ClusterId "<CLUSTER_ID>" --region <REGION> \
-  --ID "<RELEASE_ID>"
+  --Name "<RELEASE_NAME>" --Namespace "<NAMESPACE>"
 # expected: exit 0, Release 详情
 
 # 查询待处理 Release
 tccli tke DescribeClusterPendingReleases --ClusterId "<CLUSTER_ID>" --region <REGION>
 # expected: exit 0, 待处理 Release 列表
 
-# 取消 Release
-tccli tke CancelClusterRelease --ClusterId "<CLUSTER_ID>" --region <REGION> --ID "<RELEASE_ID>"
+# 取消 Release（必填 --ID；ClusterId 可选）
+tccli tke CancelClusterRelease --region <REGION> --ID "<RELEASE_ID>"
 # expected: exit 0
 ```
 
@@ -265,21 +268,25 @@ tccli tke DescribeRollOutSequences --region <REGION> --Limit 10
 ```
 
 ```bash
-# 创建灰度发布序列 (Name + SequenceFlows[] 按标签分批)
+# 创建灰度发布序列：Name + SequenceFlows[] + Enabled 均必填；
+# 每个 flow 的 SoakTime（秒）必填；Tags[].Value 为字符串数组
 tccli tke CreateRollOutSequence --region <REGION> \
-  --Name "<SEQUENCE_NAME>" --SequenceFlows '[{"Tags":[{"Key":"<K>","Value":["<V>"]}]}]'
-# expected: exit 0, 返回 ID
+  --Name "<SEQUENCE_NAME>" --Enabled true \
+  --SequenceFlows '[{"Tags":[{"Key":"<K>","Value":["<V>"]}],"SoakTime":86400}]'
+# expected: exit 0, 返回 ID（Integer）
 
-# 修改灰度序列 (按 ID)
-tccli tke ModifyRollOutSequence --region <REGION> --ID <SEQUENCE_ID> --Name "<NEW_NAME>"
-# expected: exit 0
+# 修改灰度序列：ID + Name + SequenceFlows + Enabled 均必填（覆盖式，不可只改 Name）
+tccli tke ModifyRollOutSequence --region <REGION> \
+  --ID <SEQUENCE_ID> --Name "<NEW_NAME>" --Enabled true \
+  --SequenceFlows '[{"Tags":[{"Key":"<K>","Value":["<V>"]}],"SoakTime":86400}]'
+# expected: exit 0；缺 SequenceFlows/Enabled 报 required arguments
 
 # 删除灰度序列 (按 ID)
 tccli tke DeleteRollOutSequence --region <REGION> --ID <SEQUENCE_ID>
 # expected: exit 0
 ```
 
-> `RollOutSequence` 用 `ID`（Integer）定位，`SequenceFlows[]` 按节点 `Tags` 分批（每批一个 flow）。集群/序列标签管理用 `DescribeClusterRollOutSequenceTags`/`ModifyClusterRollOutSequenceTags`。
+> `RollOutSequence` 用 `ID`（Integer）定位。`Create`/`Modify` 均要求 `Enabled` 与完整 `SequenceFlows[]`（每步 `SoakTime` 必填，按节点 `Tags` 分批）。集群/序列标签管理用 `DescribeClusterRollOutSequenceTags`/`ModifyClusterRollOutSequenceTags`。
 
 ```bash
 # 查询集群灰度序列标签（Filters + Offset/Limit 分页）
@@ -288,13 +295,15 @@ tccli tke DescribeClusterRollOutSequenceTags --region ap-guangzhou \
 # expected: exit 0，返回 ClusterTags[]+TotalCount
 
 # 修改集群灰度序列标签（ClusterID 大写 + Tags[] 覆盖）
+# Tags 合法键值：Key=Env → Value∈{Test,Pre-Production,Production}；
+# Key=Protection-Level → Value∈{Low,Medium,High}（不是任意 env/canary）
 tccli tke ModifyClusterRollOutSequenceTags --region ap-guangzhou \
   --ClusterID "<CLUSTER_ID>" \
-  --Tags '[{"Key":"env","Value":"canary"}]'
+  --Tags '[{"Key":"Env","Value":"Test"}]'
 # expected: CAM 拦截 UnauthorizedOperation.CamNoAuth；授权后 exit 0
 ```
 
-> ⚠️ `ModifyClusterRollOutSequenceTags` 用大写 `ClusterID`（区别于多数 TKE 接口的小写 `ClusterId`），`Tags[]` 是覆盖式整体更新。`DescribeClusterRollOutSequenceTags` 不需 ClusterId，按 Offset/Limit 翻页。两者参数见各 Action 的 `help --detail`。灰度序列用这些标签按节点 `Tags` 分批发布。
+> ⚠️ `ModifyClusterRollOutSequenceTags` 用大写 `ClusterID`（区别于多数 TKE 接口的小写 `ClusterId`），`Tags[]` 是覆盖式整体更新；键值仅支持上述枚举。`DescribeClusterRollOutSequenceTags` 不需 ClusterId，按 Offset/Limit 翻页。两者参数见各 Action 的 `help --detail`。灰度序列用这些标签按节点 `Tags` 分批发布。
 
 ## 收尾确认
 
@@ -349,4 +358,6 @@ kubectl get all -n <NAMESPACE> -l app.kubernetes.io/instance=<RELEASE_NAME> \
 |:---|:---|:---:|:---|
 | `Name` | `CreateClusterRelease` | 是 | Release 名称 |
 | `Chart` | `CreateClusterRelease` | 是 | Chart 名称 |
-| `Chart` | `UpgradeClusterRelease` | 是 | 目标 Chart 名称 |
+| `Chart` | `UpgradeClusterRelease` | 是 | 目标 Chart 名称（升级时也必填，不可只传 ChartVersion） |
+| `Name` / `Namespace` | `DescribeClusterReleaseDetails` | 是 | 详情用 Name+Namespace 寻址，非 `--ID` |
+| `ID` | `CancelClusterRelease` | 是 | 取消待处理 Release 用业务 ID |

@@ -92,7 +92,7 @@ tccli tcr DescribeNamespacePersonal --Namespace "" --Limit 10 --Offset 0
 
 ```bash
 tccli tcr CreateUserPersonal --Password "<PASSWORD>"
-# expected: exit 0, {"RequestId":"..."}（响应不含用户名；用户名=腾讯云账号 UIN，如 <UIN>）
+# expected: exit 0, {"RequestId":"..."}（响应不含用户名；用户名=腾讯云账号 UIN，如 <ACCOUNT_UIN>）
 ```
 
 | 占位符 | 含义 | 约束 | 如何获取 |
@@ -114,7 +114,7 @@ tccli tcr CreateNamespacePersonal --Namespace "<NAMESPACE_NAME>"
 # expected: exit 0
 ```
 
-> 个人版命名空间名直接用于镜像地址：`<个人版域名>/<namespace>/<repo>:<tag>`。个人版域名是 `ccr.ccs.tencentyun.com`（与企业版的 `xxx.tencentcloudcr.com` 不同）。
+> 个人版命名空间名直接用于镜像地址：`<PERSONAL_DOMAIN>/<NAMESPACE_NAME>/<REPOSITORY_NAME>:<TAG>`。个人版域名是 `ccr.ccs.tencentyun.com`（与企业版的 `xxx.tencentcloudcr.com` 不同）。
 
 ### 步骤 3：创建仓库
 
@@ -165,7 +165,7 @@ tccli tcr DescribeRepositoryPersonal --RepoName "<NAMESPACE_NAME>/<REPO_NAME>"
 | 命名空间存在 | `DescribeNamespacePersonal` | 含目标命名空间 |
 | 仓库存在 | `DescribeRepositoryPersonal` | 含目标仓库 |
 | 镜像版本 | `DescribeImagePersonal --RepoName ns/repo` | 含推送的 tag |
-| docker 本地 | `docker images ccr.ccs.tencentyun.com/<ns>/<repo>` | 含推送的 tag |
+| docker 本地 | `docker images ccr.ccs.tencentyun.com/<NAMESPACE_NAME>/<REPO_NAME>` | 含推送的 tag |
 
 ## 清理
 
@@ -174,7 +174,7 @@ tccli tcr DescribeRepositoryPersonal --RepoName "<NAMESPACE_NAME>/<REPO_NAME>"
 #### 1. 删除镜像（RepoName = namespace/repo；无 --Namespace）
 
 ```bash
-tccli tcr DeleteImagePersonal --RepoName "<NAMESPACE_NAME>/<REPO_NAME>" --Tag "<TAG>"
+tccli tcr DeleteImagePersonal --RepoName "<NAMESPACE_NAME>/<REPO_NAME>" --Tag "<IMAGE_TAG>"
 # expected: exit 0
 ```
 

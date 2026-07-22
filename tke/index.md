@@ -25,13 +25,12 @@ graph TD
 
 | 角色 | 目标 | 主要文档 |
 |------|------|-------------|
-| 开发者 | 部署应用到 K8s，不需要管 Master | [Quickstart](../quickstart/tke-first-cluster.md) |
+| 开发者 | 部署应用到 K8s，不需要管 Master | [快速入门](../quickstart/tke-first-cluster.md) |
 | 运维/SRE | 管理集群生命周期、节点、监控 | [集群管理](clusters/index.md) |
 | 安全工程师 | 审计、加密、认证、权限控制 | [安全](security/index.md) |
 | 架构师 | Serverless、边缘计算、混合云接入 | [专用工作负载](specialized/index.md) + [注册节点](nodes/registered-nodes/overview.md) |
 
-## 触发条件
-
+## 何时阅读
 - 你要在腾讯云上运行/管理 Kubernetes 集群（创建、查询、升级、删除）— 本域是入口
 - 你已读完 [快速入门](../quickstart/tke-first-cluster.md)，需查阅某个具体操作（节点池/网络/安全/可观测）— 看下方下一步或 [集群管理](clusters/index.md)
 - 你遇到 TKE API 双版本困惑（`2018-05-25` vs `2022-05-01` 哪个该用）— 直接看 [API 版本选择](#api-版本选择)

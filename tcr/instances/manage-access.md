@@ -207,8 +207,11 @@ tccli tcr ModifyInstanceToken --RegistryId "<ID>" --TokenId "<TOKEN_ID>" --Enabl
 # expected: exit 0, Token 禁用
 
 # 白名单删除（写操作见访问控制）
-tccli tcr DeleteSecurityPolicy --RegistryId "<ID>" --PolicyIndex <INDEX>  # 见 access/manage.md
+tccli tcr DeleteSecurityPolicy --RegistryId "<ID>" --PolicyIndex <INDEX>
+# expected: exit 0
 ```
+
+完整白名单运维见 [访问控制](../access/manage.md)。
 
 ## 外网端点字段契约
 

@@ -1,10 +1,10 @@
 ---
-doc_type: Reference
+doc_type: Overview
 fused: false
 ---
 # 术语表
 
-> 本指南涉及的腾讯云与 Kubernetes 术语速查。文档中首次出现时链接到本表对应条目。
+> 本指南涉及的腾讯云与 Kubernetes 术语速查。文档中首次出现时链接到本表对应条目。用于冷启动查词与对象对齐，不替代各产品 How-to。
 >
 > 官方文档：[TKE 产品概述](https://cloud.tencent.com/document/product/457/6759) · [TCR 产品概述](https://cloud.tencent.com/document/product/1141/39288)
 
@@ -59,11 +59,11 @@ fused: false
 | imagePullSecret | — | K8s 中存镜像仓库凭证的 Secret。TKE 集群拉 TCR 镜像时配置。 |
 | 个人版 | Personal | TCR 免费版，功能受限，无独立实例。 |
 
-## tccli
+## TCCLI
 
 | 术语 | 释义 |
 |:-----|:-----|
-| tccli | 腾讯云命令行工具。本指南所有操作的入口。 |
+| TCCLI / `tccli` | 腾讯云命令行工具产品名写作 **TCCLI**；命令与可执行文件写作 `tccli`。本指南操作入口。 |
 | Action | TCCLI 调用的 API 操作名，如 `CreateCluster`、`DescribeClusters`。 |
 | `--generate-cli-skeleton` | 生成 Action 入参骨架 JSON 的命令（调试用；日常执行可直接按文档参数传参）。 |
 | `--filter` | JMESPath 表达式，从响应中提取字段。如 `--filter "Clusters[0].ClusterId"`。 |

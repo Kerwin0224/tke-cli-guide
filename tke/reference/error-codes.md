@@ -4,7 +4,7 @@ subtype: 8D
 ---
 # TKE 错误码
 
-> 错误码按 API 返回原样写出。双版本相关错误码优先列出，TKE 特有错误码次之，通用错误码垫底。退出码仅三级（0 成功 / 252 参数解析错误 / 255 其他），定位问题须解析响应 JSON 的 `Error.Code`（tccli 默认剥离 `Response` 包装层，顶层即 `Error` + `RequestId`）。
+> 错误码按 API 返回原样写出。双版本相关错误码优先列出，TKE 特有错误码次之，通用错误码垫底。退出码仅三级（0 成功 / 252 参数解析错误 / 255 其他）。**定位问题先看 exit，再分流 stdout/stderr**：exit `0` 读 stdout 业务字段；exit `252`/`255` 读 **stderr** 中的 `code:` / `message:` / `requestId:`（常见一行 `[TencentCloudSDKException] code:... message:... requestId:...`）。不要假设 API 失败时 stdout 顶层存在 `{"Error":{"Code":...}}`。
 >
 > 官方文档：[公共错误码](https://cloud.tencent.com/document/product/457/31885)
 
@@ -30,9 +30,9 @@ subtype: 8D
 | `FailedOperation.UnexpectedError` | 不可预知的错误 | 否 | 收集 RequestId | 提工单附 RequestId |
 | `InternalError.CamNoAuth` | CAM 权限不足 | 否 | 查 CAM 策略 | 授予 `tke:<Action>` 权限 |
 | `UnauthorizedOperation.CamNoAuth` | 无该接口 CAM 权限 | 否 | 查 CAM 策略 | 授予对应 Action 权限 |
-| `UnauthorizedOperation.AutoScalingRoleUnauthorized` | 未授权服务角色 `AS_QCSRole`（节点池/AS） | 否 | `tccli cam DescribeRoleList --Page 1 --Rp 100 --filter "List[?RoleName=='AS_QCSRole'].RoleName" --output text` | [创建节点池 — AS 服务角色](../nodes/nodepool-create.md#as-服务角色节点池创建前)；[配置凭证 — 服务角色](../../getting-started/credentials.md#服务角色tke--ipamd--as--tcr--可观测) |
-| （创建/VPC-CNI 中途失败，消息含服务授权/未授权） | 缺 `TKE_QCSRole` 或未挂 `QcloudAccessForTKERole` | 否 | `DescribeRoleList` 查 `TKE_QCSRole`；`ListAttachedRolePolicies --RoleName TKE_QCSRole` | [配置凭证 — 补 TKE_QCSRole](../../getting-started/credentials.md#补-tke_qcsrole主服务角色)；官方 [43416](https://cloud.tencent.com/document/product/457/43416) |
-| （VPC-CNI / ENI / IPAMD 授权失败） | 缺 `IPAMDofTKE_QCSRole` | 否 | `DescribeRoleList` 查 `IPAMDofTKE_QCSRole` | [VPC-CNI — IPAMD 服务角色](../networking/vpc-cni.md#ipamd-服务角色) |
+| `UnauthorizedOperation.AutoScalingRoleUnauthorized` | 未授权服务角色 `AS_QCSRole`（节点池/AS） | 否 | `tccli cam GetRole --RoleName AS_QCSRole --filter "RoleInfo.RoleName" --output text` | [创建节点池 — AS 服务角色](../nodes/nodepool-create.md#as-服务角色节点池创建前)；[配置凭证 — 服务角色](../../getting-started/credentials.md#服务角色tke--ipamd--as--tcr--可观测) |
+| （创建/VPC-CNI 中途失败，消息含服务授权/未授权） | 缺 `TKE_QCSRole` 或未挂 `QcloudAccessForTKERole` | 否 | `tccli cam GetRole --RoleName TKE_QCSRole`；`ListAttachedRolePolicies --RoleName TKE_QCSRole` | [配置凭证 — 补 TKE_QCSRole](../../getting-started/credentials.md#补-tke_qcsrole主服务角色)；官方 [43416](https://cloud.tencent.com/document/product/457/43416) |
+| （VPC-CNI / ENI / IPAMD 授权失败） | 缺 `IPAMDofTKE_QCSRole` | 否 | `tccli cam GetRole --RoleName IPAMDofTKE_QCSRole --filter "RoleInfo.RoleName" --output text` | [VPC-CNI — IPAMD 服务角色](../networking/vpc-cni.md#ipamd-服务角色) |
 | `FailedOperation.AsCommon` | AS 侧失败（常嵌套 `UnknownParameter` 如 HostName/InstanceName） | 否 | 读 Message 内嵌字段名；核 `LaunchConfigurePara` | 去掉 CVM 专有键；见 [nodepool-create 旧版路径](../nodes/nodepool-create.md#旧版路径createclusternodepool-2018-05-25) |
 | `FailedOperation.CvmCommon` / `InvalidParameterValue.DuplicateTags` | 透传 `RunInstancePara` 标签与 TKE 自动打标冲突 | 否 | 查 RunInstancePara 是否含 `TagSpecification` | 去掉透传 Tags；见 [CreateClusterInstances](../nodes/instance-ops.md#新建-cvm-作节点createclusterinstances) |
 | `ResourceUnavailable.ClusterState`（消息含 without worker） | 空集群不允许开公网/VIP 端点 | 否 | `DescribeClusterStatus` → `ClusterRunningNodeNum` | 先加 worker 再 `CreateClusterEndpoint`；见 [管理端点](../networking/endpoints.md) |
@@ -65,7 +65,7 @@ tccli tke <Action> --version <VERSION> --generate-cli-skeleton
 # expected: 入参骨架 JSON
 ```
 
-> 错误响应结构（HTTP API 原始）：`{"Response":{"Error":{"Code":"...","Message":"..."},"RequestId":"..."}}`。**tccli 默认剥离 `Response` 包装**，终端常见顶层即 `Error` + `RequestId`；SDK 异常行也会打印 `code:… message:…`。用 `--language en-US` 锁定英文错误消息，便于脚本匹配。如遇未列出的错误码，查 [腾讯云 TKE 错误码文档](https://cloud.tencent.com/document/product/457)。`ResourceNotFound` 删不存在的集群时消息为 `[E404000 ResourceNotFound] record not found`（Error.Code 常为 `InvalidParameter.Param`，Message 内嵌 ResourceNotFound）。
+> 错误通道（与 [Agent 优化](../../appendix/agent-optimization.md#调用成功怎么判) 一致）：HTTP API 原始体为 `{"Response":{"Error":{"Code":"...","Message":"..."},"RequestId":"..."}}`。**tccli 失败时 stdout 常为空**，信息落在 **stderr** 字符串（`[TencentCloudSDKException] code:… message:… requestId:…`），不要只在 stdout 找 `Error` 键。exit `0` 时 stdout 业务 JSON 默认无外层 `Response` 包装。用 `--language en-US` 锁定英文 message，便于脚本匹配。如遇未列出的错误码，查 [腾讯云 TKE 错误码文档](https://cloud.tencent.com/document/product/457)。`ResourceNotFound` 删不存在的集群时消息为 `[E404000 ResourceNotFound] record not found`（`code` 常为 `InvalidParameter.Param`，message 内嵌 ResourceNotFound）。
 
 ## 相关文档
 

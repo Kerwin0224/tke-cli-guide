@@ -50,15 +50,25 @@ tccli tke DescribeClusterInstances --version 2018-05-25 \
 # expected: 节点列表, 每行 id/state/ip
 ```
 
-> ⚠️ `DescribeClusterInstances` 两版同名但入参不兼容: 旧版用 `InstanceIds`/`InstanceRole`, 新版用 `SortBy`/`NeedTags`。若需 Machine 语义/排序/标签, 改用新版 `DescribeClusterMachines --version 2022-05-01`。切换前用 `--generate-cli-skeleton` 核对入参。
+> ⚠️ 三套查询勿混用：
+> - `DescribeClusterInstances --version 2018-05-25`：`InstanceIds`/`InstanceRole` 顶层参数；出参 `InstanceSet[].InstanceState`
+> - `DescribeClusterInstances --version 2022-05-01`：`Filters`（含 `InstanceIds`/`InstanceStates`/`NodePoolIds` 等）+ 可选 `SortBy`/`NeedTags`
+> - `DescribeClusterMachines --version 2022-05-01`：原生节点 Machine 语义；`Filters` **仅** `NodePoolsName`/`NodePoolsId`/`tags`/`tag:tag-key`（**无** `InstanceIds`）；出参 `Machines[].MachineName`/`MachineState`（**不是** `InstanceState`）
 
 ```bash
-# 2022-05-01 新版: 用 Filters/SortBy/NeedTags 查询（Machine 语义，含标签）
-tccli tke DescribeClusterMachines --version 2022-05-01 \
+# 2022-05-01：按实例 ID 过滤用 DescribeClusterInstances（Filters.Name=InstanceIds）
+tccli tke DescribeClusterInstances --version 2022-05-01 \
   --ClusterId "<CLUSTER_ID>" --region ap-guangzhou \
   --Filters '[{"Name":"InstanceIds","Values":["<INSTANCE_ID>"]}]' \
   --Offset 0 --Limit 20
-# expected: exit 0，返回 Machines[]+TotalCount（每项含 InstanceId/InstanceState/ExistedLabels 等 Machine 语义字段）
+# expected: exit 0，InstanceSet[]+TotalCount
+
+# 2022-05-01：原生节点 Machine 列表（按节点池过滤；无 InstanceIds Filter）
+tccli tke DescribeClusterMachines --version 2022-05-01 \
+  --ClusterId "<CLUSTER_ID>" --region ap-guangzhou \
+  --Filters '[{"Name":"NodePoolsId","Values":["<NODE_POOL_ID>"]}]' \
+  --Offset 0 --Limit 20
+# expected: exit 0，Machines[]+TotalCount（MachineName/MachineState/LanIP/InstanceType 等）
 ```
 
 ## 启动 / 停止 / 重启 (原生节点)
@@ -104,14 +114,14 @@ tccli tke DeleteClusterMachines --version 2022-05-01 \
 # expected: exit 0
 ```
 
-`InstanceDeleteMode` 决定删除后的实例资源：
+`InstanceDeleteMode` 决定删除后的实例资源（两版均可传；旧版 `DeleteClusterInstances` 为 **Required**，新版 `DeleteClusterMachines` 为 Optional）：
 
 | 值 | 结果 |
 |:---|:-----|
 | `terminate` | 将节点移出集群并销毁实例；仅支持按量计费 CVM |
 | `retain` | 仅将节点移出集群，保留 CVM 实例 |
 
-> 旧版 (2018-05-25) 用 `DeleteClusterInstances --version 2018-05-25 --InstanceIds '["<INSTANCE_ID>"]'`（Instance 抽象）。两版抽象不同: 新版 Machine vs 旧版 Instance。
+> 旧版 (2018-05-25) 用 `DeleteClusterInstances --version 2018-05-25 --InstanceIds '["<INSTANCE_ID>"]' --InstanceDeleteMode retain`（Instance 抽象；`InstanceDeleteMode` 必填，不传 exit 252）。两版抽象不同: 新版 Machine vs 旧版 Instance。
 
 ## 节点隔离与驱逐（kubectl，非 tccli） {#节点隔离与驱逐kubectl非-tccli}
 
@@ -120,7 +130,6 @@ tccli tke DeleteClusterMachines --version 2022-05-01 \
 ### 隔离节点（停止调度新 Pod）
 
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
-<!-- tccli无普通节点cordon能力(仅DrainClusterVirtualNode/DrainExternalNode)，kubectl管理K8s原生节点调度，非tccli边界 -->
 ```bash
 kubectl cordon <NODE_NAME>
 # expected: node <NODE_NAME> cordoned（节点标 SchedulingDisabled，已运行 Pod 不动）
@@ -129,7 +138,6 @@ kubectl cordon <NODE_NAME>
 ### 驱逐节点上 Pod（维护前移走工作负载）
 
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
-<!-- tccli无普通节点drain能力(仅DrainClusterVirtualNode/DrainExternalNode)，kubectl管理K8s原生Pod驱逐，非tccli边界 -->
 ```bash
 kubectl drain <NODE_NAME> --ignore-daemonsets --delete-emptydir-data
 # expected: 逐个 evict Pod，DaemonSet Pod 保留（--ignore-daemonsets），emptyDir 数据删（--delete-emptydir-data）
@@ -138,7 +146,6 @@ kubectl drain <NODE_NAME> --ignore-daemonsets --delete-emptydir-data
 > `kubectl drain` = `cordon` + 逐个 evict Pod。维护后恢复调度：
 
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
-<!-- kubectl管理K8s原生节点调度恢复，tccli无uncordon能力，非tccli边界 -->
 ```bash
 kubectl uncordon <NODE_NAME>
 # expected: node <NODE_NAME> uncordoned（恢复可调度）
@@ -346,12 +353,12 @@ tccli tke CreateClusterInstances --version 2018-05-25 \
 > 各写操作后按类型核对（与「收尾确认」表一致；本段给出最短命令）：
 
 ```bash
-# 启停后：节点 InstanceState
+# 启停后：原生节点 MachineState（按节点池列 Machine，再对照 MachineName）
 tccli tke DescribeClusterMachines --version 2022-05-01 \
   --ClusterId "<CLUSTER_ID>" \
-  --Filters '[{"Name":"InstanceIds","Values":["<INSTANCE_ID>"]}]' \
-  --filter "Machines[].InstanceState" --output text
-# expected: Stopped（停止后）或 Running（启动后）
+  --Filters '[{"Name":"NodePoolsId","Values":["<NODE_POOL_ID>"]}]' \
+  --filter "Machines[?MachineName=='<MACHINE_NAME>'].MachineState" --output text
+# expected: Stopped（停止后）或 Running（启动后）；无 InstanceIds Filter、无 InstanceState 字段
 
 # 删除后：目标节点不在列表
 tccli tke DescribeClusterInstances --version 2018-05-25 \
@@ -364,6 +371,18 @@ tccli tke DescribeClusterInstances --version 2018-05-25 \
   --filter "InstanceSet[].InstanceState" --output text
 # expected: running
 ```
+
+## 故障恢复
+
+| 现象 | 诊断 | 根因 | 修复 |
+|:-----|:-----|:-----|:-----|
+| 启停后状态不符 | `DescribeClusterMachines` → `MachineState` | 异步未完成或 Filter/字段混用 | 等状态收敛；Filter 仅 NodePools* / tags；字段为 MachineState/MachineName |
+| 删除后节点仍在列表 | `DescribeClusterInstances` | 删错 ID 或删保护 | 核对 InstanceIds；原生节点走 `DeleteClusterMachines` |
+| 驱逐后 Pod 卡住 | `kubectl describe pod` / Events | PDB、本地卷、DaemonSet | 放宽 PDB 或按业务删 Pod；勿对普通节点误用虚拟/注册节点 Drain Action |
+| 接入 CVM 后 NotReady | `DescribeClusterInstances` + `kubectl get nodes` | 网络/安全组/运行时 | 查实例状态与安全组；必要时 `retain` 后重建接入 |
+| 扩缩容未达副本 | 见 [扩缩容节点池](nodepool-scale.md) | 配额/库存/健康检查 | 按该篇故障表处理 |
+
+更广路径见 [故障排查](../troubleshooting.md)。健康检查触发的隔离见上文 [节点隔离与驱逐](#节点隔离与驱逐kubectl非-tccli)。
 
 ## 清理
 
@@ -391,7 +410,7 @@ tccli tke DeleteClusterInstances --version 2018-05-25 \
 
 | 操作类型 | 确认命令 | 预期（端到端可用性） |
 |:---------|:---------|:--------------------------|
-| 启停/重启 | `tccli tke DescribeClusterMachines --version 2022-05-01 --ClusterId "<CLUSTER_ID>" --Filters '[{"Name":"InstanceIds","Values":["<ID>"]}]'` | InstanceState=Stopped(停止后)/Running(启动后)；启动后 `kubectl get nodes` 节点须 Ready |
+| 启停/重启 | `tccli tke DescribeClusterMachines --version 2022-05-01 --ClusterId "<CLUSTER_ID>" --Filters '[{"Name":"NodePoolsId","Values":["<NODE_POOL_ID>"]}]'` | 目标 `MachineName` 的 `MachineState`=Stopped(停止后)/Running(启动后)；启动后 `kubectl get nodes` 节点须 Ready |
 | 删除节点 | `tccli tke DescribeClusterInstances --version 2018-05-25 --ClusterId "<CLUSTER_ID>" --InstanceIds '["<ID>"]'` | 目标节点不在列表（已删）；剩余 `kubectl get nodes` 无 NotReady |
 | 驱逐 (kubectl) | `kubectl get nodes <NODE_NAME>` | 节点 SchedulingDisabled + Pod 已迁移无 Pending |
 | 扩缩容 | 见 [扩缩容节点池](nodepool-scale.md) 收尾确认 | 新版 LifeState=Running + Replicas==ReadyReplicas；旧版 LifeState=normal + DesiredNodesNum==NodeCountSummary |

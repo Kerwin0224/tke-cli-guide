@@ -11,7 +11,7 @@ fused: false
 
 ## 触发条件
 
-- `tccli tcr DescribeInstanceCustomizedDomain --RegistryId "<ID>"` 返回 `DomainInfoList: []`（无自定义域名），需用公司自有域名访问镜像仓库
+- `tccli tcr DescribeInstanceCustomizedDomain --RegistryId "<REGISTRY_ID>"` 返回 `DomainInfoList: []`（无自定义域名），需用公司自有域名访问镜像仓库
 - `docker login <DOMAIN_NAME>` 报证书错误（`registry.company.com` 未绑定或证书过期），`DescribeInstanceCustomizedDomain` 返回的域名证书已失效
 - 企业内网 DNS 统一管控要求，`*.tencentcloudcr.com` 默认域名不符合公司域名规范，需 CNAME 自有域名到 TCR
 
@@ -91,13 +91,20 @@ tccli tcr DescribeInstanceCustomizedDomain --region <REGION> --RegistryId <REGIS
 ```
 ```json
 {
-    "DomainInfoList": [],
-    "TotalCount": 0,
+    "DomainInfoList": [
+        {
+            "DomainName": "registry.example.com",
+            "CertId": "<CERTIFICATE_ID>",
+            "Status": "SUCCESS",
+            "RegistryId": "<REGISTRY_ID>"
+        }
+    ],
+    "TotalCount": 1,
     "RequestId": "..."
 }
 ```
 
-> 以上为空结果示例（未绑定时，或 `RegistryId` 不存在时 API 亦可能返回空列表而非报错）。绑定成功后 `DomainInfoList` 含域名对象（字段含 `DomainName`/`CertId`/`Status`），`TotalCount >= 1`。`Status` 枚举：`SUCCESS` / `FAILURE` / `CREATING` / `DELETING`。
+> 未绑定时 `DomainInfoList: []`、`TotalCount: 0`（`RegistryId` 不存在时 API 亦可能返回空列表而非报错）。绑定成功后 `DomainInfoList` 含域名对象（字段含 `DomainName`/`CertId`/`Status`），`TotalCount >= 1`。`Status` 枚举：`SUCCESS` / `FAILURE` / `CREATING` / `DELETING`。
 
 ### 步骤 4：配置 DNS 解析
 
@@ -146,7 +153,7 @@ tccli tcr DeleteInstanceCustomizedDomain --region <REGION> \
 > docker CLI（Registry 登录可用性确认，非 tccli）。**为什么 tccli 做不到**：自定义域名绑定由 TCCLI 完成；登录/推拉仍依赖 docker，TCR API 无 Registry 协议登录 Action。
 ```bash
 # 域名绑定记录已生效
-tccli tcr DescribeInstanceCustomizedDomain --region ap-guangzhou --RegistryId "<REGISTRY_ID>" \
+tccli tcr DescribeInstanceCustomizedDomain --region <REGION> --RegistryId "<REGISTRY_ID>" \
   --filter "DomainInfoList[0].{domain:DomainName,cert:CertId,status:Status}"
 # expected: domain 与配置一致, cert 与绑定参数一致, status 正常
 

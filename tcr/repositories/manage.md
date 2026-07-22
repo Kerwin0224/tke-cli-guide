@@ -11,8 +11,8 @@ fused: false
 
 ## 触发条件
 
-- `tccli tcr DescribeNamespaces --RegistryId "<ID>"` 返回 `TotalCount: 0`（实例下无命名空间，docker push 报 `project not found`）
-- `docker push <DOMAIN>/<NS>/<REPO>:<TAG>` 报 `repository not found`，`DescribeRepositories --NamespaceName "<NS>"` 返回 `RepositoryList: []`（命名空间下无仓库）
+- `tccli tcr DescribeNamespaces --RegistryId "<REGISTRY_ID>"` 返回 `TotalCount: 0`（实例下无命名空间，docker push 报 `project not found`）
+- `docker push <REGISTRY_DOMAIN>/<NAMESPACE_NAME>/<REPOSITORY_NAME>:<TAG>` 报 `repository not found`，`DescribeRepositories --NamespaceName "<NAMESPACE_NAME>"` 返回 `RepositoryList: []`（命名空间下无仓库）
 - `LimitExceeded.Namespace`（命名空间数达 basic=50 上限）或 `LimitExceeded.Repository`（仓库数达 basic=1000 上限），需清理或提额
 
 
@@ -26,7 +26,7 @@ TCR 的两级结构：实例 → 命名空间 → 仓库 → 镜像版本。
 | 仓库 | 镜像存放单元 | 命名空间内唯一 | 1000 / 3000 / 5000 |
 | 镜像版本 | 具体镜像 tag | 仓库内唯一 | 无限制 |
 
-> 配额以官方 [104731](https://cloud.tencent.com/document/product/1141/104731) 为准，配额数字汇总见 [配额与限制](../reference/quotas.md)。命名空间名直接用于镜像地址：`<domain>/<namespace>/<repo>:<tag>`。命名空间创建后**不可改名**，只能删除重建。
+> 配额以官方 [104731](https://cloud.tencent.com/document/product/1141/104731) 为准，配额数字汇总见 [配额与限制](../reference/quotas.md)。命名空间名直接用于镜像地址：`<REGISTRY_DOMAIN>/<NAMESPACE_NAME>/<REPOSITORY_NAME>:<TAG>`。命名空间创建后**不可改名**，只能删除重建。
 >
 > **为什么会出现 docker**：仓库 CRUD 纯 tccli；`docker login`/`push` 仅在收尾时作为能力边界提示——TCCLI 无 Registry 协议与镜像层传输 Action。
 
@@ -218,13 +218,13 @@ tccli tcr DescribeNamespaces --region <REGION> --RegistryId "<REGISTRY_ID>" \
 ```bash
 # 修改仓库属性 (BriefDescription 简述 / Description 详述)
 tccli tcr ModifyRepository --RegistryId "<REGISTRY_ID>" --region <REGION> \
-  --NamespaceName "<NAMESPACE>" --RepositoryName "<REPO>" \
-  --BriefDescription "<BRIEF>" --Description "<DESC>"
+  --NamespaceName "<NAMESPACE_NAME>" --RepositoryName "<REPOSITORY_NAME>" \
+  --BriefDescription "<BRIEF_DESCRIPTION>" --Description "<DESCRIPTION>"
 # expected: exit 0
 
 # 删除仓库标签 (Tags[] 待删 tag 列表)
 tccli tcr DeleteRepositoryTags --RegistryId "<REGISTRY_ID>" --region <REGION> \
-  --NamespaceName "<NAMESPACE>" --RepositoryName "<REPO>" --Tags '["<TAG1>","<TAG2>"]'
+  --NamespaceName "<NAMESPACE_NAME>" --RepositoryName "<REPOSITORY_NAME>" --Tags '["<TAG_1>","<TAG_2>"]'
 # expected: exit 0
 ```
 
@@ -233,29 +233,29 @@ tccli tcr DeleteRepositoryTags --RegistryId "<REGISTRY_ID>" --region <REGION> \
 ### Helm Chart 下载
 
 ```bash
-# 查询 Helm Chart 下载信息
+# 查询 Helm Chart 预签名下载 URL
 tccli tcr DescribeChartDownloadInfo --RegistryId "<REGISTRY_ID>" --region <REGION> \
-  --NamespaceName "<NAMESPACE>" --ChartName "<CHART>" --ChartVersion "<VERSION>"
-# expected: exit 0, 下载地址
+  --NamespaceName "<NAMESPACE_NAME>" --ChartName "<CHART_NAME>" --ChartVersion "<CHART_VERSION>"
+# expected: exit 0, PreSignedDownloadURL 为预签名下载地址
 
-# 下载 Helm Chart
+# 获取 Chart 下载临时凭证（非直接返回包体）
 tccli tcr DownloadHelmChart --RegistryId "<REGISTRY_ID>" --region <REGION> \
-  --NamespaceName "<NAMESPACE>" --ChartName "<CHART>" --ChartVersion "<VERSION>"
-# expected: exit 0, 返回下载包
+  --NamespaceName "<NAMESPACE_NAME>" --ChartName "<CHART_NAME>" --ChartVersion "<CHART_VERSION>"
+# expected: exit 0, 返回 TmpToken/TmpSecretId/TmpSecretKey/Bucket/Region/Path 等临时 COS 凭证与对象路径
 ```
 
-> Helm Chart 用 `ChartName`+`ChartVersion`（非 RepositoryName），存放在命名空间下。
+> Helm Chart 用 `ChartName`+`ChartVersion`（非 RepositoryName），存放在命名空间下。`DescribeChartDownloadInfo` 给预签名 URL；`DownloadHelmChart` 给临时密钥与 COS 路径，需再用这些凭证从 COS 拉取 `.tgz`，TCCLI 本身不输出 chart 包体。
 
 ## 收尾确认
 
 > docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）
 ```bash
 # 命名空间 + 仓库 核对（汇总两步产物）
-tccli tcr DescribeNamespaces --region ap-guangzhou --RegistryId "<REGISTRY_ID>" \
+tccli tcr DescribeNamespaces --region <REGION> --RegistryId "<REGISTRY_ID>" \
   --filter "NamespaceList[?Name=='<NAMESPACE_NAME>'].{name:Name,public:Public}"
 # expected: 含目标命名空间, public 与创建参数一致
 
-tccli tcr DescribeRepositories --region ap-guangzhou --RegistryId "<REGISTRY_ID>" \
+tccli tcr DescribeRepositories --region <REGION> --RegistryId "<REGISTRY_ID>" \
   --NamespaceName "<NAMESPACE_NAME>" --Limit 20 \
   --filter "RepositoryList[?Namespace=='<NAMESPACE_NAME>' && (Name=='<REPOSITORY_NAME>' || Name=='<NAMESPACE_NAME>/<REPOSITORY_NAME>')].{name:Name,ns:Namespace}"
 # expected: 含目标仓库；`Name` 响应常为 `ns/repo` 全路径，过滤时两种写法都兼容

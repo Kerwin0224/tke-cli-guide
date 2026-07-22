@@ -156,24 +156,24 @@ tccli tke CreatePrometheusClusterAgent --version 2018-05-25 --region ap-guangzho
 
 ```bash
 tccli tke DescribePrometheusTargets --version 2018-05-25 --region ap-guangzhou \
-  --InstanceId "<INSTANCE_ID>" --ClusterId "<CLUSTER_ID>"
-# expected: 采集目标列表，含 up 状态
+  --InstanceId "<INSTANCE_ID>" --ClusterType tke --ClusterId "<CLUSTER_ID>"
+# expected: 采集目标列表，目标 `State=up`/`down`/`unknown`（字符串）；缺 --ClusterType 报 required arguments
 ```
 
 ### 步骤 5：验证
 
 ```bash
-# 查看实例状态
+# 查看实例状态（InstanceStatus 为整数：1创建中/2运行中/3异常/4重启中/5销毁中/6已停机/7已删除）
 tccli tke DescribePrometheusInstancesOverview --region ap-guangzhou \
   --filter "Instances[].{id:InstanceId,name:InstanceName,state:InstanceStatus}"
-# expected: 实例状态为运行中
+# expected: 目标实例 InstanceStatus=2（运行中）
 ```
 
 | 维度 | 命令 | 预期 |
 |:-----|:-----|:-----|
-| 实例运行 | `DescribePrometheusInstancesOverview` → `InstanceStatus` | 运行中 |
-| Agent 就绪 | `DescribePrometheusClusterAgents`（见 [Agent 管理](prometheus-agent.md)） | Agent Ready |
-| 采集目标 up | `DescribePrometheusTargets` | 目标 `up` 状态为 1 |
+| 实例运行 | `DescribePrometheusInstancesOverview` → `InstanceStatus` | `2`（运行中） |
+| Agent 就绪 | `DescribePrometheusClusterAgents`（见 [Agent 管理](prometheus-agent.md)） | `Status=normal`（`abnormal`=异常） |
+| 采集目标 up | `DescribePrometheusTargets`（须带 `ClusterType`） | 目标 `State=up`（字符串；非数字 1） |
 | 指标可查 | `DescribePrometheusRecordRules`（见 [配置](prometheus-config.md)） | 指标返回 |
 
 ## 清理
@@ -185,9 +185,11 @@ tccli tke DescribePrometheusInstancesOverview --region ap-guangzhou \
 #### 1. 卸载 Agent
 
 ```bash
+# Agents[] 每项必填 ClusterType + ClusterId；Region 可选
 tccli tke DeletePrometheusClusterAgent --version 2018-05-25 --region ap-guangzhou \
-  --InstanceId "<INSTANCE_ID>" --Agents '[{"ClusterId":"<CLUSTER_ID>"}]'
-# expected: exit 0
+  --InstanceId "<INSTANCE_ID>" \
+  --Agents '[{"ClusterType":"tke","ClusterId":"<CLUSTER_ID>","Region":"ap-guangzhou"}]'
+# expected: exit 0；仅传 ClusterId 缺 ClusterType 会被拒
 ```
 
 #### 2. 删除实例

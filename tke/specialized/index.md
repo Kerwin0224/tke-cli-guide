@@ -9,8 +9,7 @@ doc_type: Overview
 
 TKE 标准集群覆盖通用场景。本目录覆盖边缘与存量 EKS / 容器实例；**新建免 CVM、仍要 K8s 编排**时，主路径是 [标准集群](../clusters/create.md) + [虚拟节点](../nodes/virtual-nodes.md)，不是本目录里的 `CreateEKSCluster`。
 
-## 触发条件
-
+## 何时阅读
 - 你要在边缘位置（IoT/门店/CDN）运行 K8s 集群，节点处于弱网环境 — 新建走 [标准集群](../clusters/create.md) + [注册节点公网版](https://cloud.tencent.com/document/product/457/57916)；已有 TKEEdge 资源的查询、迁移和受保护清理见 [边缘集群](edge-cluster.md)
 - 你已有存量 EKS 集群（`DescribeEKSClusters` 返回资源），需查询/扩缩容/删除 — 去 [EKS / 容器实例](eks-cluster.md)
 - 你要运行单次或常驻容器，不要 K8s 控制面 — 用 `CreateEKSContainerInstances`，见 [容器实例](eks-cluster.md#创建容器实例-部署-pod)

@@ -281,8 +281,20 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_I
 从控制台获取 CloudAudit 日志，或：
 
 ```bash
-tccli cloudaudit LookUpEvents --LookupAttributes '[{"AttributeKey":"ResourceName","AttributeValue":"<CLUSTER_ID>"}]'
+# StartTime/EndTime 为 Unix 秒级时间戳（必填）；窗口按排查需要自定
+START_TIME=<START_UNIX_TS>
+END_TIME=<END_UNIX_TS>
+tccli cloudaudit LookUpEvents \
+  --StartTime "$START_TIME" --EndTime "$END_TIME" \
+  --LookupAttributes '[{"AttributeKey":"ResourceName","AttributeValue":"<CLUSTER_ID>"}]' \
+  --MaxResults 50
+# expected: exit 0；Events[] 含近期与该 ResourceName 相关的操作（空列表表示窗口内无命中，非失败）
 ```
+
+| 占位符 | 含义 | 如何获取 |
+|:-------|:-----|:---------|
+| `<START_UNIX_TS>` / `<END_UNIX_TS>` | 查询起止 Unix 秒 | 本机 `date +%s` 与回溯窗口；须 `StartTime < EndTime` |
+| `<CLUSTER_ID>` | 集群 ID | 失败请求或 `DescribeClusters` 返回的 `ClusterId` |
 
 #### 4. 错误 RequestId
 

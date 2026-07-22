@@ -17,7 +17,7 @@ doc_type: Overview
 1. **先手册，再 `tccli`** — 通过文档站 MCP（`askQuestion` / `searchDocumentation` / `getPage` 等）定位页面；取得 `page_url` 后再调用命令。  
 2. **调用范式** — 查询默认使用 `--filter` 与 `--output text`；复杂入参采用 `skeleton` → `--cli-input-json`；长任务使用 `--waiter`；多 Agent 场景使用 `--profile` / `--request-client`。详细路径见 skill `tencentcloud-tccli-skill`。  
 3. **有问题则反馈** — 手册错误或缺失、工具异常、流程建议，按 skill `tccli-agent-sop` 向 **本仓库**（`Kerwin0224/tke-cli-guide`）提交 Issue。纯文档问题且无需追踪时，可使用 `sendFeedback`。  
-4. **响应以实际返回为准** — 字段与 `Error.Code` 以实际返回为准；不预写未验证字段。
+4. **响应以实际返回为准** — 成功时读 stdout 业务字段；失败时读 **stderr** 的 `code:`/`message:`（勿只在 stdout 找 `Error`）；不预写未验证字段。
 
 ## 准备工作
 
@@ -48,7 +48,7 @@ doc_type: Overview
 - 使用 Terraform / Pulumi 等 IaC 工具 → 查阅对应 Provider 文档
 - 仅需 Kubernetes 原生 `kubectl` 操作 → [Kubernetes 文档](https://kubernetes.io/docs/)
 
-## 本指南不覆盖的操作
+## 本指南不覆盖的操作 {#本指南不覆盖哪些操作}
 
 并非全部 `tccli tke` / `tccli tcr` Action 均纳入本指南。下列 Action 不在覆盖范围，请按去向处理：
 
@@ -61,7 +61,7 @@ doc_type: Overview
 
 > 本指南覆盖上表之外的 TKE + TCR TCCLI 操作。若所用 Action 既不在本指南、也不在上表，请通过 **本仓库 Issues**（推荐经 `tccli-agent-sop`）反馈。
 >
-> **调用边界**：① 部分账号的 CAM 策略可能拒绝 `tke:CreateCluster` 等写操作——以 `help --detail` 核对入参，以实际返回的 `Error.Code` 为准；响应字段以实际响应为准，不预写未验证字段。② 个别 Action 在命令行展开参数时可能解析失败，请改用 `--cli-input-json file://` 传参。
+> **调用边界**：① 部分账号的 CAM 策略可能拒绝 `tke:CreateCluster` 等写操作——以 `help --detail` 核对入参；失败时以 stderr 的 `code:`/`message:` 为准；响应字段以实际 stdout 为准，不预写未验证字段。② 个别 Action 在命令行展开参数时可能解析失败，请改用 `--cli-input-json file://` 传参。
 
 ## 快速检查
 

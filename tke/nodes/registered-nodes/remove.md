@@ -117,6 +117,32 @@ tccli tke DescribeExternalNodePools --ClusterId <CLUSTER_ID> --region <REGION> \
 | `DeleteExternalNode` 报节点不存在 | `Names[]` 用了节点池 ID 而非节点名 | 用 `DescribeExternalNode` 返回的节点名 |
 | `Force=true` 后 Pod 丢失 | 未先驱逐直接强制删除 | 先 `DrainExternalNode` 再删除 |
 
+## 收尾确认
+
+按本次目标勾选对应终态。除 TKE 记录消失外，必须做残留资源核查（外机 / Kubernetes Node / 关联计费），避免「API 已删但残留仍计费或孤儿 Node」。
+
+```bash
+# A. 仅下线单节点：TKE 节点记录已不可见
+tccli tke DescribeExternalNode --ClusterId <CLUSTER_ID> \
+  --NodePoolId <NODEPOOL_ID> --region <REGION> \
+  --filter "Nodes[?Name=='<NODE_NAME>']"
+# expected: 空（节点已移除）
+
+# B. 删除节点池：池记录已不可见
+tccli tke DescribeExternalNodePools --ClusterId <CLUSTER_ID> --region <REGION> \
+  --filter "NodePoolSet[?NodePoolId=='<NODEPOOL_ID>']"
+# expected: 空（节点池已移除）
+
+# C. 残留资源核查（与验证段正交：验证只看 TKE 记录；此处查集群侧与外机侧残留）
+# kubectl（K8s 原生命令，非 tccli；TCCLI 不提供 Node 对象查询）
+kubectl get node <NODE_NAME> --ignore-not-found
+# expected: 无输出（无残留 Node 对象）；若仍存在须手工 kubectl delete node 并核对外机是否已回收
+
+# 可选：外机仍开机时按对应产品（CVM/IDC）核对应销毁或停机，避免遗留计费
+```
+
+> TKE 侧目标记录为空 + 无 Kubernetes 孤儿 Node + 外机/关联云资源无残留计费 = 移除任务闭合。删除不可逆，收尾确认的是「已按计划消失且无残留」，不是可回滚状态。
+
 ## 下一步
 
 - 重新接入：[创建注册节点（专线版）](dedicated-line.md)

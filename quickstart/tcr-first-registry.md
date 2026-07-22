@@ -162,12 +162,18 @@ tccli tcr CreateInstance \
 }
 ```
 
+> 记下响应中的 `RegistryId`，后续步骤以 `<REGISTRY_ID>` 代指（示例输出中的 `tcr-xxxxxxxx` 仅为虚构样例）。
+
 | 参数 | 说明 |
 |:-----|:-----|
 | `RegistryName` | 实例名，全局唯一（已通过 `CheckInstanceName` 预检） |
 | `RegistryType` | `basic` / `standard` / `premium` |
 | `RegistryChargeType` | `0` = 按量计费，`1` = 包年包月。**入参名是 `RegistryChargeType`，不是 `PayMod`**（`PayMod` 是 `DescribeInstances` 出参字段） |
 | `DeletionProtection` | `false` — Quickstart 用完即删 |
+
+| 占位符 | 含义 | 约束 | 获取方式 |
+|--------|------|------|---------|
+| `<REGISTRY_ID>` | 实例 ID | 格式 `tcr-xxxxxxxx` | `CreateInstance` 响应的 `RegistryId` |
 
 ### 等待就绪
 
@@ -177,7 +183,7 @@ tccli tcr CreateInstance \
 ```bash
 tccli tcr DescribeInstanceStatus \
     --region ap-guangzhou \
-    --RegistryIds '["tcr-xxxxxxxx"]' \
+    --RegistryIds '["<REGISTRY_ID>"]' \
     --waiter '{"expr":"RegistryStatusSet[0].Status","to":"Running","timeout":180,"interval":5}'
 # expected: RegistryStatusSet[0].Status 为 Running
 ```
@@ -210,7 +216,7 @@ tccli tcr DescribeInstanceStatus \
 ```bash
 # 维度 1: 状态
 tccli tcr DescribeInstanceStatus --region ap-guangzhou \
-    --RegistryIds '["tcr-xxxxxxxx"]' \
+    --RegistryIds '["<REGISTRY_ID>"]' \
     --filter "RegistryStatusSet[0].Status" --output text
 # expected: Running
 ```
@@ -274,7 +280,7 @@ Address: 81.71.x.x
 ```bash
 # 查看当前状态（开启前应为 Closed）
 tccli tcr DescribeExternalEndpointStatus --region ap-guangzhou \
-    --RegistryId tcr-xxxxxxxx --output json
+    --RegistryId <REGISTRY_ID> --output json
 # expected: Status 为 Closed（未开启）或 Opening（开启中）
 ```
 ```json
@@ -288,7 +294,7 @@ tccli tcr DescribeExternalEndpointStatus --region ap-guangzhou \
 ```bash
 # 开启公网端点
 tccli tcr ManageExternalEndpoint --region ap-guangzhou \
-    --RegistryId tcr-xxxxxxxx --Operation Create
+    --RegistryId <REGISTRY_ID> --Operation Create
 # expected: 返回 RegistryId 与 RequestId
 ```
 ```json
@@ -301,7 +307,7 @@ tccli tcr ManageExternalEndpoint --region ap-guangzhou \
 ```bash
 # 验证端点已开启
 tccli tcr DescribeExternalEndpointStatus --region ap-guangzhou \
-    --RegistryId tcr-xxxxxxxx --output json
+    --RegistryId <REGISTRY_ID> --output json
 # expected: Status 为 Opened
 ```
 ```json
@@ -324,7 +330,7 @@ tccli tcr DescribeExternalEndpointStatus --region ap-guangzhou \
 ```bash
 tccli tcr CreateInstanceToken \
     --region ap-guangzhou \
-    --RegistryId tcr-xxxxxxxx \
+    --RegistryId <REGISTRY_ID> \
     --TokenType temp \
     --Desc "quickstart"
 # expected: 返回 Username, Token, ExpTime（temp token 的 TokenId 为空）
@@ -381,7 +387,7 @@ echo "$TCR_TOKEN" | docker login "$TCR_ENDPOINT" -u "$TCR_USERNAME" --password-s
 ```bash
 tccli tcr CreateNamespace \
     --region ap-guangzhou \
-    --RegistryId tcr-xxxxxxxx \
+    --RegistryId <REGISTRY_ID> \
     --NamespaceName "<NAMESPACE_NAME>" \
     --IsPublic false
 # expected: 返回 RequestId
@@ -399,7 +405,33 @@ tccli tcr CreateNamespace \
 > ⚠️ **`--IsPublic` 是必填参数**。缺省会报参数错误（exit 252）。
 > `false` = 私有（仅认证用户可拉取），`true` = 公开（匿名可拉取）。
 
-### 3.4 推送镜像
+### 3.4 创建镜像仓库
+
+先显式创建仓库，再 `docker push`。当前 `CreateNamespace` 无“首次 push 自动建仓”开关，不要把 push 当作仓库创建步骤（见 [命名空间与仓库](../tcr/repositories/manage.md)）。
+
+```bash
+tccli tcr CreateRepository \
+    --region ap-guangzhou \
+    --RegistryId <REGISTRY_ID> \
+    --NamespaceName "<NAMESPACE_NAME>" \
+    --RepositoryName "<REPO_NAME>"
+# expected: 返回 RequestId
+```
+
+| 占位符 | 含义 | 约束 | 获取方式 |
+|--------|------|------|---------|
+| `<NAMESPACE_NAME>` | 命名空间名 | 须已存在 | Step 3.3 |
+| `<REPO_NAME>` | 仓库名 | 长度大于 2 且小于 245；小写字母/数字/`.`/`_`/`-` | 自定义（如 `alpine`） |
+
+```bash
+tccli tcr DescribeRepositories --region ap-guangzhou \
+    --RegistryId <REGISTRY_ID> \
+    --NamespaceName "<NAMESPACE_NAME>" \
+    --RepositoryName "<REPO_NAME>"
+# expected: RepositoryList 含目标仓库
+```
+
+### 3.5 推送镜像
 
 > docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）
 ```bash
@@ -412,6 +444,7 @@ docker pull alpine:latest
 ```bash
 # 打标签（格式: <PUBLIC_DOMAIN>/<NAMESPACE_NAME>/<REPO_NAME>:<TAG>）
 docker tag alpine:latest "$TCR_ENDPOINT/<NAMESPACE_NAME>/<REPO_NAME>:<TAG>"
+# expected: exit 0（无输出）
 ```
 
 > docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）
@@ -424,15 +457,15 @@ docker push "$TCR_ENDPOINT/<NAMESPACE_NAME>/<REPO_NAME>:<TAG>"
 | 占位符 | 含义 | 获取方式 |
 |--------|------|---------|
 | `<NAMESPACE_NAME>` | 命名空间名 | Step 3.3 创建的命名空间 |
-| `<REPO_NAME>` | 仓库名 | 自定义（如 `alpine`） |
+| `<REPO_NAME>` | 仓库名 | Step 3.4 创建的仓库 |
 | `<TAG>` | 镜像标签 | 自定义（如 `v1`） |
 
-### 3.5 验证推送
+### 3.6 验证推送
 
 ```bash
 # TCR API 确认镜像已入库
 tccli tcr DescribeImages --region ap-guangzhou \
-    --RegistryId tcr-xxxxxxxx \
+    --RegistryId <REGISTRY_ID> \
     --NamespaceName "<NAMESPACE_NAME>" \
     --RepositoryName "<REPO_NAME>"
 # expected: ImageInfoList 含对应 tag, TotalCount >= 1
@@ -453,7 +486,7 @@ tccli tcr DescribeImages --region ap-guangzhou \
 | 占位符 | 含义 | 获取方式 |
 |--------|------|---------|
 | `<NAMESPACE_NAME>` | 命名空间名 | Step 3.3 创建的命名空间 |
-| `<REPO_NAME>` | 仓库名 | Step 3.4 使用的仓库名 |
+| `<REPO_NAME>` | 仓库名 | Step 3.4 创建的仓库 |
 
 > 镜像索引有约 5 秒缓存延迟。push 成功后若 `DescribeImages` 暂未返回，
 > 等待约 5 秒后重查。详见 [故障恢复: exit 0 误判](#exit-0-误判)。
@@ -485,7 +518,7 @@ false
 
 ```bash
 tccli tcr DeleteInstance --region ap-guangzhou \
-    --RegistryId tcr-xxxxxxxx --DryRun true
+    --RegistryId <REGISTRY_ID> --DryRun true
 # expected: 返回 RequestId；服务端完成试运行且不实际删除
 ```
 ```json
@@ -500,7 +533,7 @@ tccli tcr DeleteInstance --region ap-guangzhou \
 
 ```bash
 tccli tcr DeleteInstance --region ap-guangzhou \
-    --RegistryId tcr-xxxxxxxx --DeleteBucket true
+    --RegistryId <REGISTRY_ID> --DeleteBucket true
 # expected: 返回 RequestId，实例与关联 COS 桶开始删除
 ```
 ```json
@@ -542,7 +575,7 @@ tccli tcr DescribeInstances --region ap-guangzhou \
 | `docker login` 报 `TLS handshake timeout` | 公网端点未开启或 DNS 未生效 | Step 2 开启端点，等 `Status=Opened` 且 DNS 解析后再登录 |
 | `docker login` 报 `TLS handshake timeout`（公网端点已 Open、DNS 已解析） | 本机 docker daemon 所在 VM 网络栈限制（如 colima） | 此为环境限制，非命令错误。可换用 Linux 裸机 docker 或通过 TKE 节点内网推送 |
 | `docker push` 报 `denied: requested access ... denied` | Token 无权限或命名空间不存在 | `DescribeInstanceToken` 查 Token 状态；`DescribeNamespaces` 确认命名空间存在 |
-| `docker push` 报 `name unknown: repository` | 仓库/命名空间不存在 | 先 `CreateNamespace`，再 push |
+| `docker push` 报 `name unknown: repository` | 仓库不存在（须先 `CreateRepository`）或命名空间不存在 | 先 `CreateNamespace`（Step 3.3）再 `CreateRepository`（Step 3.4），确认后再 push |
 | `CheckInstanceName` 返回 `IsValidated: false` | `RegistryName` 已被占用 | 换名后重新 `CheckInstanceName` 预检 |
 | `RegionNotSupport` | 地域不支持 TCR 企业版 | 换 `Status: alluser` 的地域 |
 
@@ -561,13 +594,11 @@ tccli tcr DescribeInstances --region ap-guangzhou \
 
 ```bash
 # 残留资源核查：DeleteInstance --DeleteBucket true 已声明同删关联 COS 桶。
-# TCR 关联桶命名固定为 tcr-<RegistryId>-<AppId>（AppId 见账号信息）；
-# 桶清理由 --DeleteBucket true 负责，tccli cos 是对象操作 CLI（无 DescribeBuckets 枚举接口）。
-# 已知桶名时可用 tccli cos ls 直接确认桶已不存在：
-tccli cos ls -b tcr-<REGISTRY_ID>-<APP_ID>
-# expected: 报错 "NoSuchBucket"（桶已随实例删除）；若返回对象列表则需手动清理
-# 说明：tccli cos 的子命令为 ls/list/download 等对象操作，不提供桶枚举，
-# 残量桶确认须基于已知桶名；否则到 COS 控制台核对 "tcr-" 前缀桶。
+# TCR 关联桶命名固定为 tcr-<RegistryId>-<AppId>（AppId 见账号信息）。
+# 已知桶名时用 tccli cos list 确认桶是否仍存在（正确子命令为 list，不是 ls）：
+tccli cos list --bucket tcr-<REGISTRY_ID>-<APP_ID>
+# expected: 桶已删时报 NoSuchBucket / 不存在类错误；若列出对象则需手动清理
+# 可选：tccli cos list_buckets 按账号枚举桶（--filter_region 可选），再筛 tcr- 前缀。
 
 # 目标实例最终确认（只按本 Quickstart 记录的唯一名称核对）
 tccli tcr DescribeInstances --region ap-guangzhou \

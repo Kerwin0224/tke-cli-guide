@@ -69,54 +69,19 @@ fused: true
 
 ## 关键操作
 
-### 创建虚拟节点
+主路径：**先建虚拟节点池 → 再建虚拟节点 → 再查询/排水**。不要先调 `CreateClusterVirtualNode`（该接口要求已有 `NodePoolId`）。
 
-在已有集群中添加虚拟节点:
-
-```bash
-tccli tke CreateClusterVirtualNode \
-  --region ap-guangzhou \
-  --ClusterId "<CLUSTER_ID>" \
-  --NodePoolId "<NODE_POOL_ID>" \
-  --SubnetId "<SUBNET_ID>"
-# expected: { "NodeName": "eklet-xxx" }
-```
-
-### 查询虚拟节点
+### 1. 创建虚拟节点池
 
 ```bash
-tccli tke DescribeClusterVirtualNode \
-  --region ap-guangzhou \
-  --ClusterId "<CLUSTER_ID>"
-# expected: exit 0, 虚拟节点列表
-```
-
-### 排水虚拟节点 (驱逐 Pod)
-
-维护前将所有 Pod 迁移到其他节点:
-
-```bash
-tccli tke DrainClusterVirtualNode \
-  --region ap-guangzhou \
-  --ClusterId "<CLUSTER_ID>" \
-  --NodeName "<NODE_NAME>"
-# expected: exit 0
-# Pod 会被重新调度到其他节点 (CVM 或虚拟节点)
-```
-
-### 管理虚拟节点池
-
-```bash
-# 创建虚拟节点池
 tccli tke CreateClusterVirtualNodePool \
   --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" \
   --Name "<POOL_NAME>" \
   --SecurityGroupIds '["<SECURITY_GROUP_ID>"]' \
   --SubnetIds '["<SUBNET_ID>"]' \
-  --OS linux \
-  --VirtualNodes '[{"NodeName":"<NODE_NAME>"}]'
-# expected: { "NodePoolId": "np-xxx" }（OS 默认 linux，传 windows 建 Windows 虚拟节点池）
+  --OS linux
+# expected: { "NodePoolId": "np-xxx", "RequestId": "..." }（OS 默认 linux；传 windows 建 Windows 虚拟节点池）
 ```
 
 | 参数 | 必填 | 说明 |
@@ -125,30 +90,70 @@ tccli tke CreateClusterVirtualNodePool \
 | `Name` | 是 | 节点池名 |
 | `SecurityGroupIds` | 是 | 安全组列表 |
 | `SubnetIds` | 否 | 子网列表（与 `SubnetAllocationPolicy` 二选一） |
-| `VirtualNodes` | 否 | 虚拟节点规格数组（`VirtualNodeSpec`，含 `NodeName` 等） |
+| `VirtualNodes` | 否 | 创建池时预置虚拟节点规格数组（`VirtualNodeSpec`：必填 `DisplayName`、`SubnetId`；可选 `Tags`/`Quota`）；也可池建好后再用 `CreateClusterVirtualNode` 追加 |
 | `OS` | 否 | `linux`（默认）/`windows` |
 | `Labels`/`Taints` | 否 | 见 [共享字段](../reference/shared-fields.md#label-taint-annotation) |
 | `SubnetAllocationPolicy` | 否 | 子网分配策略（多子网均匀分配） |
+| `DeletionProtection` | 否 | 删除保护；`true` 时须先关闭才能删池 |
 | `AgentPlugin` | 否 | Agent 插件配置 |
 
-> `VirtualNodes` 指定虚拟节点的规格（NodeName 等）；`SubnetAllocationPolicy` 用于多子网场景自动分配。Windows 虚拟节点池需集群支持 Windows 节点。
+> `SubnetAllocationPolicy` 用于多子网自动分配。Windows 虚拟节点池需集群支持 Windows 节点。
 
 ```bash
-# 查询虚拟节点池 (返回 TotalCount + NodePoolSet[])
+# 查询虚拟节点池
 tccli tke DescribeClusterVirtualNodePools \
   --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>"
-# expected: { "TotalCount": 0, "NodePoolSet": [], "RequestId": "..." }
+# expected: { "TotalCount": >=1, "NodePoolSet": [{"NodePoolId":"np-xxx","LifeState":"normal", ...}], "RequestId": "..." }
 
 # 修改虚拟节点池；接口要求至少修改一个可选参数
 # DeletionProtection=true 可防止误删节点池；关闭保护后才可执行删除
 tccli tke ModifyClusterVirtualNodePool \
   --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" \
-  --NodePoolId "<POOL_ID>" \
+  --NodePoolId "<NODE_POOL_ID>" \
   --Labels '[{"Name":"workload-type","Value":"serverless"}]' \
   --DeletionProtection true
-# expected: exit 0
+# expected: { "RequestId": "..." }
+```
+
+### 2. 创建虚拟节点
+
+在已有虚拟节点池中追加节点（`NodePoolId` 取自上一步 `CreateClusterVirtualNodePool` / `DescribeClusterVirtualNodePools`）：
+
+```bash
+tccli tke CreateClusterVirtualNode \
+  --region ap-guangzhou \
+  --ClusterId "<CLUSTER_ID>" \
+  --NodePoolId "<NODE_POOL_ID>" \
+  --SubnetId "<SUBNET_ID>"
+# expected: { "NodeName": "eklet-xxx", "RequestId": "..." }
+```
+
+> `SubnetId` 与 `SubnetIds` / `VirtualNodes` 均为可选；不传时按节点池子网策略分配。`VirtualNodes` 可一次指定多个 `VirtualNodeSpec`。
+
+### 3. 查询虚拟节点
+
+```bash
+tccli tke DescribeClusterVirtualNode \
+  --region ap-guangzhou \
+  --ClusterId "<CLUSTER_ID>"
+# expected: { "TotalCount": >=1, "Nodes": [{"Name":"eklet-xxx","Phase":"running", ...}], "RequestId": "..." }
+```
+
+可选过滤：`--NodePoolId "<NODE_POOL_ID>"` 或 `--NodeNames '["eklet-xxx"]'`。`Nodes[].Name` 为虚拟节点名，`Phase` 为状态（如 `running`）。
+
+### 4. 排水虚拟节点（驱逐 Pod）
+
+维护前将节点上 Pod 迁移到其他节点：
+
+```bash
+tccli tke DrainClusterVirtualNode \
+  --region ap-guangzhou \
+  --ClusterId "<CLUSTER_ID>" \
+  --NodeName "<NODE_NAME>"
+# expected: { "RequestId": "..." }
+# Pod 会被重新调度到其他节点（CVM 或虚拟节点）
 ```
 
 ## 跨字段约束
@@ -166,7 +171,6 @@ tccli tke ModifyClusterVirtualNodePool \
 异步操作，检查 ≥4 个维度：
 
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
-<!-- kubectl验证虚拟节点已加入集群(kubectl get nodes查K8s Node对象)，非tccli边界 -->
 ```bash
 # 维度1: 虚拟节点已加入集群 (kubectl 查 K8s Node 对象; tccli 查的是节点池抽象, 这里用 kubectl 看节点实物)
 kubectl get nodes --show-labels | grep super
@@ -194,21 +198,40 @@ tccli tke DescribeClusterVirtualNodePools --region ap-guangzhou --ClusterId "<CL
 #### 1. 排水（迁移 Pod）
 
 ```bash
-tccli tke DrainClusterVirtualNode --ClusterId "<ID>" --NodeName "<NODE>"
+tccli tke DrainClusterVirtualNode \
+  --region ap-guangzhou \
+  --ClusterId "<CLUSTER_ID>" \
+  --NodeName "<NODE_NAME>"
+# expected: { "RequestId": "..." }（节点进入排水；Pod 迁移中或已迁出）
 ```
 
 #### 2. 删除虚拟节点
 
 ```bash
-tccli tke DeleteClusterVirtualNode --ClusterId "<ID>" --NodeName "<NODE>"
-# expected: exit 0
+tccli tke DeleteClusterVirtualNode \
+  --region ap-guangzhou \
+  --ClusterId "<CLUSTER_ID>" \
+  --NodeNames '["<NODE_NAME>"]'
+# expected: { "RequestId": "..." }
 ```
 
 #### 3. 删除虚拟节点池
 
+先关闭删除保护（若曾开启），再删池：
+
 ```bash
-tccli tke DeleteClusterVirtualNodePool --ClusterId "<ID>" --NodePoolId "<POOL>"
-# expected: exit 0
+tccli tke ModifyClusterVirtualNodePool \
+  --region ap-guangzhou \
+  --ClusterId "<CLUSTER_ID>" \
+  --NodePoolId "<NODE_POOL_ID>" \
+  --DeletionProtection false
+# expected: { "RequestId": "..." }
+
+tccli tke DeleteClusterVirtualNodePool \
+  --region ap-guangzhou \
+  --ClusterId "<CLUSTER_ID>" \
+  --NodePoolIds '["<NODE_POOL_ID>"]'
+# expected: { "RequestId": "..." }
 ```
 
 ## 故障恢复 {#故障恢复}
@@ -222,7 +245,6 @@ tccli tke DeleteClusterVirtualNodePool --ClusterId "<ID>" --NodePoolId "<POOL>"
 ## 收尾确认
 
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
-<!-- tccli管虚拟节点池CRUD，kubectl验证节点Ready并测试Pod调度到虚拟节点(K8s层观测)，非tccli边界 -->
 ```bash
 # 端到端核对：虚拟节点 eklet-xxx Ready 且 Pod 可调度到虚拟节点（仅查 LifeState 不够，还须确认 Pod 可调度）
 kubectl get nodes | grep eklet
@@ -230,7 +252,9 @@ kubectl get nodes | grep eklet
 
 kubectl run nginx-test --image=nginx --restart=Never --overrides='{"spec":{"nodeName":"<EKLET_NODE_NAME>"}}'
 # expected: Pod Pending→Running（Pod 成功调度到虚拟节点）
+
 kubectl delete pod nginx-test
+# expected: exit 0，pod "nginx-test" deleted
 ```
 
 > 虚拟节点池 LifeState=normal + eklet-xxx 节点 Ready + Pod 可调度到虚拟节点 = 虚拟节点闭环完成。

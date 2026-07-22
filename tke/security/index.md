@@ -20,8 +20,7 @@ doc_type: Overview
 
 > 调度策略（SchedulerPolicy）控制 Pod 放置，属于集群配置而非安全能力，见 [调度策略](../clusters/scheduling.md)。
 
-## 触发条件
-
+## 何时阅读
 - 子账号调用 TKE 云 API 被拒绝：检查 CAM 权限和 TCCLI 凭证
 - `kubectl` 返回 `Unauthorized`：检查 kubeconfig 凭据、OIDC/ServiceAccount 认证配置，再检查 Kubernetes RBAC 绑定
 - 多团队需要企业 SSO：使用 `ModifyClusterAuthenticationOptions` 配置 OIDC

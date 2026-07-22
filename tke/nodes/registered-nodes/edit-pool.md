@@ -101,6 +101,25 @@ tccli tke ModifyExternalNodePool --region <REGION> \
 | `FailedOperation.RecordNotFound` | `NodePoolId` 错误 | 用 `DescribeExternalNodePools` 核对节点池 ID |
 | 状态长时间 `updating` | 节点池正在应用配置 | 等待状态回到 `normal` 再操作 |
 
+## 收尾确认
+
+跨步骤汇总池级配置，并核对池内节点端到端仍可用（改标签/污点后业务调度前置就绪）。
+
+```bash
+# 池级配置汇总（Labels/Taints/删除保护）
+tccli tke DescribeExternalNodePools --ClusterId <CLUSTER_ID> --region <REGION> \
+  --filter "NodePoolSet[?NodePoolId=='<NODEPOOL_ID>'].{state:LifeState,labels:Labels,taints:Taints,protect:DeletionProtection,name:Name}"
+# expected: LifeState=normal；Labels/Taints/DeletionProtection/Name 与本次修改目标一致
+
+# 池内节点端到端可用性（改污点/标签后节点仍在池内且非异常态；衔接下一步调度前置）
+tccli tke DescribeExternalNode --ClusterId <CLUSTER_ID> \
+  --NodePoolId <NODEPOOL_ID> --region <REGION> \
+  --filter "Nodes[].{name:Name,status:Status,unschedulable:Unschedulable}"
+# expected: 既有节点 Status 非 Failed；若步骤 3 加了 NoSchedule 污点，新 Pod 不应再调度到这些节点（业务可用边界）
+```
+
+> 池级配置符合预期 + 池内节点未因修改进入异常态 = 编辑任务闭合。加污点后的调度效果属端到端业务可用维度，须与「仅池配置写成功」区分。可进入 [移除注册节点](remove.md) 或继续业务调度。
+
 ## 下一步
 
 - 移除节点或节点池：[移除注册节点](remove.md)

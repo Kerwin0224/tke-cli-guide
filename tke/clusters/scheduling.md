@@ -84,11 +84,11 @@ tccli tke ModifyClusterSchedulerPolicy --ClusterId "<CLUSTER_ID>" --region <REGI
 
 ```bash
 tccli tke ModifyClusterSchedulerPolicy --ClusterId "<CLUSTER_ID>" --region <REGION> \
-  --Extenders '[{"ExtenderClientConfig":{"url":"http://<EXTENDER_SVC>:8080","cert":"","key":""},"ManagedResources":["*"]}]'
+  --Extenders '[{"ExtenderClientConfig":{"Service":{"Namespace":"<NAMESPACE>","Name":"<SERVICE_NAME>","Port":8080,"Path":"/","Scheme":"http"}},"ManagedResources":[{"Name":"*","IgnoredByScheduler":false}],"Weight":1}]'
 # expected: exit 0
 ```
 
-> `Extenders[]` 每项含 `ExtenderClientConfig`（扩展器连接配置 url/cert/key）+ `ManagedResources`（该扩展器管理的资源列表）。用于接入集群外的自定义调度扩展服务。`ClientConnection`（kubeconfig 连接配置）与 `HighPerformance`（高性能调度模式）是同层独立配置。
+> `Extenders[]` 每项含 `ExtenderClientConfig.Service`（`Namespace`/`Name` 必填，可选 `Port`/`Path`/`Scheme`）+ `ManagedResources[]`（对象数组，每项 `Name`/`IgnoredByScheduler`，**不是**字符串数组）+ 可选 `FilterVerb`/`PrioritizeVerb`/`PreemptVerb`/`Weight`/`NodeCacheCapable`/`Ignorable`。`ExtenderClientConfig` **没有** `url`/`cert`/`key` 字段——用 in-cluster Service 引用，不要按 HTTP URL 习惯填。`ClientConnection`（QPS/Burst）与 `HighPerformance` 是同层独立配置。
 
 ## 验证
 
@@ -105,7 +105,7 @@ tccli tke DescribeClusterSchedulerPolicy --ClusterId "<CLUSTER_ID>" --region <RE
 | SchedulerName | `DescribeClusterSchedulerPolicy` → `SchedulerPolicyConfig[0].SchedulerName` | 目标调度器名（如 `default-scheduler`） |
 | PluginConfigs | 同上 → `PluginConfigs[].Name`/`Args` | 含配置的插件（如 `NodeResourcesFit`）+ Args 非空 |
 | PluginSet | 同上 → `PluginSet.Enabled[]` | 启用插件列表含目标插件 |
-| Extenders | 同上 → `Extenders[]` | 若配了扩展调度器，含 url/ManagedResources |
+| Extenders | 同上 → `Extenders[]` | 若配了扩展调度器，含 `ExtenderClientConfig.Service`/`ManagedResources` |
 
 ## 故障恢复
 
@@ -127,12 +127,11 @@ tccli tke ModifyClusterSchedulerPolicy --ClusterId "<CLUSTER_ID>" --region <REGI
 ## 收尾确认
 
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
-<!-- tccli 管调度策略 CRUD；kubectl get pods 观测 Pod 调度结果 -->
 ```bash
 # SchedulerName + PluginConfigs + Extenders 三项一并核对（先确认字段存在，再确认配置生效）
 tccli tke DescribeClusterSchedulerPolicy --ClusterId "<CLUSTER_ID>" --region <REGION> \
-  --filter "{name:SchedulerPolicyConfig[0].SchedulerName,plugins:SchedulerPolicyConfig[0].PluginConfigs[0].Name,extenders:Extenders[0].ExtenderClientConfig.url}"
-# expected: name=目标调度器 + plugins=目标插件 + extenders=扩展器 url（若未配 Extenders 则 null）
+  --filter "{name:SchedulerPolicyConfig[0].SchedulerName,plugins:SchedulerPolicyConfig[0].PluginConfigs[0].Name,extenders:Extenders[0].ExtenderClientConfig.Service}"
+# expected: name=目标调度器 + plugins=目标插件 + extenders=扩展器 Service 引用（若未配 Extenders 则 null）
 
 # 结果核对：Pod 是否按新策略调度（仅查配置字段不够，还须确认配置是否影响 Pod 调度）
 kubectl get pods -A -o wide --kubeconfig <KUBECONFIG> | head -10

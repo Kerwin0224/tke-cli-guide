@@ -9,15 +9,15 @@ fused: false
 
 > 官方文档: [容器镜像服务个人版](https://cloud.tencent.com/document/product/1141/57780) · [个人版迁移至企业版完全指南](https://cloud.tencent.com/document/product/1141/52292)
 
-> 个人版 API 形态与企业版不同——所有 Action 带 `Personal` 后缀。`RepoName` 格式是 `<namespace>/<repo>`（含斜杠）。
+> 个人版 API 形态与企业版不同——所有 Action 带 `Personal` 后缀。`RepoName` 格式是 `<NAMESPACE_NAME>/<REPO_NAME>`（含斜杠）。
 > 镜像层 push/pull 仍走 docker CLI（非 tccli；TCCLI 不提供 docker daemon 能力）；本页只覆盖个人版高级 API。
 
 ## 触发条件
 
-- `tccli tcr DescribeRepositoryFilterPersonal --Namespace "<NS>"` 需按可见性/收藏/所有者过滤，`DescribeNamespacePersonal` 无法精细过滤
+- `tccli tcr DescribeRepositoryFilterPersonal --Namespace "<NAMESPACE_NAME>"` 需按可见性/收藏/所有者过滤，`DescribeNamespacePersonal` 无法精细过滤
 - `DuplicateImagePersonal` 需同账号内复制镜像（跨命名空间/仓库），`DescribeImagePersonal` 显示源镜像存在但目标仓库缺该 tag
 - `DescribeImageLifecycleGlobalPersonal` 返回 `Data.TotalCount: 0`，旧镜像堆积需全局生命周期策略自动清理
-- `docker push` 后需自动触发 TKE 部署，`DescribeApplicationTriggerPersonal --RepoName "<R>"` 返回空（无触发器）
+- `docker push` 后需自动触发 TKE 部署，`DescribeApplicationTriggerPersonal --RepoName "<NAMESPACE_NAME>/<REPO_NAME>"` 返回空（无触发器）
 
 ## 准备工作
 
@@ -61,12 +61,12 @@ fused: false
 
 | 参数 | 所属 Action | 必填 | 说明 |
 |:-----|:-----------|:----:|:-----|
-| `RepoName` | 多数 | 是 | `<namespace>/<repo>`（含斜杠） |
+| `RepoName` | 多数 | 是 | `<NAMESPACE_NAME>/<REPO_NAME>`（含斜杠） |
 | `Namespace` | ValidateNamespaceExistPersonal | 是 | 待校验的个人版命名空间名 |
 | `Namespace` | CreateApplicationTriggerPersonal | 是 | 触发器关联工作负载的 **K8s** 命名空间 |
 | `Namespace` | 其他查询 | 视 Action | 作为筛选条件时按对应 Action 说明传入 |
 | `Public` | ModifyRepositoryAccessPersonal | 是 | 1 公开 / 0 私有 |
-| `SrcImage`/`DestImage` | DuplicateImagePersonal | 是 | `<ns>/<repo>:<tag>` |
+| `SrcImage`/`DestImage` | DuplicateImagePersonal | 是 | `<SRC_NAMESPACE>/<SRC_REPOSITORY>:<IMAGE_TAG>` |
 | `Type`/`Val` | ManageImageLifecycleGlobalPersonal | 是 | `global_keep_last_days`/`global_keep_last_nums` + 保留值 |
 | `TriggerName` | 触发器类 | 是 | 触发器名 |
 | `InvokeMethod` | CreateApplicationTriggerPersonal | 是 | **仅** `all` / `taglist` / `regex`（无 `void`） |
@@ -112,7 +112,7 @@ tccli tcr ModifyRepositoryAccessPersonal --RepoName "<NAMESPACE_NAME>/<REPO_NAME
 # expected: exit 0
 
 # 修改仓库描述
-tccli tcr ModifyRepositoryInfoPersonal --RepoName "<NAMESPACE_NAME>/<REPO_NAME>" --Description "<DESC>"
+tccli tcr ModifyRepositoryInfoPersonal --RepoName "<NAMESPACE_NAME>/<REPO_NAME>" --Description "<DESCRIPTION>"
 # expected: exit 0
 
 # 批量删除仓库
@@ -124,15 +124,15 @@ tccli tcr BatchDeleteRepositoryPersonal --RepoNames '["<NAMESPACE_NAME>/<REPO_NA
 
 ```bash
 # 复制镜像 (同账号内, SrcImage/DestImage 格式 ns/repo:tag)
-tccli tcr DuplicateImagePersonal --SrcImage "<SRC_NS>/<SRC_REPO>:<TAG>" --DestImage "<DEST_NS>/<DEST_REPO>:<TAG>"
+tccli tcr DuplicateImagePersonal --SrcImage "<SRC_NAMESPACE>/<SRC_REPOSITORY>:<IMAGE_TAG>" --DestImage "<DEST_NAMESPACE>/<DEST_REPOSITORY>:<IMAGE_TAG>"
 # expected: exit 0
 
 # 按标签过滤镜像
-tccli tcr DescribeImageFilterPersonal --RepoName "<NAMESPACE_NAME>/<REPO_NAME>" --Tag "<TAG>"
+tccli tcr DescribeImageFilterPersonal --RepoName "<NAMESPACE_NAME>/<REPO_NAME>" --Tag "<IMAGE_TAG>"
 # expected: exit 0, Data
 
 # 批量删除镜像
-tccli tcr BatchDeleteImagePersonal --RepoName "<NAMESPACE_NAME>/<REPO_NAME>" --Tags '["<TAG1>","<TAG2>"]'
+tccli tcr BatchDeleteImagePersonal --RepoName "<NAMESPACE_NAME>/<REPO_NAME>" --Tags '["<IMAGE_TAG_1>","<IMAGE_TAG_2>"]'
 # expected: exit 0
 ```
 
@@ -201,10 +201,10 @@ tccli tcr DeleteApplicationTriggerPersonal --TriggerName "<TRIGGER_NAME>"
 
 | 维度 | 命令 | 预期 |
 |:-----|:-----|:-----|
-| 仓库可见性已变 | `DescribeRepositoryFilterPersonal --RepoName <R>` | Public 字段为目标值 |
-| 镜像已复制 | `DescribeImageFilterPersonal --RepoName <DEST>` | 含目标 tag |
+| 仓库可见性已变 | `DescribeRepositoryFilterPersonal --RepoName <NAMESPACE_NAME>/<REPO_NAME>` | Public 字段为目标值 |
+| 镜像已复制 | `DescribeImageFilterPersonal --RepoName <DEST_NAMESPACE>/<DEST_REPO>` | 含目标 tag |
 | 全局策略已设 | `DescribeImageLifecycleGlobalPersonal` | StrategyInfo 含新策略 |
-| 触发器已建 | `DescribeApplicationTriggerPersonal --RepoName <R>` | 含目标触发器 |
+| 触发器已建 | `DescribeApplicationTriggerPersonal --RepoName <NAMESPACE_NAME>/<REPO_NAME>` | 含目标触发器 |
 | 触发器触发记录 | `DescribeApplicationTriggerLogPersonal` | 有推送后的触发日志 |
 
 ## 清理
@@ -219,7 +219,7 @@ tccli tcr DeleteImageLifecycleGlobalPersonal
 # expected: exit 0
 
 # 批量删除镜像
-tccli tcr BatchDeleteImagePersonal --RepoName "<NAMESPACE_NAME>/<REPO_NAME>" --Tags '["<TAG>"]'
+tccli tcr BatchDeleteImagePersonal --RepoName "<NAMESPACE_NAME>/<REPO_NAME>" --Tags '["<IMAGE_TAG>"]'
 # expected: exit 0
 ```
 
@@ -229,7 +229,7 @@ tccli tcr BatchDeleteImagePersonal --RepoName "<NAMESPACE_NAME>/<REPO_NAME>" --T
 
 | 现象 | 根因 | 修复 |
 |:-----|:-----|:-----|
-| `DuplicateImagePersonal` 报源镜像不存在 | `SrcImage` 格式错或镜像不存在 | 核对 `<ns>/<repo>:<tag>`，`DescribeImageFilterPersonal` 确认 |
+| `DuplicateImagePersonal` 报源镜像不存在 | `SrcImage` 格式错或镜像不存在 | 核对 `<SRC_NAMESPACE>/<SRC_REPOSITORY>:<IMAGE_TAG>`，`DescribeImageFilterPersonal` 确认 |
 | 全局策略不生效 | `Type` 拼错或 `Val` 非法 | 用 `global_keep_last_days`/`global_keep_last_nums`，Val 为正整数 |
 | 触发器创建报集群不存在 | `ClusterId` 错或无权限 | 核对 TKE 集群 ID 与访问权限 |
 | 触发器未触发部署 | `InvokeMethod`/工作负载参数错 | 查 `DescribeApplicationTriggerLogPersonal` 看触发记录与错误 |
@@ -243,11 +243,11 @@ tccli tcr BatchDeleteImagePersonal --RepoName "<NAMESPACE_NAME>/<REPO_NAME>" --T
 # 汇总核对：触发器已建 + 生命周期策略已设
 tccli tcr DescribeApplicationTriggerPersonal --RepoName "<NAMESPACE_NAME>/<REPO_NAME>" --Limit 10 \
   --filter "Data.TriggerInfo[].{name:TriggerName,action:InvokeAction,source:InvokeSource}"
-# expected: 含目标触发器（响应字段 TriggerInfo 非 Triggers；ClusterId/WorkloadName 是创建入参，响应不含，故只核对触发器名与触发动作）
+# expected: 含目标触发器（响应字段 TriggerInfo 非 Triggers；集群/工作负载在 InvokePara 中，本 filter 只核对触发器名与触发动作）
 
 tccli tcr DescribeImageLifecycleGlobalPersonal \
-  --filter "Data.StrategyInfo[].{type:Type}"
-# expected: 含设置的策略（如 type=global_keep_last_days；Val 不在响应字段，设后用 Type 确认策略已落地）
+  --filter "Data.StrategyInfo[].{type:Type,value:Value}"
+# expected: 含设置的策略（如 type=global_keep_last_days；响应字段是 Value，对应入参 Val）
 
 # 端到端：触发器在 push 后产生部署触发记录
 tccli tcr DescribeApplicationTriggerLogPersonal --RepoName "<NAMESPACE_NAME>/<REPO_NAME>" --Limit 5 \
@@ -255,7 +255,7 @@ tccli tcr DescribeApplicationTriggerLogPersonal --RepoName "<NAMESPACE_NAME>/<RE
 # expected: 有触发记录（需先 push 一次镜像才产生日志；InvokeResult 为触发执行结果）
 ```
 
-> 触发器存在 + 生命周期策略生效 + 触发日志有记录（`InvokeResult` 含 `returnCode`/`returnMsg`）= 个人版高级管理配置完成。触发器未触发时日志为空，需 push 镜像后查。
+> 触发器存在 + 生命周期策略生效 + 触发日志有记录（`InvokeResult` 含 `ReturnCode`/`ReturnMsg`）= 个人版高级管理配置完成。触发器未触发时日志为空，需 push 镜像后查。
 
 ---
 

@@ -11,7 +11,7 @@ fused: true
 
 ## 触发条件
 
-- `docker push <DOMAIN>/<NS>/<REPO>` 报 `denied: requested access to the resource is denied`，`DescribeSecurityPolicies` 返回的白名单不含当前出口 IP
+- `docker push <REGISTRY_DOMAIN>/<NAMESPACE_NAME>/<REPOSITORY_NAME>` 报 `denied: requested access to the resource is denied`，`DescribeSecurityPolicies` 返回的白名单不含当前出口 IP
 - `docker login` 报 `unauthorized`，`DescribeInstanceToken` 返回 `Tokens: []`（需创建 Token）或需长期凭证（CI/CD 场景 `temp` Token 约 1 小时过期，无法覆盖长时任务）
 - VPC 内 TKE 集群拉取 TCR 镜像延迟高/走公网，`DescribeInternalEndpoints` 返回 `TotalCount: 0`（需开 VPC 内网接入）
 
@@ -181,14 +181,14 @@ tccli tcr DescribeServiceAccounts --region <REGION> --RegistryId "<REGISTRY_ID>"
 > **副作用警告**：关闭 VPC 内网会断开该 VPC 内所有拉取访问。删除白名单会阻断对应 IP 的访问。
 
 ```bash
-# 关闭 VPC 内网（端点开关见实例访问管理）
+# 关闭 VPC 内网（端点开关见实例访问管理；Delete 亦必填 SubnetId）
 tccli tcr ManageInternalEndpoint --region <REGION> \
-  --RegistryId "<REGISTRY_ID>" --Operation Delete --VpcId "<VPC_ID>" --SubnetId "<SUBNET_ID>"  # Delete 亦必填 SubnetId；见 instances/manage-access.md
+  --RegistryId "<REGISTRY_ID>" --Operation Delete --VpcId "<VPC_ID>" --SubnetId "<SUBNET_ID>"
 # expected: exit 0
 
 # 删除白名单
 tccli tcr DeleteSecurityPolicy --region <REGION> \
-  --RegistryId "<REGISTRY_ID>" --CidrBlock "<IP>/32"
+  --RegistryId "<REGISTRY_ID>" --CidrBlock "<CIDR_IP>/32"
 # expected: exit 0
 ```
 
@@ -220,13 +220,14 @@ tccli tcr DeleteSecurityPolicy --region <REGION> \
 ### 内网 DNS 解析 {#内网-dns-解析}
 
 ```bash
-# 查询内网 DNS 解析状态 (注意: 入参是 VpcSet[] 嵌套数组, 非 RegistryId)
+# 查询内网 DNS 解析状态 (注意: 入参是 VpcSet[] 嵌套数组, 非顶层 RegistryId)
+# EniLBIp = DescribeInternalEndpoints → AccessVpcSet[].AccessIp
 tccli tcr DescribeInternalEndpointDnsStatus --region <REGION> \
-  --VpcSet '[{"InstanceId":"<REGISTRY_ID>","VpcId":"<VPC_ID>","RegionName":"<REGION>"}]'
+  --VpcSet '[{"InstanceId":"<REGISTRY_ID>","VpcId":"<VPC_ID>","EniLBIp":"<ENI_LB_IP>","RegionName":"<REGION>"}]'
 # expected: exit 0, 返回各 VPC 的 DNS 解析状态
 ```
 
-> ⚠️ `DescribeInternalEndpointDnsStatus` 必填 `--VpcSet`（嵌套数组，含 InstanceId/VpcId/RegionName），缺失报 `the following arguments are required: --VpcSet`（exit 252）。注意用 `InstanceId`（非 RegistryId）。
+> ⚠️ `DescribeInternalEndpointDnsStatus` 必填 `--VpcSet`（嵌套数组）。嵌套项必填 `InstanceId`/`VpcId`/`EniLBIp`；`RegionName`/`UsePublicDomain` 可选。缺失 `--VpcSet` 报 `the following arguments are required: --VpcSet`（exit 252）。注意用 `InstanceId`（非 `RegistryId`）。`EniLBIp` 取自 `DescribeInternalEndpoints` 的 `AccessVpcSet[].AccessIp`（两接口字段名不同，值相同）。
 
 ```bash
 # 创建内网 DNS 解析 (用内网 IP 解析到自定义/默认域名)
@@ -241,7 +242,7 @@ tccli tcr DeleteInternalEndpointDns --region <REGION> \
 # expected: exit 0
 ```
 
-> `CreateInternalEndpointDns` 的 `EniLBIp` 是内网端点 IP，`UsePublicDomain=true` 用公网域名解析，`RegionId` 是数字 ID（见 [实例同步](../replication/manage.md) 地域表）。
+> `CreateInternalEndpointDns` / `DeleteInternalEndpointDns` 的 `EniLBIp` 是内网接入 IP（= `DescribeInternalEndpoints` → `AccessIp`），`UsePublicDomain=true` 用公网域名解析，`RegionId` 是数字 ID（见 [实例同步](../replication/manage.md) 地域表）。
 
 ### 多策略白名单（批量）
 
@@ -249,13 +250,13 @@ tccli tcr DeleteInternalEndpointDns --region <REGION> \
 # 批量创建安全策略 (SecurityGroupPolicySet[] 多条)
 tccli tcr CreateMultipleSecurityPolicy --region <REGION> \
   --RegistryId "<REGISTRY_ID>" \
-  --SecurityGroupPolicySet '[{"PolicyIndex":1,"CidrBlock":"<IP1>/32","Description":"office"},{"PolicyIndex":2,"CidrBlock":"<IP2>/32","Description":"ci"}]'
+  --SecurityGroupPolicySet '[{"PolicyIndex":1,"CidrBlock":"<CIDR_IP_1>/32","Description":"office"},{"PolicyIndex":2,"CidrBlock":"<CIDR_IP_2>/32","Description":"ci"}]'
 # expected: exit 0
 
 # 批量删除安全策略
 tccli tcr DeleteMultipleSecurityPolicy --region <REGION> \
   --RegistryId "<REGISTRY_ID>" \
-  --SecurityGroupPolicySet '[{"PolicyIndex":1,"CidrBlock":"<IP1>/32"}]'
+  --SecurityGroupPolicySet '[{"PolicyIndex":1,"CidrBlock":"<CIDR_IP_1>/32"}]'
 # expected: exit 0
 
 # 修改单条安全策略 (按 PolicyIndex)

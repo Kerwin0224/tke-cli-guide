@@ -11,7 +11,7 @@ fused: false
 
 ## 触发条件
 
-- `tccli tcr DescribeInstances --Registryids '["<ID>"]'` 返回 `RegistryType: premium` 且需镜像完整性校验（合规/安全要求镜像不可篡改）
+- `tccli tcr DescribeInstances --Registryids '["<REGISTRY_ID>"]'` 返回 `RegistryType: premium` 且需镜像完整性校验（合规/安全要求镜像不可篡改）
 - `tccli kms ListKeys` 有可用签名密钥但镜像未签名，拉取侧 TKE 验签准入控制器拒绝未签名镜像
 - `tccli tcr CreateSignature` 无法发起签名：先确认签名策略已创建，且实例为 premium
 
@@ -132,7 +132,7 @@ tccli tcr CreateSignaturePolicy --region <REGION> \
 # 创建签名（对指定镜像版本签名，须先有签名策略）
 tccli tcr CreateSignature --region <REGION> \
   --RegistryId "<REGISTRY_ID>" --NamespaceName "<NAMESPACE_NAME>" \
-  --RepositoryName "<REPOSITORY_NAME>" --ImageVersion "<TAG>"
+  --RepositoryName "<REPOSITORY_NAME>" --ImageVersion "<IMAGE_VERSION>"
 # expected: exit 0
 ```
 
@@ -146,7 +146,7 @@ tccli tcr CreateSignature --region <REGION> \
 # 对存量镜像发起手动签名；随后在控制台“镜像仓库 > 版本管理”查看签名状态
 tccli tcr CreateSignature --region <REGION> \
   --RegistryId "<REGISTRY_ID>" --NamespaceName "<NAMESPACE_NAME>" \
-  --RepositoryName "<REPOSITORY_NAME>" --ImageVersion "<TAG>"
+  --RepositoryName "<REPOSITORY_NAME>" --ImageVersion "<IMAGE_VERSION>"
 # expected: exit 0；签名状态仍以控制台“镜像仓库 > 版本管理”为准
 ```
 

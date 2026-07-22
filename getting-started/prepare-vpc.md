@@ -23,7 +23,7 @@ TKE 集群节点从子网分配内网 IP，Pod/Service 用 VPC CIDR 通信。创
 |:---|:-----|:-----|
 | VPC CIDR | `10.0.0.0/16`（65536 IP）/ `192.168.0.0/16` | `10.0.0.0/16`（与 IDC 冲突少） |
 | 子网 CIDR | VPC CIDR 的子段，如 `10.0.1.0/24`（254 IP） | `10.0.1.0/24` |
-| 可用区 | 如 `ap-guangzhou-6` | 以 `tccli cvm DescribeZones` 返回的 `ZoneState=AVAILABLE` 为准（广州当前常见为 5/6/7，勿写死已下线可用区） |
+| 可用区 | 如 `ap-guangzhou-6` | 以 `tccli cvm DescribeZones` 返回的 `ZoneState=AVAILABLE` 为准（勿写死可用区；广州等地域可用区集合会随账号/库存变化） |
 
 > CIDR 不可与已有 VPC 重叠。集群创建后 VPC CIDR 无法更改，子网可后加。
 
@@ -36,7 +36,7 @@ tccli --version
 # expected: 输出当前已安装的 TCCLI 版本号
 
 tccli tke DescribeRegions --filter "TotalCount" --output text
-# expected: 数字（如 19；随账号/产品开通变化）→ 凭证有效 + TKE 域可达
+# expected: 非零数字（随账号/产品开通变化；示例量级约 20+）→ 凭证有效 + TKE 域可达
 ```
 
 凭证配置见 [配置凭证](credentials.md)
@@ -262,7 +262,7 @@ tccli vpc DescribeSubnets --region <REGION> \
 
 # 下一步前置：VPC + 子网可进入创建集群（CreateCluster 必传 VpcId/SubnetId 均就绪）
 tccli tke DescribeRegions --filter "TotalCount" --output text
-# expected: 数字（如 19；随账号/产品开通变化）→ TKE 域可达，VPC+子网就绪
+# expected: 非零数字（随账号/产品开通变化；示例量级约 20+）→ TKE 域可达，VPC+子网就绪
 ```
 
 VPC 存在 + 子网可用 IP ≥ 10 + 可用区支持 TKE = 网络底座三要素齐备，满足 `CreateCluster` 的 `VpcId`/`SubnetId` 前置要求，可进入 [创建集群](../quickstart/tke-first-cluster.md)。

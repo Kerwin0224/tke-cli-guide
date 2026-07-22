@@ -9,7 +9,7 @@ subtype: 7B
 ## 从这里开始
 
 ```bash
-tccli tcr DescribeInstances --region ap-guangzhou
+tccli tcr DescribeInstances --region <REGION>
 # expected: { "TotalCount": "≥0", "Registries": [...] }
 ```
 
@@ -19,14 +19,14 @@ tccli tcr DescribeInstances --region ap-guangzhou
 
 | 命令 | 检查什么 | 何时使用 |
 |---------|---------------|------------|
-| `tccli tcr DescribeInstances --Registryids '["<ID>"]'` | 实例状态 + 域名 + 规格 | 怀疑实例异常时首先执行 |
-| `tccli tcr DescribeExternalEndpointStatus --RegistryId "<ID>"` | 公网访问开关状态 | docker login 超时 |
-| `tccli tcr DescribeInternalEndpoints --RegistryId "<ID>"` | 内网 VPC 链接状态 | VPC 内 docker pull 失败 |
-| `tccli tcr DescribeInstanceToken --RegistryId "<ID>"` | Token 列表 + 启用状态 | docker login 认证失败 |
-| `tccli tcr DescribeSecurityPolicies --RegistryId "<ID>"` | 公网白名单列表 | 403 Forbidden |
-| `tccli tcr DescribeNamespaces --RegistryId "<ID>"` | 命名空间列表 | 确认仓库是否存在 |
-| `tccli tcr DescribeRepositories --RegistryId "<ID>"` | 仓库列表 + 详情 | push/pull 找不到仓库 |
-| `tccli tcr DescribeImages --RegistryId "<ID>" --NamespaceName "<NS>" --RepositoryName "<REPO>"` | 镜像 Tag 列表 | 确认镜像是否推送成功 |
+| `tccli tcr DescribeInstances --Registryids '["<REGISTRY_ID>"]'` | 实例状态 + 域名 + 规格 | 怀疑实例异常时首先执行 |
+| `tccli tcr DescribeExternalEndpointStatus --RegistryId "<REGISTRY_ID>"` | 公网访问开关状态 | docker login 超时 |
+| `tccli tcr DescribeInternalEndpoints --RegistryId "<REGISTRY_ID>"` | 内网 VPC 链接状态 | VPC 内 docker pull 失败 |
+| `tccli tcr DescribeInstanceToken --RegistryId "<REGISTRY_ID>"` | Token 列表 + 启用状态 | docker login 认证失败 |
+| `tccli tcr DescribeSecurityPolicies --RegistryId "<REGISTRY_ID>"` | 公网白名单列表 | 403 Forbidden |
+| `tccli tcr DescribeNamespaces --RegistryId "<REGISTRY_ID>"` | 命名空间列表 | 确认仓库是否存在 |
+| `tccli tcr DescribeRepositories --RegistryId "<REGISTRY_ID>"` | 仓库列表 + 详情 | push/pull 找不到仓库 |
+| `tccli tcr DescribeImages --RegistryId "<REGISTRY_ID>" --NamespaceName "<NAMESPACE>" --RepositoryName "<REPOSITORY>"` | 镜像 Tag 列表 | 确认镜像是否推送成功 |
 
 ## 常见问题
 
@@ -37,7 +37,7 @@ tccli tcr DescribeInstances --region ap-guangzhou
 **诊断**：
 
 ```bash
-tccli tcr DescribeInstanceToken --region ap-guangzhou --RegistryId "<REGISTRY_ID>"
+tccli tcr DescribeInstanceToken --region <REGION> --RegistryId "<REGISTRY_ID>"
 # expected: 列出所有 Token。检查目标 Token 的 Enabled 状态和过期时间
 ```
 
@@ -47,18 +47,18 @@ tccli tcr DescribeInstanceToken --region ap-guangzhou --RegistryId "<REGISTRY_ID
 
 ```bash
 # 方案 1: 重新启用 Token
-tccli tcr ModifyInstanceToken --region ap-guangzhou \
+tccli tcr ModifyInstanceToken --region <REGION> \
   --RegistryId "<REGISTRY_ID>" \
   --TokenId "<TOKEN_ID>" \
   --Enable true
 # expected: exit 0
 
 # 方案 2: 创建新临时 Token（temp 默认 1 小时过期；长期用 longterm）
-tccli tcr CreateInstanceToken --region ap-guangzhou \
+tccli tcr CreateInstanceToken --region <REGION> \
   --RegistryId "<REGISTRY_ID>" \
   --TokenType temp \
   --Desc "Replacement Token"
-# expected: {"Username":"<USER>","Token":"<TOKEN>","ExpTime":<TS>}
+# expected: {"Username":"<USERNAME>","Token":"<TOKEN>","ExpTime":<EXP_TIME>}
 # ⚠️ 临时 Token 1 小时过期；长期凭证用控制台或服务账号
 ```
 
@@ -84,14 +84,14 @@ Docker 可能把登录凭证写入 `~/.docker/config.json`。生产环境配置 
 #### 1. VPC 内客户端先检查内网接入链路
 
 ```bash
-tccli tcr DescribeInternalEndpoints --region ap-guangzhou --RegistryId "<REGISTRY_ID>"
+tccli tcr DescribeInternalEndpoints --region <REGION> --RegistryId "<REGISTRY_ID>"
 # expected: InternalEndpoint 列表中目标 VPC 链路处于可用状态；它是内网接入证据，不是 --docker-server 域名
 ```
 
 #### 2. 仅当客户端确需从公网访问时检查公网端点
 
 ```bash
-tccli tcr DescribeExternalEndpointStatus --region ap-guangzhou --RegistryId "<REGISTRY_ID>"
+tccli tcr DescribeExternalEndpointStatus --region <REGION> --RegistryId "<REGISTRY_ID>"
 # expected: Status="Opened"
 ```
 
@@ -109,13 +109,13 @@ curl -v https://<REGISTRY_DOMAIN>/v2/
 
 ```bash
 # 公网路径：开启端点
-tccli tcr ManageExternalEndpoint --region ap-guangzhou \
+tccli tcr ManageExternalEndpoint --region <REGION> \
   --RegistryId "<REGISTRY_ID>" \
   --Operation Create
 # expected: exit 0
 
 # 端点 Opened 后，仅放行当前固定出口 IP
-tccli tcr CreateSecurityPolicy --region ap-guangzhou \
+tccli tcr CreateSecurityPolicy --region <REGION> \
   --RegistryId "<REGISTRY_ID>" \
   --CidrBlock "<YOUR_EGRESS_IP>/32" \
   --Description "Temporary troubleshooting access"
@@ -128,11 +128,11 @@ tccli tcr CreateSecurityPolicy --region ap-guangzhou \
 
 ```bash
 # 内网路径：目标 VPC 链路仍处于可用状态
-tccli tcr DescribeInternalEndpoints --region ap-guangzhou --RegistryId "<REGISTRY_ID>"
+tccli tcr DescribeInternalEndpoints --region <REGION> --RegistryId "<REGISTRY_ID>"
 
 # 公网路径：端点已开启，且白名单仅含所需出口 CIDR
-tccli tcr DescribeExternalEndpointStatus --region ap-guangzhou --RegistryId "<REGISTRY_ID>"
-tccli tcr DescribeSecurityPolicies --region ap-guangzhou --RegistryId "<REGISTRY_ID>"
+tccli tcr DescribeExternalEndpointStatus --region <REGION> --RegistryId "<REGISTRY_ID>"
+tccli tcr DescribeSecurityPolicies --region <REGION> --RegistryId "<REGISTRY_ID>"
 # expected: 公网 Status="Opened"；SecurityPolicySet 含 "<YOUR_EGRESS_IP>/32"
 
 curl -s -o /dev/null -w "%{http_code}" https://<REGISTRY_DOMAIN>/v2/
@@ -149,14 +149,14 @@ curl -s -o /dev/null -w "%{http_code}" https://<REGISTRY_DOMAIN>/v2/
 
 ```bash
 # Closed 时 DescribeSecurityPolicies 报 ResourceNotFound: Failed to get security group id
-tccli tcr DescribeExternalEndpointStatus --region ap-guangzhou --RegistryId "<REGISTRY_ID>"
+tccli tcr DescribeExternalEndpointStatus --region <REGION> --RegistryId "<REGISTRY_ID>"
 # expected: Status=Opened；若 Closed → 先 ManageExternalEndpoint --Operation Create
 ```
 
 #### 1. 检查白名单
 
 ```bash
-tccli tcr DescribeSecurityPolicies --region ap-guangzhou --RegistryId "<REGISTRY_ID>"
+tccli tcr DescribeSecurityPolicies --region <REGION> --RegistryId "<REGISTRY_ID>"
 # expected: SecurityPolicySet 列表；Closed 端点 → ResourceNotFound（非「无白名单」）
 ```
 
@@ -173,7 +173,7 @@ curl -s ifconfig.me
 
 ```bash
 # 添加当前 IP 到白名单
-tccli tcr CreateSecurityPolicy --region ap-guangzhou \
+tccli tcr CreateSecurityPolicy --region <REGION> \
   --RegistryId "<REGISTRY_ID>" \
   --CidrBlock "<YOUR_IP>/32" \
   --Description "Added via troubleshooting"
@@ -184,7 +184,7 @@ tccli tcr CreateSecurityPolicy --region ap-guangzhou \
 
 > docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）
 ```bash
-docker pull <REGISTRY_DOMAIN>/<NAMESPACE>/<REPO>:<TAG>
+docker pull <REGISTRY_DOMAIN>/<NAMESPACE_NAME>/<REPOSITORY_NAME>:<TAG>
 # expected: 镜像拉取成功，不再 403
 ```
 
@@ -195,7 +195,7 @@ docker pull <REGISTRY_DOMAIN>/<NAMESPACE>/<REPO>:<TAG>
 **诊断**：
 
 ```bash
-tccli tcr DescribeInstances --region ap-guangzhou --Registryids '["<REGISTRY_ID>"]'
+tccli tcr DescribeInstances --region <REGION> --Registryids '["<REGISTRY_ID>"]'
 # expected: 查看 Status 和 DescribeInstanceStatus 中的 Conditions 明细
 ```
 
@@ -210,7 +210,7 @@ tccli tcr DescribeInstances --region ap-guangzhou --Registryids '["<REGISTRY_ID>
 **验证**：
 
 ```bash
-tccli tcr DescribeInstances --region ap-guangzhou --Registryids '["<REGISTRY_ID>"]'
+tccli tcr DescribeInstances --region <REGION> --Registryids '["<REGISTRY_ID>"]'
 # expected: Status: "Running"
 ```
 
@@ -222,8 +222,8 @@ tccli tcr DescribeInstances --region ap-guangzhou --Registryids '["<REGISTRY_ID>
 
 ```bash
 # 列出所有命名空间和仓库
-tccli tcr DescribeNamespaces --region ap-guangzhou --RegistryId "<REGISTRY_ID>"
-tccli tcr DescribeRepositories --region ap-guangzhou --RegistryId "<REGISTRY_ID>"
+tccli tcr DescribeNamespaces --region <REGION> --RegistryId "<REGISTRY_ID>"
+tccli tcr DescribeRepositories --region <REGION> --RegistryId "<REGISTRY_ID>"
 # expected: 找到你推送的目标 Repository
 ```
 
@@ -232,19 +232,19 @@ tccli tcr DescribeRepositories --region ap-guangzhou --RegistryId "<REGISTRY_ID>
 > docker CLI（镜像传输，非 tccli；TCCLI 不提供 docker daemon 操作能力）
 ```bash
 # 用正确的路径重新推送
-docker tag <IMAGE> <REGISTRY_DOMAIN>/<CORRECT_NAMESPACE>/<CORRECT_REPO>:<TAG>
-docker push <REGISTRY_DOMAIN>/<CORRECT_NAMESPACE>/<CORRECT_REPO>:<TAG>
+docker tag <IMAGE_NAME> <REGISTRY_DOMAIN>/<CORRECT_NAMESPACE>/<CORRECT_REPOSITORY>:<TAG>
+docker push <REGISTRY_DOMAIN>/<CORRECT_NAMESPACE>/<CORRECT_REPOSITORY>:<TAG>
 # expected: push 成功
 ```
 
 **验证**：
 
 ```bash
-tccli tcr DescribeImages --region ap-guangzhou \
+tccli tcr DescribeImages --region <REGION> \
   --RegistryId "<REGISTRY_ID>" \
   --NamespaceName "<NAMESPACE>" \
-  --RepositoryName "<REPO>"
-# expected: ImageInfoList 包含你的 Tag
+  --RepositoryName "<REPOSITORY>"
+# expected: ImageInfoList 含目标 ImageVersion（字段名 ImageVersion，非 Tag）
 ```
 
 ## 升级
@@ -254,24 +254,36 @@ tccli tcr DescribeImages --region ap-guangzhou \
 #### 1. 实例信息
 
 ```bash
-tccli tcr DescribeInstances --region ap-guangzhou --Registryids '["<REGISTRY_ID>"]' > tcr-info.json
+tccli tcr DescribeInstances --region <REGION> --Registryids '["<REGISTRY_ID>"]' > tcr-info.json
 # expected: 文件写入成功，JSON 含 Registries[]
 ```
 
 #### 2. 访问配置
 
 ```bash
-tccli tcr DescribeExternalEndpointStatus --region ap-guangzhou --RegistryId "<ID>" > tcr-endpoint.json
+tccli tcr DescribeExternalEndpointStatus --region <REGION> --RegistryId "<REGISTRY_ID>" > tcr-endpoint.json
 # expected: 文件写入成功，含 Status（Opened/Closed）
-tccli tcr DescribeSecurityPolicies --region ap-guangzhou --RegistryId "<ID>" > tcr-policies.json
+tccli tcr DescribeSecurityPolicies --region <REGION> --RegistryId "<REGISTRY_ID>" > tcr-policies.json
 # expected: 文件写入成功；公网 Closed 时可能 ResourceNotFound
 ```
 
 #### 3. 操作日志 (CloudAudit)
 
 ```bash
-# 从控制台获取或: tccli cloudaudit LookUpEvents --LookupAttributes '[{"AttributeKey":"ResourceName","AttributeValue":"<REGISTRY_ID>"}]'
+# StartTime/EndTime 为 Unix 秒级时间戳（必填）；窗口按排查需要自定
+START_TIME=<START_UNIX_TS>
+END_TIME=<END_UNIX_TS>
+tccli cloudaudit LookUpEvents \
+  --StartTime "$START_TIME" --EndTime "$END_TIME" \
+  --LookupAttributes '[{"AttributeKey":"ResourceName","AttributeValue":"<REGISTRY_ID>"}]' \
+  --MaxResults 50
+# expected: exit 0；Events[] 含近期与该 ResourceName 相关的操作（空列表表示窗口内无命中，非失败）
 ```
+
+| 占位符 | 含义 | 如何获取 |
+|:-------|:-----|:---------|
+| `<START_UNIX_TS>` / `<END_UNIX_TS>` | 查询起止 Unix 秒 | 本机 `date +%s` 与回溯窗口；须 `StartTime < EndTime` |
+| `<REGISTRY_ID>` | TCR 实例 ID | 失败请求或 `DescribeInstances` 返回的 `RegistryId` |
 
 #### 4. 失败操作的 RequestId
 

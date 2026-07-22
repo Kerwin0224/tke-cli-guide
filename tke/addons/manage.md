@@ -101,7 +101,7 @@ Role not exist → 先补 [TKE_QCSRole](../../getting-started/credentials.md#补
 
 | 字段 | 类型 | 必填 | 作用 |
 |:------|------|:--------:|:-----|
-| UpdateStrategy | string | 否 | 更新策略（如 `rolling`） |
+| UpdateStrategy | string | 否 | `RawValues` 更新策略：`replace`（全量替换）/ `merge`（默认，增量合并） |
 
 > `RawValues` 是 base64 编码的 JSON 配置。用 `echo '<json>' | base64` 生成。查询时返回的 `RawValues` 可 `echo '<base64>' | base64 -d` 解码看配置。
 
@@ -111,15 +111,16 @@ Role not exist → 先补 [TKE_QCSRole](../../getting-started/credentials.md#补
 
 | 字段 | 类型 | 必填 | 约束 | 填错时的错误 |
 |:------|------|:--------:|------------|---------------|
-| ChartName | string | 否 | 插件名关键词 | — |
+| Kind | string | 否 | app 类型：`log`/`scheduler`/`network`/`storage`/`monitor`/`dns`/`image`/`other`/`invisible`（非 Chart 名） | — |
 | Arch | string | 否 | 架构枚举：`amd64` / `arm64` / `arm32`。须与节点架构匹配，否则装上后 Pod 因镜像架构不符无法启动 | `InvalidParameterValue` |
+| ClusterType | string | 否 | `tke` / `eks` | — |
 
 ```bash
 tccli tke GetTkeAppChartList --region ap-guangzhou --Arch amd64
-# expected: ChartList[] 含 ChartName/ChartVersion/Arch，按架构过滤
+# expected: AppCharts[] 含 Name/Label/LatestVersion，按架构过滤
 ```
 
-> `Arch` 三值代表三种 CPU 架构。ARM 集群（如鲲鹏）必须传 `arm64`/`arm32`，x86 集群传 `amd64`。装错架构的插件 Pod 会报 `ImagePullBackOff` 或 `CrashLoopBackOff`。
+> 入参无 `ChartName`；按类型筛用 `--Kind`。输出顶层是 **`AppCharts`**（非 `ChartList`），项字段为 `Name`/`Label`/`LatestVersion`（非 `ChartName`/`ChartVersion`）。`Arch` 三值代表三种 CPU 架构。ARM 集群（如鲲鹏）必须传 `arm64`/`arm32`，x86 集群传 `amd64`。装错架构的插件 Pod 会报 `ImagePullBackOff` 或 `CrashLoopBackOff`。
 
 ## 操作步骤
 
@@ -179,9 +180,10 @@ tccli tke InstallAddon --region ap-guangzhou \
 ### 步骤 3：更新 — 升级版本 {#步骤-3更新-升级版本}
 
 ```bash
+# 仅升级版本时可省略 RawValues；UpdateStrategy 仅 replace/merge（默认 merge），不是 rolling
 tccli tke UpdateAddon --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" --AddonName "<ADDON_NAME>" --AddonVersion "<NEW_VERSION>" \
-  --UpdateStrategy rolling
+  --UpdateStrategy merge
 # expected: exit 0
 ```
 
@@ -294,9 +296,9 @@ tccli tke CreateImageCache --region <REGION> \
 # 选项 A：绑定已有 EIP
 --ExistedEipId "<EIP_ID>"
 
-# 选项 B：自动创建 EIP，并指定带宽与计费属性
+# 选项 B：自动创建 EIP（EipAttribute 仅 DeletePolicy / InternetServiceProvider / InternetMaxBandwidthOut）
 --AutoCreateEip true \
---AutoCreateEipAttribute '{"InternetMaxBandwidthOut":1,"InternetChargeType":"TRAFFIC_POSTPAID_BY_HOUR"}'
+--AutoCreateEipAttribute '{"DeletePolicy":"","InternetServiceProvider":"BGP","InternetMaxBandwidthOut":1}'
 ```
 
 ```bash
@@ -314,7 +316,7 @@ tccli tke DeleteImageCaches --region <REGION> --ImageCacheIds '["<CACHE_ID>"]'
 # expected: exit 0
 ```
 
-> `CreateImageCache` 创建 CVM 实例制作快照，需 VpcId/SubnetId/SecurityGroupIds（有 CVM 计费成本）。`GetMostSuitableImageCache` 按镜像列表匹配已有缓存，`Snapshotter` 如 `overlayfs`。`UpdateImageCache` 可配 `ImageRegistryCredentials[]`（私有镜像仓库凭证）。
+> `CreateImageCache` 创建过程会起临时 CVM 做快照，**必填** `Images`/`VpcId`/`SubnetId`；`SecurityGroupIds`/`ImageCacheName`/`ImageCacheSize` 等可选（有 CVM 计费成本）。`GetMostSuitableImageCache` 按镜像列表匹配已有缓存，`Snapshotter` 如 `overlayfs`。`UpdateImageCache` 可配 `ImageRegistryCredentials[]`（私有镜像仓库凭证）。
 
 ## 收尾确认
 

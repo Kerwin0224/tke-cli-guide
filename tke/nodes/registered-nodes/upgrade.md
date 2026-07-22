@@ -35,7 +35,6 @@ TCCLI 不提供注册节点操作系统或节点组件的升级 Action。注册�
 
 ### 步骤 1：记录升级前版本
 
-<!-- kubectl验证K8s原生Node版本，tccli不管理OS与组件升级，非tccli边界 -->
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供机器操作系统升级能力）
 ```bash
 kubectl get node <NODE_NAME> \
@@ -45,10 +44,11 @@ kubectl get node <NODE_NAME> \
 
 ### 步骤 2：隔离并安全驱逐
 
-<!-- kubectl管理K8s原生Node调度与驱逐，非tccli边界 -->
 > kubectl（K8s 原生命令，非 tccli；TCCLI 不提供 cordon/drain 能力）
 ```bash
 kubectl cordon <NODE_NAME>
+# expected: node/<NODE_NAME> cordoned
+
 kubectl drain <NODE_NAME> --ignore-daemonsets --delete-emptydir-data
 # expected: 节点不可调度，允许驱逐的工作负载已迁移；PDB 阻断时先处理阻断原因，不要强行跳过
 ```
@@ -61,7 +61,6 @@ kubectl drain <NODE_NAME> --ignore-daemonsets --delete-emptydir-data
 
 ### 步骤 4：验证后恢复调度
 
-<!-- kubectl验证K8s原生Node并恢复调度，非tccli边界 -->
 > kubectl（K8s 原生命令，非 tccli；TCCLI 不管理机器版本或 Node 调度）
 ```bash
 kubectl get node <NODE_NAME> \
@@ -88,13 +87,16 @@ kubectl uncordon <NODE_NAME>
 
 ## 收尾确认
 
-<!-- kubectl验证升级后节点版本、就绪与可调度状态，非tccli边界 -->
 > kubectl（K8s 原生命令，非 tccli；TCCLI 不提供机器升级终态）
 ```bash
 kubectl get node <NODE_NAME> \
   -o custom-columns='NAME:.metadata.name,OS:.status.nodeInfo.osImage,KUBELET:.status.nodeInfo.kubeletVersion,RUNTIME:.status.nodeInfo.containerRuntimeVersion,READY:.status.conditions[?(@.type=="Ready")].status,UNSCHEDULABLE:.spec.unschedulable'
 # expected: 版本符合批准目标，READY=True，UNSCHEDULABLE=<none>
 ```
+
+## 清理
+
+本篇不创建 TKE 侧新资源；机器侧升级残留（临时包、备份镜像）按组织运维规范处理。若升级失败且决定下线节点，见 [移除注册节点](remove.md)。
 
 ## 下一步
 

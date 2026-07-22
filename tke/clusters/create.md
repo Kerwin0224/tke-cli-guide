@@ -17,12 +17,10 @@ fused: true
 
 创建 TKE 集群即在腾讯云上运行 K8s。TKE 提供两种集群类型:
 
-
 | 选项                       | 最佳场景            | 关键限制            | 升级路径         | 新建 |
 | ------------------------ | --------------- | --------------- | ------------ | ---- |
 | MANAGED_CLUSTER (托管)     | 生产环境，免运维 Master | Master 不可 SSH；不可改 Master/Etcd **节点规模**（控制面参数/组件仍可由 tccli 改，见 [配置集群](configure.md)） | 控制台/API 发起升级 | ✅ |
 | INDEPENDENT_CLUSTER (独立) | 存量：完全控制 Master  | 需自行维护 Master HA | 手动升级 Master  | ❌ **已停止新建** |
-
 
 **默认推荐**: `MANAGED_CLUSTER`。Master/Etcd 由腾讯云运维，你管理工作节点。`INDEPENDENT_CLUSTER` 已停止新建（空参创建报 `FailedOperation.Param`：`not has master NodeRole`）；勿用独立类型做新建路径。
 
@@ -37,11 +35,7 @@ fused: true
 - 账号下没有集群，或现有集群不满足需求，需新建一个 TKE 集群（`DescribeClusters` 返回的集群不满足需求）— 用本文创建
 - 需要一个独立/托管集群承载新业务，且已备好 VPC+子网（见 [准备 VPC 与子网](../../getting-started/prepare-vpc.md)）— 本文从 `CreateCluster` 开始
 
-
-
 ## 准备工作
-
-
 
 ### 环境检查
 
@@ -52,8 +46,6 @@ tccli --version
 tccli tke DescribeRegions
 # expected: { "TotalCount": ..., "RegionInstanceSet": [...] }  → 凭证有效 + TKE 域可达（顶层键是 RegionInstanceSet，非 RegionSet；tccli 默认剥离 Response 包装层；鉴权探针无需先假定 --region）
 ```
-
-
 
 ### 资源检查
 
@@ -133,23 +125,18 @@ tccli cam DescribeRoleList --Page 1 --Rp 100 \
 
 > 注意：API 层 `required` 与业务层"必需"不同——`ClusterBasicSettings` 在 API 层非必填，但不传 `ClusterName`/`VpcId` 集群无法正常使用；下表"必填"列按 API 层 `required` 标注，"业务必需"在约束列说明。
 
-
-
 ### 顶层参数（API 必填项）
-
 
 | 字段                  | 类型     | 必填  | 约束                                                                                           | 填错时的错误                              |
 | ------------------- | ------ | --- | -------------------------------------------------------------------------------------------- | ----------------------------------- |
 | ClusterType         | string | 是   | `MANAGED_CLUSTER` / `INDEPENDENT_CLUSTER`（后者**已停止新建**；空集群创建报 `FailedOperation.Param`：`not has master NodeRole`，非 `InvalidParameterValue.ClusterType`） | 非法枚举可能 `InvalidParameterValue.ClusterType`；停新建独立见上 |
 | ClusterCIDRSettings | object | 是   | ClusterCIDR + ServiceCIDR（不传报 `the following arguments are required: --ClusterCIDRSettings`） | `InvalidParameterValue.ClusterCIDR` |
 
-
 > 顶层另有可选入参 `CdcId`（本地专用集群 ID，部署在 CDC 时传，`required=False`），见 [TKE 容器服务 — 托管集群「集群信息」步](../index.md#托管集群4-步)。
 
 > ⚠️ `ClusterType` 与 `ClusterCIDRSettings` 是仅有的两个 API 层必填项。缺 `ClusterCIDRSettings` 命令直接 exit 252 失败，不会进入业务校验。
 
 **ClusterCIDRSettings 子字段**（8 字段）：
-
 
 | 子字段                         | 适用网络类型  | 说明                                       |
 | --------------------------- | ------- | ---------------------------------------- |
@@ -162,13 +149,9 @@ tccli cam DescribeRoleList --Page 1 --Rp 100 \
 | `EniSubnetIds`              | VPC-CNI | ENI 模式子网 ID 列表（`NetworkType=VPC-CNI` 时用） |
 | `ClaimExpiredSeconds`       | VPC-CNI | ENI IP 续期时长（VPC-CNI 模式）                  |
 
-
 > `MaxNodePodNum`/`MaxClusterServiceNum` 是 GR 模式的容量规划参数；`EniSubnetIds`/`ClaimExpiredSeconds` 仅 VPC-CNI 模式用。网络类型由 `ClusterAdvancedSettings.NetworkType` 决定（见下表）。
 
-
-
 ### ClusterBasicSettings（业务必需，API 非必填）
-
 
 | 字段                      | 类型      | 必填  | 约束                                                                                                                          | 填错时的错误                                                                |
 | ----------------------- | ------- | --- | --------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
@@ -176,8 +159,8 @@ tccli cam DescribeRoleList --Page 1 --Rp 100 \
 | ClusterVersion          | string  | 否   | 如 `1.34.1`，默认 `1.10.5`；业务必需（须完整三段式，`1.30` 会失败）                                                                              | 版本不存在 → `FailedOperation.DbRecordNotFound`（非 `InvalidParameterValue`） |
 | VpcId                   | string  | 否   | 已有 VPC ID；创建托管集群时业务必需（"创建托管空集群时必传"）                                                                                         | `ResourceNotFound.VpcId`                                              |
 | ClusterOs               | string  | 否   | `ubuntu20.04x86_64` / `tlinux3.1x86_64` 等；不传用默认 OS                                                                          | `InvalidParameterValue.ClusterOs`                                     |
-| OsCustomizeType         | string  | 否   | `GENERAL`（通用，默认）/ `Rh8` 等；OS 定制类型                                                                                           | `InvalidParameterValue`                                               |
-| ClusterLevel            | string  | 否   | 可用等级 L5/L20/L50/L100/L200/L500（无 L10），默认 `L5`；L1000/L3000/L5000 需工单开通（`Enable=false`），见 [配置集群 — 选等级](configure.md#为什么选这个等级) | `InvalidParameterValue.ClusterLevel`                                  |
+| OsCustomizeType         | string  | 否   | `GENERAL`（普通版本，默认）/ `DOCKER_CUSTOMIZE`（容器定制版）；非法值报 `InvalidParameterValue`                                                                                           | `InvalidParameterValue`                                               |
+| ClusterLevel            | string  | 否   | 真实枚举 `L5`/`L20`/`L50`/`L100`/`L200`/`L500`/`L1000`/`L3000`/`L5000`（**无 L10**），默认 `L5`；是否可选用以 `DescribeClusterLevelAttribute` 返回的 `Enable` 为准（部分账号高等级可能 `Enable=false` 需工单），见 [配置集群 — 选等级](configure.md#为什么选这个等级) | `InvalidParameterValue.ClusterLevel`                                  |
 | SubnetId                | string  | 否   | VPC 内子网 ID                                                                                                                  | `ResourceNotFound.SubnetId`                                           |
 | ProjectId               | integer | 否   | 项目 ID，默认 `0`                                                                                                                | `InvalidParameterValue.ProjectId`                                     |
 | NeedWorkSecurityGroup   | boolean | 否   | `true` 自动创建工作节点安全组；不传按默认                                                                                                    | —                                                                     |
@@ -185,11 +168,7 @@ tccli cam DescribeRoleList --Page 1 --Rp 100 \
 | AutoUpgradeClusterLevel | object  | 否   | `{IsAutoUpgrade:true}` 集群等级自动升级（有计费风险，谨慎）                                                                                   | —                                                                     |
 | ClusterDescription      | string  | 否   | 集群描述，≤200 字符                                                                                                                | —                                                                     |
 
-
-
-
 ### ClusterAdvancedSettings（建议设置）
-
 
 | 字段                  | 类型      | 推荐值          | 作用                                                                                                                                                                                                                                         |
 | ------------------- | ------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -209,19 +188,13 @@ tccli cam DescribeRoleList --Page 1 --Rp 100 \
 | ExtraArgs           | object  | 不设           | 集群自定义参数：`{KubeAPIServer:[...],KubeControllerManager:[...],KubeScheduler:[...]}`，可用的参数见 `tccli tke DescribeClusterAvailableExtraArgs`                                                                                                       |
 | EtcdOverrideConfigs | list    | 不设           | 元数据拆分存储 Etcd 配置：把指定资源（Pods/Nodes/Deployments/Secrets 等）拆分到独立 Etcd 集群，提升大规模集群稳定性                                                                                                                                                            |
 
-
 > `NetworkType=GR` 是后期 `AddClusterCIDR` 扩容 Pod 网段的前置——VPC 模式（ENI）集群不支持 `AddClusterCIDR`。见 [配置集群属性与运行时](configure.md#步骤-5扩容容器网段)。
-
-
 
 ## 跨字段约束 {#跨字段约束}
 
 > ⚠️ 控制台创建流程按字段组合校验，传互斥组合会被服务端拦或创建中途失败。
 
-
-
 ### 网络类型 × 各字段互斥矩阵
-
 
 | 字段                                   | `NetworkType=GR` | `NetworkType=VPC-CNI`                    | `NetworkType=CiliumOverlay`              |
 | ------------------------------------ | ---------------- | ---------------------------------------- | ---------------------------------------- |
@@ -232,20 +205,15 @@ tccli cam DescribeRoleList --Page 1 --Rp 100 \
 | `SubnetId`（控制面子网）                    | 不强制              | 不强制                                      | ✅ **条件必填**，须预留 ≥2 IP（TKE 取 2 IP 建内网 CLB） |
 | 后期 `AddClusterCIDR` 扩 Pod 网段         | ✅ 支持             | ❌ 不支持                                    | ❌ 不支持                                    |
 
-
-
-
 ### kube-proxy 转发模式 × IPVS × KubeProxyMode 互斥 {#kube-proxy-转发模式-×-ipvs-×-kubeproxymode-互斥}
 
 `IPVS` 与 `KubeProxyMode` 三模式互斥（以 `KubeProxyMode` 字段说明为准）：
-
 
 | 模式               | `IPVS` | `KubeProxyMode`  | 前置条件                                                                      |
 | ---------------- | ------ | ---------------- | ------------------------------------------------------------------------- |
 | **iptables**（默认） | 不设     | 不设               | —                                                                         |
 | **ipvs**         | `true` | 不设               | —                                                                         |
 | **ipvs-bpf**     | —      | `kube-proxy-bpf` | ① 集群版本 ≥1.14；② 系统镜像须 **Tencent Linux 2.4**（`ClusterOs` 传对应镜像 ID，否则创建中途失败） |
-
 
 > `kube-proxy-bpf` 是第三种独立模式，非 IPVS 的子项。`DataPlaneV2=true`（cilium 替代 kube-proxy）语义上与 `KubeProxyMode` 互斥——CiliumOverlay 走 Cilium 数据面，不再走 kube-proxy 三模式。
 >
@@ -254,7 +222,6 @@ tccli cam DescribeRoleList --Page 1 --Rp 100 \
 ### DataPlaneV2 × 镜像白名单
 
 > ⚠️ `DataPlaneV2=true` 仅以下镜像支持（传非白名单 `ClusterOs` 会创建中途失败）：
-
 
 | 镜像                               | ID             |
 | -------------------------------- | -------------- |
@@ -266,7 +233,6 @@ tccli cam DescribeRoleList --Page 1 --Rp 100 \
 | TencentOS Server 3.1 (TK4) SPR   | `img-ppgc11rl` |
 | TencentOS Server 3.1 (TK4)       | `img-eb30mz89` |
 | TencentOS Server 3.1 (CGroupV2)  | `img-2kulq18f` |
-
 
 传 `DataPlaneV2=true` + 非白名单 `ClusterOs` → 控制台报"当前操作系统暂不支持开启 Dataplane v2"；走 API 可能到创建中途才失败。反查某 ID：`tccli cvm DescribeImages --region <REGION> --Filters '[{"Name":"image-id","Values":["<ID>"]}]'`。
 
@@ -288,8 +254,6 @@ tccli cam DescribeRoleList --Page 1 --Rp 100 \
 
 > 双栈集群依赖前序资源：`IsDualStack=true` 须前序 VPC 已 `AssignIpv6CidrBlock` + 子网已 `AssignIpv6SubnetCidrBlock`。前置缺失会创建中途失败。完整双栈 VPC 创建步骤见 [准备 VPC 与子网 — 创建双栈 VPC](../../getting-started/prepare-vpc.md#create-dualstack-vpc)。
 
-
-
 ## 操作步骤
 
 > ⚠️ **高危操作**：Region 选错不可迁移；NetworkType 创建后不可切换；IPVS 开启后不可关闭；删除保护未开则集群可被直接删除。[常见高危操作](https://cloud.tencent.com/document/product/457/39539)
@@ -300,11 +264,7 @@ tccli cam DescribeRoleList --Page 1 --Rp 100 \
 >
 > 本步约 5-10 分钟，完成后须立即进入 [创建节点池](../nodes/nodepool-create.md) 加节点，否则集群无工作负载仍计管理费。完整生命周期见 [集群生命周期故事线](index.md#集群生命周期故事线)。
 
-
-
 ### 步骤 1：决策 — 选集群类型 {#步骤-1决策-选集群类型}
-
-
 
 #### 为什么选 MANAGED_CLUSTER
 
@@ -313,12 +273,9 @@ tccli cam DescribeRoleList --Page 1 --Rp 100 \
 - **默认推荐**: `MANAGED_CLUSTER`（独立模式**已停止新建**）
 - **可修改**： 不能。集群类型创建后无法切换。存量独立集群须持续维护 Master
 
-
-
 #### 创建模式决策 — 4 条路径 {#创建模式决策-4-条路径}
 
 `CreateCluster` 的顶层入参有 4 个嵌套组合，对应 4 条创建路径。选哪条取决于"建集群时是否同时建节点 / 用已有 CVM / 装组件"。
-
 
 | 路径                    | 触发条件                                 | 关键参数                                                                     | 后续                                                 |
 | --------------------- | ------------------------------------ | ------------------------------------------------------------------------ | -------------------------------------------------- |
@@ -327,12 +284,9 @@ tccli cam DescribeRoleList --Page 1 --Rp 100 \
 | **C. 导入已有 CVM**       | 把现有 CVM 转成集群节点                       | 加 `ExistedInstancesForNode`（CVM 须已存在且可重装）                                | 集群就绪即可运行 Pod                                       |
 | **D. 创建时装组件**         | 建集群同时装 CiliumOverlay/RuntimeConfig 等 | 加 `ExtensionAddons`（组件参数对象数组）                                            | 见 [CiliumOverlay](../networking/cilium-overlay.md) |
 
-
 > **判据**: 路径 A 分步可控，失败仅回退控制面；路径 B/C 单步完成但失败须连集群带节点一起排查；路径 D 与网络模型绑定（CiliumOverlay 创建时定型）。首次部署用 A，批量部署可用 B/C。
 
 > **4 路径共用同一** `CreateCluster` **Action**——返回结构一致（`ClusterId`/`RequestId`），区别仅在顶层嵌套入参组合。形态差异：`RunInstancesPara` = **Array of String**（每个元素是 CVM `RunInstances` 的 JSON 字符串）；`ExistedInstancesPara` = **对象**；`ExtensionAddons[].AddonParam` = 字符串化 JSON。expected 与路径 A 同构。B/C 因会真实创建/重装 CVM（计费+副作用），命令块用占位符示参，调用前先核 CVM 机型/镜像/子网库存（见 [创建节点池 — 准备工作（机型查询）](../nodes/nodepool-create.md#准备工作)）。
-
-
 
 ##### 路径 B：一步建带节点（RunInstancesForNode）
 
@@ -349,8 +303,6 @@ tccli tke CreateCluster --region ap-guangzhou \
 
 > ⚠️ `RunInstancesPara` 是 **Array of String**：每个元素是 CVM `RunInstances` 参数的 **JSON 字符串**（不是对象、也不是单个字符串字段）。与 [Master 运维](master-ops.md) 扩容形态一致。CVM 参数结构见 [共享字段](../reference/shared-fields.md#instanceadvancedsettings-节点高级设置) + CVM 文档；机型/镜像查询见 [创建节点池 — 准备工作](../nodes/nodepool-create.md#准备工作)。
 
-
-
 ##### 路径 C：导入已有 CVM（ExistedInstancesForNode）
 
 把已存在的 CVM 重装系统并加入集群（CVM 数据会清空，须先备份）。
@@ -366,8 +318,6 @@ tccli tke CreateCluster --region ap-guangzhou \
 
 > `ExistedInstancesPara` 是 **对象**（非 JSON 字符串）：`InstanceIds`/`LoginSettings`/`EnhancedService`/`SecurityGroupIds` 等为对象字段。`InstanceIds` 指向已存在 CVM，须与集群同 VPC 且可重装。登录/增强服务配置见 [共享字段](../reference/shared-fields.md#loginsettings-实例登录设置)。
 
-
-
 ##### 路径 D：创建时装组件（ExtensionAddons）
 
 ```bash
@@ -382,15 +332,11 @@ tccli tke CreateCluster --region ap-guangzhou \
 
 > `ExtensionAddons` 在创建时定型网络模型/运行时配置。CiliumOverlay 须 `ClusterOs=tlinux3.1x86_64` + `SubnetId`，且 AdvancedSettings **只传** `NetworkType`（禁 `CiliumMode`/`DataPlaneV2`/`IPVS=true`）——详见 [CiliumOverlay](../networking/cilium-overlay.md)。`InstanceDataDiskMountSettings`（自定义数据盘挂载）是同层独立组合，配置见 [共享字段](../reference/shared-fields.md#instanceadvancedsettings-节点高级设置)。
 
-
-
 ### 步骤 2：创建集群
 
 `CreateCluster` 的 `ClusterType` + `ClusterCIDRSettings` 是 API 层仅有的两个必填项（缺则 exit 252），另需集群名/VPC/K8s 版本（业务必需，不传集群无法正常使用）。按场景**二选一**：A 最小化（测试/快速验证）或 B 增强（生产，容量规划+审计+运行时）。
 
 > ⚠️ **A 与 B 是二选一变体，不是先做 A 再做 B**——两者各调一次 `CreateCluster` 会建**两个集群**。集群创建后改配置（等级/标签/运行时/组件参数）用 `ModifyClusterAttribute` 等，见 [配置集群](configure.md)，**禁用第二次** `CreateCluster` **改配置**。
-
-
 
 #### 选项 A：最小化（测试/快速验证）
 
@@ -416,16 +362,12 @@ tccli tke CreateCluster \
 
 > ⚠️ **此命令创建的是无工作节点的空集群**（无 `RunInstancesForNode`，`ClusterRunningNodeNum=0`）。集群会进入 `Running` 状态但**不能直接运行 Pod**——必须接着 [创建节点池](../nodes/nodepool-create.md) 添加工作节点。`ClusterCIDR` 不得与 VPC CIDR 冲突。
 
-
 | 占位符              | 含义        | 约束          | 如何获取                                        |
 | ---------------- | --------- | ----------- | ------------------------------------------- |
 | `<CLUSTER_NAME>` | 集群名称      | ≤60 字符，全局唯一 | 自定义（如 `prod-cluster`）                      |
 | `<VPC_ID>`       | VPC 实例 ID | 必须存在        | `tccli vpc DescribeVpcs` → `VpcSet[].VpcId` |
 
-
 > 命令中的 `ClusterCIDR`（如 `172.16.0.0/16`）与 `ServiceCIDR`（如 `10.96.0.0/20`）是字面量示例——按你的 VPC CIDR 选择不重叠的网段，不得与 VPC CIDR 冲突。
-
-
 
 #### 选项 B：增强（生产，容量规划+审计+运行时）
 
@@ -471,10 +413,9 @@ tccli tke DescribeClusterStatus --region ap-guangzhou \
 
 # 或手动轮询
 tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]'
+# expected: ClusterStatusSet[0].ClusterState 为 Running（创建中为 Creating/Initializing，失败为 Idling/Abnormal 等，见状态机）
 ```
 
-
-<!-- kubectl 验证节点连通（TCCLI 无 kubectl 能力） -->
 | 维度         | 命令                                                                       | 预期                                                 |
 | ---------- | ------------------------------------------------------------------------ | -------------------------------------------------- |
 | Status     | `DescribeClusterStatus`                                                  | `ClusterState: "Running"`                          |
@@ -484,10 +425,7 @@ tccli tke DescribeClusterStatus --region ap-guangzhou --ClusterIds '["<CLUSTER_I
 | kubectl 连通 | `kubectl --kubeconfig kubeconfig.yaml get nodes`                         | exit 0（需先开端点，见 [管理端点](../networking/endpoints.md)） |
 | 节点数        | `DescribeClusterStatus` → `ClusterStatusSet[].ClusterRunningNodeNum`     | ≥0（空集群为 0，字段名是 ClusterRunningNodeNum 非 NodeCount）  |
 
-
 > `--waiter` 的 `expr` 必须用 `DescribeClusterStatus` 响应字段名 `ClusterStatusSet[0].ClusterState`（非 `Clusters[0].ClusterStatus`）。`CreateCluster` 本身也可直接挂 `--waiter`，但 `CreateCluster` 响应无状态字段，需轮询 `DescribeClusterStatus`。
-
-
 
 ## 清理
 
@@ -507,14 +445,9 @@ tccli tke DescribeClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]'
 # expected: { "TotalCount": 0, "Clusters": [] } → 主资源已删；关联残留见 delete.md
 ```
 
-
-
 ## 故障恢复
 
-
-
 ### 命令返回错误（exit ≠ 0）
-
 
 | 现象                                                                                       | 诊断                                                          | 根因                                                                        | 修复                                                                 |
 | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------ |
@@ -529,11 +462,7 @@ tccli tke DescribeClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]'
 | 缺 `--ClusterType` / `--ClusterCIDRSettings`（tccli exit 252，无 `Error.Code`） | 查命令是否传对应必填项 | CLI/API 必填；缺则本地拒，不进业务校验 | 补 `--ClusterType MANAGED_CLUSTER` 与 `--ClusterCIDRSettings '{...}'` |
 | `FailedOperation.Param`（`INDEPENDENT_CLUSTER`，消息含 `not has master NodeRole`） | 查 `ClusterType` | 独立集群已停止新建；空 `CreateCluster` 无 Master 节点角色入参 | 新建用 `MANAGED_CLUSTER`；存量独立集群运维见 [Master 运维](master-ops.md) |
 
-
-
-
 ### 命令成功但状态不对（exit = 0）
-
 
 | 现象                                             | 诊断                                           | 根因                        | 修复                                              |
 | ---------------------------------------------- | -------------------------------------------- | ------------------------- | ----------------------------------------------- |
@@ -541,9 +470,6 @@ tccli tke DescribeClusters --region ap-guangzhou --ClusterIds '["<CLUSTER_ID>"]'
 | 状态为 `Running` 但 `DescribeClusterKubeconfig` 失败 | 检查返回的 kubeconfig 内容                          | 集群就绪延迟 (API Server 未完全就绪) | 等待 1-2 分钟后重试                                    |
 | 状态为 `Abnormal`                                 | `tccli tke DescribeClusterStatus`            | Master 组件异常 (罕见)          | `DeleteCluster` → 重建。若重建仍异常，提交工单                |
 | 删除保护无法关闭                                       | `tccli tke DisableClusterDeletionProtection` | CAM 权限不足                  | 确认账号有 `tke:DisableClusterDeletionProtection` 权限 |
-
-
-
 
 ## 收尾确认 {#收尾确认}
 

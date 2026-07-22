@@ -13,8 +13,7 @@ TKE 可观测按三条能力线组织：**指标**（云监控默认集成 + TMP
 
 > **入口**：控制台把 Prometheus 放在「云原生服务」；日志采集/查看以**集群详情**侧栏为主（运维中心多为跨集群开关，不是日志正文入口）。下文以 `tccli` 可调的 Prometheus/日志 Action 为主；装默认 `monitoragent` 见 [插件](../addons/index.md)。
 
-## 触发条件
-
+## 何时阅读
 - 你要为集群创建 Prometheus 实例并关联采集 Agent — 用 `RunPrometheusInstance`，看 [Prometheus 监控入门](prometheus.md)
 - 你要配置告警策略与通知规则 — 看 [Prometheus 告警配置](prometheus-alerting.md)
 - 你要开启控制面日志或采集业务日志 — 用 `EnableControlPlaneLogs`，看 [日志采集](logging.md)

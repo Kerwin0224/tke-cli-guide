@@ -143,6 +143,7 @@ printf '%s' "$TCR_TOKEN" | docker login <REGISTRY_DOMAIN> -u "$TCR_USERNAME" --p
 ```bash
 # 打标签
 docker tag alpine:latest <REGISTRY_DOMAIN>/<NAMESPACE_NAME>/<REPOSITORY_NAME>:v1
+# expected: exit 0（无输出表示本地 tag 已指向目标仓库路径）
 
 # 推送
 docker push <REGISTRY_DOMAIN>/<NAMESPACE_NAME>/<REPOSITORY_NAME>:v1

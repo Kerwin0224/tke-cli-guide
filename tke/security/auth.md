@@ -221,24 +221,24 @@ tccli tke DescribeUserPermissions --TargetUin "<SUB_UIN>" --region <REGION>
 ```bash
 # 删除子账号的指定权限 (按 ClusterId + RoleName 定位)
 tccli tke DeleteUserPermissions --TargetUin "<SUB_UIN>" --region <REGION> \
-  --Permissions '[{"ClusterId":"<CLUSTER_ID>","RoleName":"<ROLE>","RoleType":"cls","Namespace":""}]'
+  --Permissions '[{"ClusterId":"<CLUSTER_ID>","RoleName":"<ROLE>","RoleType":"cluster","Namespace":""}]'
 # expected: exit 0
 ```
 
-> `TargetUin` 是子账号 UIN（非主账号）。`DeleteUserPermissions` 的 `Permissions[]` 精确定位要撤销的权限（ClusterId+RoleName+Namespace），`RoleType` 如 `cls`（集群级）/ `ns`（命名空间级）。
+> `TargetUin` 是子账号 UIN（非主账号）。`DeleteUserPermissions` 的 `Permissions[]` 精确定位要撤销的权限（ClusterId+RoleName+Namespace）。`RoleType` **仅** `cluster`（集群级，对应 ClusterRoleBinding）/ `namespace`（命名空间级，对应 RoleBinding）；**不是** `cls` / `ns`。
 
 `RoleName` 预置角色枚举：
 
 | RoleName | 角色 | 作用域 | 适用 |
 |:---------|:-----|:-------|:-----|
-| `tke:admin` | 集群管理员 | 集群级 (`RoleType=cls`) | 全部操作，生产集群慎授 |
+| `tke:admin` | 集群管理员 | 集群级 (`RoleType=cluster`) | 全部操作，生产集群慎授 |
 | `tke:ops` | 运维人员 | 集群级 | 集群运维操作，无敏感删除 |
 | `tke:dev` | 开发人员 | 集群级 | 工作负载读写，无集群管理 |
 | `tke:ro` | 只读用户 | 集群级 | 只读，审计/排查用 |
-| `tke:ns:dev` | 命名空间开发人员 | 命名空间级 (`RoleType=ns`，须配 `Namespace`) | 单命名空间读写 |
+| `tke:ns:dev` | 命名空间开发人员 | 命名空间级 (`RoleType=namespace`，须配 `Namespace`) | 单命名空间读写 |
 | `tke:ns:ro` | 命名空间只读用户 | 命名空间级 | 单命名空间只读 |
 
-> 传非预置值（如自定义角色名）也可，但须是集群内已存在的 Role/ClusterRole。命名空间级角色（`tke:ns:*`）必须同时传 `Namespace`，否则报 `InvalidParameter`。
+> 传非预置值（如自定义角色名）也可，但须是集群内已存在的 Role/ClusterRole。命名空间级角色（`tke:ns:*`）必须同时传 `Namespace` 且 `RoleType=namespace`，否则报 `InvalidParameter`。
 
 ## 收尾确认
 

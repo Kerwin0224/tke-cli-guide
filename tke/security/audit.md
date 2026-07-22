@@ -45,11 +45,12 @@ fused: false
 | 字段 | 类型 | 必填 | 默认值 | 有效值 | 填错的影响 |
 |:------|------|:--------:|:------:|-------|-----------|
 | ClusterId | string | 是 | — | `cls-xxxxxxxx` | `ResourceNotFound` |
-| LogsetId | string | 是 | — | CLS 日志集 ID | `ResourceNotFound` |
-| TopicId | string | 是 | — | CLS 日志主题 ID | `ResourceNotFound` |
+| LogsetId | string | 否 | — | CLS 日志集 ID；不传时由服务侧按策略处理（建议显式传入已建日志集） | `ResourceNotFound` |
+| TopicId | string | 否 | — | CLS 日志主题 ID；建议与 LogsetId 一并显式传入 | `ResourceNotFound` |
 | TopicRegion | string | 否 | 集群当前地域 | CLS 主题地域，如 `ap-guangzhou`；主题不在集群当前地域时，显式传入主题实际地域 | 地域不匹配 |
+| ClusterType | string | 否 | — | 集群类型（help 可选） | — |
 
-> `LogsetId`/`TopicId` 须先在 CLS 服务创建。`TopicRegion` 可省略，默认使用集群当前地域；CLS 主题位于其他地域时，显式传入主题实际地域。
+> `LogsetId`/`TopicId` 在 `help --detail` 中为 Optional，但生产建议先在 CLS 建好日志集/主题再显式传入，便于权限与检索闭环。`TopicRegion` 可省略，默认使用集群当前地域；CLS 主题位于其他地域时，显式传入主题实际地域。
 
 ## 应用
 
@@ -193,13 +194,13 @@ tccli tke DescribeOpenPolicyList --ClusterId "<CLUSTER_ID>" --Category "baseline
 ```
 
 ```bash
-# 修改开放策略 (OpenPolicyInfoList[] 批量, 含 EnforcementAction/Name/EnabledStatus)
+# 修改开放策略 (OpenPolicyInfoList[] 批量；每项 Name/Kind/EnforcementAction 均为 Required)
 tccli tke ModifyOpenPolicyList --ClusterId "<CLUSTER_ID>" --region <REGION> \
-  --OpenPolicyInfoList '[{"Name":"<POLICY_NAME>","EnforcementAction":"dryrun","EnabledStatus":"open"}]'
-# expected: exit 0
+  --OpenPolicyInfoList '[{"Name":"<POLICY_NAME>","Kind":"<POLICY_KIND>","EnforcementAction":"dryrun","EnabledStatus":"open"}]'
+# expected: exit 0；Name/Kind 取自 DescribeOpenPolicyList 返回
 ```
 
-> `EnforcementAction`：`deny` / `dryrun`。`EnabledStatus`：`open` / `close`。入参 `--Category` 与响应 `PolicyCategory` **不是同一枚举**（见下表）。开放策略与 [巡检](../observability/logging.md#集群巡检与日志配置) 互补。
+> `EnforcementAction`：`deny` / `dryrun`。`EnabledStatus`：`open` / `close`。`OpenPolicyInfoList` 每项须含 `Name` + `Kind` + `EnforcementAction`（三者 Required）；`Kind` 从 `DescribeOpenPolicyList` 同名字段取，不要只传 Name。入参 `--Category` 与响应 `PolicyCategory` **不是同一枚举**（见下表）。开放策略与 [巡检](../observability/logging.md#集群巡检与日志配置) 互补。
 
 入参 `--Category`（`help --detail`：基线 / 优选 / 可选）：
 
@@ -241,7 +242,7 @@ tccli tke ModifyOpenPolicyList --ClusterId "<CLUSTER_ID>" --region <REGION> \
 | `blockworkloadcrossversionupgrade` | 工作负载镜像版本升级策略管控 | 管控跨版本升级 |
 | `blockserviceaccountgranthighprivilegepermission` | ServiceAccount 高权限制约 | 防 SA 过权 |
 
-> 完整 Kind 列表以 `tccli tke DescribeOpenPolicyList --ClusterId "<ID>" --Category "baseline|priority|optional"` 返回为准。启用时 `ModifyOpenPolicyList --OpenPolicyInfoList '[{"Name":"<规则 Name>","EnforcementAction":"deny","EnabledStatus":"open"}]'`（`Name` 用返回的规则名，如 `block-cluster-deletion-rule`，非 Kind）。
+> 完整 Kind 列表以 `tccli tke DescribeOpenPolicyList --ClusterId "<ID>" --Category "baseline|priority|optional"` 返回为准。启用时 `ModifyOpenPolicyList --OpenPolicyInfoList '[{"Name":"<规则 Name>","Kind":"<POLICY_KIND>","EnforcementAction":"deny","EnabledStatus":"open"}]'`（`Name`/`Kind` 均用返回字段；如 `Name=block-cluster-deletion-rule`、`Kind=blockclusterdeletion`）。
 
 ## 故障恢复 {#故障恢复}
 

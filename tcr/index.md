@@ -27,13 +27,12 @@ graph TD
 
 | 角色 | 目标 | 主要文档 |
 |------|------|-------------|
-| 开发者 | 推送/拉取镜像 | [Quickstart](../quickstart/tcr-first-registry.md) |
+| 开发者 | 推送/拉取镜像 | [快速入门](../quickstart/tcr-first-registry.md) |
 | DevOps | CI/CD 流水线集成 | [访问控制](access/manage.md) |
 | SRE | 镜像安全、生命周期管理 | [生命周期](lifecycle/index.md) |
 | 运维 | 多地域同步、跨账号同步 | [实例同步](replication/manage.md) |
 
-## 触发条件
-
+## 何时阅读
 - 你要在腾讯云上管理容器镜像仓库（推送/拉取/删除镜像）— 本域是入口
 - 你已读完 [快速入门](../quickstart/tcr-first-registry.md)，需查阅某个具体操作（访问控制/生命周期/镜像安全）— 看下方导航或 [实例管理](instances/index.md)
 - 你在 docker login/push/pull 遇到权限或网络问题 — 直接看 [访问控制](access/manage.md) 或 [故障排查](troubleshooting.md)

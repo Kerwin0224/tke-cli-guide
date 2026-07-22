@@ -46,10 +46,12 @@ tccli tcr DescribeNamespaces --region <REGION> \
 | Tags | array | `Tag` 数组（Key/Value） |
 
 ```bash
+# TagSpecification 为单对象（非数组）——展开时无 .0 下标
 --cli-unfold-argument \
-  --TagSpecification.0.ResourceType instance \
-  --TagSpecification.0.Tags.0.Key team \
-  --TagSpecification.0.Tags.0.Value backend
+  --TagSpecification.ResourceType instance \
+  --TagSpecification.Tags.0.Key team \
+  --TagSpecification.Tags.0.Value backend
+# JSON 等价: --TagSpecification '{"ResourceType":"instance","Tags":[{"Key":"team","Value":"backend"}]}'
 ```
 
 ## Permission 服务账号权限
@@ -112,14 +114,19 @@ tccli tcr CreateNamespace --region <REGION> \
 | Deletion | bool | 是否同步删除事件 |
 
 ```bash
+# Rule 是单个 ReplicationRule 对象（非数组）——展开时无 .0 下标；Filters 必填
 --cli-unfold-argument \
-  --Rule.0.Name prod-sync \
-  --Rule.0.DestNamespace prod \
-  --Rule.0.Override false \
-  --Rule.0.Deletion false
+  --Rule.Name prod-sync \
+  --Rule.DestNamespace prod \
+  --Rule.Override false \
+  --Rule.Deletion false \
+  --Rule.Filters.0.Type name \
+  --Rule.Filters.0.Value '**'
+# JSON 等价:
+# --Rule '{"Name":"prod-sync","DestNamespace":"prod","Override":false,"Filters":[{"Type":"name","Value":"**"}],"Deletion":false}'
 ```
 
-> `Override=true` 会覆盖目标端同名镜像，`Deletion=true` 会传播删除事件；启用前先确认目标命名空间和回滚方案。
+> `Override=true` 会覆盖目标端同名镜像，`Deletion=true` 会传播删除事件；启用前先确认目标命名空间和回滚方案。`Filters` 为必填（Type 为 `name`/`tag`/`resource`）。
 
 详见 [实例同步](../replication/manage.md)。
 

@@ -9,8 +9,7 @@ doc_type: Overview
 
 TCR 实例是独立的镜像仓库服务后端。企业版实例有独立存储与访问域名，个人版是共享服务。实例创建后产生计费（按量计费），承载所有镜像数据。
 
-## 触发条件
-
+## 何时阅读
 - 你要创建企业版镜像仓库实例（选 `RegistryType` 规格/地域/后端存储）— 用 `CreateInstance`，见 [创建实例](create.md)
 - 你要配置 `docker login` 访问（**先内网 VPC，再按需公网**、Token、白名单）— 见 [访问管理](manage-access.md)
 - 你要绑定自有域名 + 证书访问实例 — 见 [自定义域名](custom-domain.md)

@@ -57,7 +57,7 @@ tccli tcr DescribeExternalEndpointStatus --region <REGION> --RegistryId "<REGIST
 # expected: Status = "Opened"
 ```
 
-> 错误响应结构（HTTP API 原始）：`{"Response":{"Error":{"Code":"...","Message":"..."},"RequestId":"..."}}`。**tccli 默认剥离 `Response` 包装**，终端常见顶层即 `Error` + `RequestId`。docker 侧错误不是 JSON，是 stderr 文本——用 `--language en-US` 锁定 TCCLI 错误语言，docker 错误天然英文。如遇未列出的错误码，查 [腾讯云 TCR 错误码文档](https://cloud.tencent.com/document/product/1141)。
+> 错误通道（与 [Agent 优化](../../appendix/agent-optimization.md#调用成功怎么判) 一致）：HTTP API 原始体为 `{"Response":{"Error":{"Code":"...","Message":"..."},"RequestId":"..."}}`。**tccli 失败时 stdout 常为空**，`code` / `message` / `requestId` 在 **stderr**（`[TencentCloudSDKException] code:… message:… requestId:…`），不要假设 stdout 顶层即 `Error` + `RequestId`。docker 侧错误不是 JSON，是 stderr 文本。用 `--language en-US` 锁定 TCCLI 错误语言，docker 错误天然英文。如遇未列出的错误码，查 [腾讯云 TCR 错误码文档](https://cloud.tencent.com/document/product/1141)。
 
 ## 相关文档
 

@@ -20,7 +20,6 @@ fused: true
 - 集群节点数已达 MaxNodesNum 上限，或扩容报 `LimitExceeded`/`ResourceInsufficient.SpecifiedInstanceType`（机型售罄）需调区间或换机型
 - 你遇到扩缩容节点池问题需查诊断路径 — 看 [故障恢复](#故障恢复)
 
-
 ## 概述
 
 扩缩容改变节点池的 `DesiredCapacity`，由底层 ASG（弹性伸缩组）执行实际加减节点：
@@ -117,6 +116,8 @@ tccli tke ScaleNodePool --version 2022-05-01 --region ap-guangzhou \
 
 ```bash
 kubectl get nodes
+# expected: 节点列表含待评估节点；记下可能被缩容的 Ready 节点名
+
 kubectl get pods -A -o wide
 # expected: 已识别全部潜在缩容候选，任一候选被控制器选中都不会造成不可接受的数据或可用性影响
 ```
@@ -250,12 +251,18 @@ tccli tke DeleteClusterAsGroups --ClusterId "<CLUSTER_ID>" --region <REGION> \
 > 扩容不增长时查 ASG 活动历史定位根因（机型售罄/子网 IP 不足）；`DesiredCapacity` 超区间时先 `ModifyClusterNodePool` 调 Min/Max。两者参数见各 Action 的 `help --detail`。
 
 ```bash
-# 查询集群 ASG 活动与实例数（ClusterId + AutoScalingGroupIds[] + 分页）
+# 查询集群关联的 ASG 列表（TKE 视图：状态/不可调度/Labels，无 Min/Max/活动）
 tccli tke DescribeClusterAsGroups --region ap-guangzhou \
   --ClusterId "<CLUSTER_ID>" \
   --AutoScalingGroupIds '["<ASG_ID>"]' \
   --Offset 0 --Limit 20
-# expected: exit 0，返回 TotalCount+ClusterAsGroupSet[]（含 MinSize/MaxSize/CurrentSize/Activity）
+# expected: exit 0，TotalCount+ClusterAsGroupSet[]（AutoScalingGroupId/Status/IsUnschedulable/Labels/CreatedTime）
+
+# MinSize/MaxSize/DesiredCapacity 在 AS 产品侧（非 DescribeClusterAsGroups 字段）
+tccli as DescribeAutoScalingGroups --region ap-guangzhou \
+  --AutoScalingGroupIds '["<ASG_ID>"]' \
+  --filter "AutoScalingGroupSet[0].{id:AutoScalingGroupId,min:MinSize,max:MaxSize,desired:DesiredCapacity}"
+# expected: min/max/desired 为整数；对照节点池 DesiredNodesNum 与区间
 
 # 调整节点池 Min/Max 区间（突破 DesiredCapacity 区间限制前先调此）
 tccli tke ModifyClusterNodePool --region ap-guangzhou \
@@ -267,10 +274,10 @@ tccli tke ModifyClusterNodePool --region ap-guangzhou \
 
 | 占位符 | 含义 | 如何获取 |
 |:-------|:-----|:---------|
-| `<ASG_ID>` | 弹性伸缩组 ID | `DescribeClusterNodePools` → `NodePoolSet[].AutoScalingGroupId` |
+| `<ASG_ID>` | 弹性伸缩组 ID | `DescribeClusterNodePools` → `NodePoolSet[].AutoscalingGroupId` |
 | `<NODE_POOL_ID>` | 节点池 ID | `tccli tke DescribeClusterNodePools` → `NodePoolSet[].NodePoolId` |
 
-> `ModifyClusterNodePool` 改全部配置（Min/Max/Labels/Taints/OsName 等），与 `ModifyNodePoolDesiredCapacityAboutAsg`（只改期望数，轻量）分工：扩缩容走后者，调区间/改配置走前者。
+> `DescribeClusterAsGroups` 只返回 TKE 关联视图（`Status`/`IsUnschedulable`/`Labels`/`CreatedTime`），**没有** `MinSize`/`MaxSize`/`CurrentSize`/`Activity`。容量与期望数看 `as DescribeAutoScalingGroups` 或节点池 `DesiredNodesNum`/`MinNodesNum`/`MaxNodesNum`。`ModifyClusterNodePool` 改全部配置（Min/Max/Labels/Taints/OsName 等），与 `ModifyNodePoolDesiredCapacityAboutAsg`（只改期望数，轻量）分工：扩缩容走后者，调区间/改配置走前者。
 
 ## 清理
 
@@ -293,7 +300,7 @@ tccli tke ModifyClusterNodePool --region ap-guangzhou \
 
 | 现象 | 诊断 | 根因 | 修复 |
 |:--------|:----------|:------------|:-----|
-| 扩容后节点数不增长 | `DescribeClusterAsGroups` 看 ASG 活动 | 机型售罄或子网 IP 不足 | 查 ASG 活动历史，换机型/加子网 |
+| 扩容后节点数不增长 | `as DescribeAutoScalingGroups` 看 Desired/Min/Max；AS 活动历史查扩缩失败原因 | 机型售罄或子网 IP 不足 | 换机型/加子网后重试扩容 |
 | 缩容后 Pod 处于 Pending | `kubectl get pods -A` | 缩容过度，剩余节点资源不足 | 扩容回原值，或优化 Pod 资源请求 |
 | 节点池卡在 `updating` | `DescribeClusterNodePools` → `LifeState` | ASG 操作未完成 | 等待；超 30 分钟查 `DescribeClusterAsGroups` |
 | 缩容节点上 Pod 被强杀 | `kubectl get events` | 未先 drain | 缩容前对普通/原生节点 `kubectl drain`（超级节点才用 `DrainClusterVirtualNode`）；有状态服务用 PDB 保护 |
@@ -303,7 +310,6 @@ tccli tke ModifyClusterNodePool --region ap-guangzhou \
 ## 收尾确认
 
 > kubectl（K8s 原生命令，非 tccli；TCCLI 管 TKE 抽象层不提供 K8s 资源操作能力）
-<!-- kubectl验证tccli扩缩容操作结果，kubectl get nodes观察K8s层节点Ready与Pod调度状态，非tccli边界 -->
 ```bash
 # 端到端核对：扩容新节点不仅 InstanceState=running 须 K8s Ready（缩容后无 Pod Pending）
 # 扩容后 kubectl get nodes 看新节点真 Ready（InstanceState=running 不等于 K8s Ready，kubelet 注册需时间）
